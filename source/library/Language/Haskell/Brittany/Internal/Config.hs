@@ -228,25 +228,6 @@ readConfig path = do
       return $ Just fileConf
     else return $ Nothing
 
--- | Looks for a user-global config file and return its path.
--- If there is no global config in a system, one will be created.
-userConfigPath :: IO System.IO.FilePath
-userConfigPath = do
-  userBritPathSimple <- Directory.getAppUserDataDirectory "brittany"
-  userBritPathXdg <- Directory.getXdgDirectory Directory.XdgConfig "brittany"
-  let searchDirs = [userBritPathSimple, userBritPathXdg]
-  globalConfig <- Directory.findFileWith
-    Directory.doesFileExist
-    searchDirs
-    "config.yaml"
-  maybe (writeUserConfig userBritPathXdg) pure globalConfig
- where
-  writeUserConfig dir = do
-    let createConfPath = dir FilePath.</> "config.yaml"
-    liftIO $ Directory.createDirectoryIfMissing True dir
-    writeDefaultConfig $ createConfPath
-    pure createConfPath
-
 -- | Searches for a local (per-project) brittany config starting from a given directory
 findLocalConfigPath :: System.IO.FilePath -> IO (Maybe System.IO.FilePath)
 findLocalConfigPath dir = do
@@ -274,8 +255,7 @@ readConfigsWithUserConfig
   -> [System.IO.FilePath]  -- ^ List of config files to load and merge, highest priority first
   -> MaybeT IO Config
 readConfigsWithUserConfig cmdlineConfig configPaths = do
-  defaultPath <- liftIO $ userConfigPath
-  readConfigs cmdlineConfig (configPaths ++ [defaultPath])
+  readConfigs cmdlineConfig configPaths
 
 writeDefaultConfig :: MonadIO m => System.IO.FilePath -> m ()
 writeDefaultConfig path =
