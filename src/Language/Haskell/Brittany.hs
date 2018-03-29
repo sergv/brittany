@@ -4,7 +4,6 @@ module Language.Haskell.Brittany
   ( parsePrintModule
   , staticDefaultConfig
   , forwardOptionsSyntaxExtsEnabled
-  , userConfigPath
   , findLocalConfigPath
   , readConfigs
   , readConfigsWithUserConfig
