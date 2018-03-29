@@ -1,4 +1,4 @@
 func = ($)
- where
-  {-# INLINE ($) #-}
-  ($) = id
+  where
+    {-# INLINE ($) #-}
+    ($) = id

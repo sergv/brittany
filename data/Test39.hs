@@ -1,4 +1,4 @@
 func = f
- where
-  {-# INLINE f #-}
-  f = id
+  where
+    {-# INLINE f #-}
+    f = id

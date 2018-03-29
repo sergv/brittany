@@ -3,8 +3,8 @@ func = do
   aaa
   -- complex second step
   bbb
- where
-  helper :: Helper
-  helper = helpful
-  other :: Other
-  other = True
+  where
+    helper :: Helper
+    helper = helpful
+    other :: Other
+    other = True
