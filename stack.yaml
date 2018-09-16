@@ -1,4 +1,4 @@
-resolver: lts-11.1
+resolver: lts-12.17
 
 extra-deps:
   - czipwith-1.0.1.0
