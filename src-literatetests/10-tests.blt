@@ -1155,3 +1155,37 @@ func = do
 
   other :: Other
   other = True
+
+#test function-where-newlines2
+
+func = do
+
+  -- complex first step
+  aaa
+
+  -- complex second step
+  bbb
+ where
+
+  helper :: Helper
+  helper = helpful
+
+  other :: Other
+  other = True
+
+#test function-where-newlines3
+
+func = do
+
+  -- complex first step
+  aaa
+
+  -- complex second step
+  bbb
+
+ where
+  helper :: Helper
+  helper = helpful
+
+  other :: Other
+  other = True
