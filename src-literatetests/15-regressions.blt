@@ -251,7 +251,7 @@ isValidPosition position | validX && validY = Just position
 ## this is ugly, but at least syntactically valid.
 foo = Reflex.runSpiderHost $ ReflexHost.hostApp $ do
   (inputEvent :: Reflex.Event Reflex.Spider String, inputFire :: String
-    -> IO Bool                                                         ) <-
+    -> IO Bool)                                                          <-
     ReflexHost.newExternalEvent
   liftIO . forkIO . forever $ getLine >>= inputFire
   ReflexHost.performEvent_ $ fmap (liftIO . putStrLn) inputEvent
