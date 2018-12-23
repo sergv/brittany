@@ -182,6 +182,10 @@ layoutPat lpat@(L _ pat) = docWrapNode lpat $ case pat of
 colsWrapPat :: Seq BriDocNumbered -> ToBriDocM BriDocNumbered
 colsWrapPat = docCols ColPatterns . fmap return . Foldable.toList
 
+seqWrapPat :: Seq BriDocNumbered -> ToBriDocM BriDocNumbered
+seqWrapPat = docSeq . fmap return . Foldable.toList
+
+
 wrapPatPrepend
   :: LPat GhcPs -> ToBriDocM BriDocNumbered -> ToBriDocM (Seq BriDocNumbered)
 wrapPatPrepend pat prepElem = do
@@ -199,11 +203,19 @@ wrapPatListy
   -> ToBriDocM BriDocNumbered
   -> ToBriDocM (Seq BriDocNumbered)
 wrapPatListy elems both start end = do
-  elemDocs <- Seq.fromList elems `forM` (layoutPat >=> colsWrapPat)
-  case Seq.viewl elemDocs of
-    Seq.EmptyL -> fmap Seq.singleton $ docLit $ Text.pack both
-    x1 Seq.:< rest -> do
-      sDoc <- start
-      eDoc <- end
-      rest' <- rest `forM` \bd -> docSeq [docCommaSep, return bd]
-      return $ (sDoc Seq.<| x1 Seq.<| rest') Seq.|> eDoc
+  -- let elemDocs = Seq.fromList elems -- `forM` (layoutPat >=> colsWrapPat)
+  let noItems = fmap Seq.singleton $ docLit $ Text.pack both
+  case Seq.viewr $ Seq.fromList elems of
+    Seq.EmptyR         -> noItems
+    prefix Seq.:> last -> do
+      elemDocs <- prefix `forM` \e -> do
+        e'    <- layoutPat e
+        comma <- docCommaSep
+        seqWrapPat $ e' Seq.|> comma
+      last' <- docSeq [seqWrapPat =<< layoutPat last, end]
+      let result = elemDocs Seq.|> last'
+      case Seq.viewl result of
+        Seq.EmptyL  -> noItems
+        y Seq.:< ys -> do
+          y' <- docSeq [start, pure y]
+          return $ y' Seq.<| ys
