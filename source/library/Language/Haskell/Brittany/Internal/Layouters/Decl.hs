@@ -332,23 +332,6 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
     --       be shared between alternatives.
     wherePartMultiLine :: [ToBriDocM BriDocNumbered] <- case mWhereDocs of
       Nothing -> return $ []
-      Just (annKeyWhere, [w]) -> pure . pure <$> docAlt
-        [ docEnsureIndent BrIndentRegular
-          $ docSeq
-              [ docLit $ Text.pack "where"
-              , docSeparator
-              , docForceSingleline $ return w
-              ]
-        , docMoveToKWDP annKeyWhere AnnWhere False
-        $ docEnsureIndent whereIndent
-        $ docLines
-            [ docLit $ Text.pack "where"
-            , docEnsureIndent whereIndent
-            $ docSetIndentLevel
-            $ docNonBottomSpacing
-            $ return w
-            ]
-        ]
       Just (annKeyWhere, ws) ->
         fmap (pure . pure)
           $ docMoveToKWDP annKeyWhere AnnWhere False
