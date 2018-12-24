@@ -1,7 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 data MyRecord
-  = forall a b
-  . ( Loooooooooooooooooooooooooooooooong a
+  = forall a b.
+    ( Loooooooooooooooooooooooooooooooong a
     , Loooooooooooooooooooooooooooooooong b
     ) =>
     MyConstructor

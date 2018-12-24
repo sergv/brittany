@@ -1,2 +1,2 @@
 {-# LANGUAGE RankNTypes #-}
-func :: forall b . Show b => b -> String
+func :: forall b. Show b => b -> String

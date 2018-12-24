@@ -1,5 +1,6 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE TupleSections     #-}
 
 module Language.Haskell.Brittany.Internal.Layouters.DataDecl where
 
@@ -73,43 +74,64 @@ layoutDataDecl ltycl name (HsQTvs _ bndrs) defn = case defn of
       (L _ (ConDeclH98 _ext consName (L _ _hasExt) qvars mRhsContext details _conDoc))
         -> docWrapNode ltycl $ do
           lhsContextDoc <- docSharedWrapper createContextDoc lhsContext
-          nameStr <- lrdrNameToTextAnn name
-          consNameStr <- lrdrNameToTextAnn consName
-          tyVarLine <- return <$> createBndrDoc bndrs
-          forallDocMay <- case createForallDoc qvars of
+          nameStr       <- lrdrNameToTextAnn name
+          consNameStr   <- lrdrNameToTextAnn consName
+          tyVarLine     <- return <$> createBndrDoc bndrs
+          forallDocMay  <- case createForallDoc qvars of
             Nothing -> pure Nothing
-            Just x -> Just . pure <$> x
-          rhsContextDocMay <- case mRhsContext of
-            Nothing -> pure Nothing
-            Just (L _ ctxt) -> Just . pure <$> createContextDoc ctxt
-          rhsDoc <- return <$> createDetailsDoc consNameStr details
+            Just x  -> Just . pure <$> x
+          (rhsContextDocMay, isSingularContext) <- case mRhsContext of
+            Nothing         -> pure (Nothing, False)
+            Just (L _ ctxt) -> (, isSingular) . Just . pure <$> createContextDoc ctxt
+              where
+                isSingular = case ctxt of
+                  [_] -> True
+                  _   -> False
+          rhsDoc  <- return <$> createDetailsDoc consNameStr details
           consDoc <-
             fmap pure
             $ docNonBottomSpacing
             $ case (forallDocMay, rhsContextDocMay) of
-                (Just forallDoc, Just rhsContextDoc) -> docLines
-                  [ docSeq
-                    [docLitS "=", docSeparator, docForceSingleline forallDoc]
-                  , docSeq
-                    [ docLitS "."
-                    , docSeparator
-                    , docSetBaseY $ docLines [rhsContextDoc, docSetBaseY rhsDoc]
-                    ]
+                (Just forallDoc, Just rhsContextDoc) -> docSeq
+                  [ docLitS "="
+                  , docSeparator
+                  , docSetBaseY $ docLines
+                      [ runFilteredAlternative $ do
+                          addAlternativeCond isSingularContext $
+                            docSeq
+                              [ docForceSingleline forallDoc
+                              , docLitS "."
+                              , docSeparator
+                              , rhsContextDoc
+                              ]
+                          addAlternative $
+                            docLines
+                              [ docSeq [docForceSingleline forallDoc, docLitS "."]
+                              , rhsContextDoc
+                              ]
+                      , docSetBaseY rhsDoc
+                      ]
                   ]
-                (Just forallDoc, Nothing) -> docLines
-                  [ docSeq
-                    [docLitS "=", docSeparator, docForceSingleline forallDoc]
-                  , docSeq [docLitS ".", docSeparator, rhsDoc]
+                (Just forallDoc, Nothing) -> docSeq
+                  [ docLitS "="
+                  , docSeparator
+                  , docSetBaseY $ docLines
+                      [ docSeq [docForceSingleline forallDoc, docLitS "."]
+                      , rhsDoc
+                      ]
                   ]
                 (Nothing, Just rhsContextDoc) -> docSeq
                   [ docLitS "="
                   , docSeparator
-                  , docSetBaseY $ docLines [rhsContextDoc, docSetBaseY rhsDoc]
+                  , docSetBaseY $ docLines
+                    [ rhsContextDoc
+                    , docSetBaseY rhsDoc
+                    ]
                   ]
                 (Nothing, Nothing) ->
                   docSeq [docLitS "=", docSeparator, rhsDoc]
           createDerivingPar mDerivs $ docAlt
-            [ -- data D = forall a . Show a => D a
+            [ -- data D = forall a. Show a => D a
               docSeq
               [ docNodeAnnKW ltycl (Just GHC.AnnData) $ docSeq
                 [ appSep $ docLitS "data"
@@ -126,7 +148,6 @@ layoutDataDecl ltycl name (HsQTvs _ bndrs) defn = case defn of
                   Just forallDoc ->
                     docSeq
                       [ docForceSingleline forallDoc
-                      , docSeparator
                       , docLitS "."
                       , docSeparator
                       ]
@@ -135,7 +156,7 @@ layoutDataDecl ltycl name (HsQTvs _ bndrs) defn = case defn of
                 ]
               ]
             , -- data D
-              --   = forall a . Show a => D a
+              --   = forall a. Show a => D a
               docAddBaseY BrIndentRegular $ docPar
               (docNodeAnnKW ltycl (Just GHC.AnnData) $ docSeq
                 [ appSep $ docLitS "data"
@@ -153,7 +174,6 @@ layoutDataDecl ltycl name (HsQTvs _ bndrs) defn = case defn of
                     Just forallDoc ->
                       docSeq
                         [ docForceSingleline forallDoc
-                        , docSeparator
                         , docLitS "."
                         , docSeparator
                         ]
@@ -163,8 +183,8 @@ layoutDataDecl ltycl name (HsQTvs _ bndrs) defn = case defn of
                 ]
               )
             , -- data D
-              --   = forall a
-              --   . Show a =>
+              --   = forall a.
+              --     Show a =>
               --     D a
               docAddBaseY BrIndentRegular $ docPar
               (docNodeAnnKW ltycl (Just GHC.AnnData) $ docSeq
@@ -178,8 +198,8 @@ layoutDataDecl ltycl name (HsQTvs _ bndrs) defn = case defn of
             , -- data
               --   Show a =>
               --   D
-              --   = forall a
-              --   . Show a =>
+              --   = forall a.
+              --     Show a =>
               --     D a
               -- This alternative is only for -XDatatypeContexts.
               -- But I think it is rather unlikely this will trigger without

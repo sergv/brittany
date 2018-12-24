@@ -1,7 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 data MyRecord
-  = forall a
-  . LooooooooooooooooooooongConstraint a =>
-    LoooooooooooongConstructor
+  = forall a. LoooooooConstraint a =>
+    LoooooooooooooooooooooooooooooooooooooooooooooooooooooongConstructor
       { foo :: abittoolongbutnotvery -> abittoolongbutnotvery
       }

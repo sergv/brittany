@@ -1,7 +1,11 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
-module Language.Haskell.Brittany.Internal.Layouters.Type where
+module Language.Haskell.Brittany.Internal.Layouters.Type
+  ( layoutType
+  , layoutTyVarBndrs
+  , processTyVarBndrsSingleline
+  ) where
 
 import qualified Data.Text as Text
 import GHC (AnnKeywordId(..), GenLocated(L))
@@ -17,6 +21,8 @@ import Language.Haskell.Brittany.Internal.Utils
   (FirstLastView(..), splitFirstLast)
 
 
+forallDoc :: ToBriDocM BriDocNumbered
+forallDoc = docLit (Text.pack "forall")
 
 layoutType :: ToBriDoc HsType
 layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
@@ -37,11 +43,13 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
         _ -> id
     let
       tyVarDocLineList = processTyVarBndrsSingleline tyVarDocs
-      forallDoc = docAlt
-        [ let open = docLit $ Text.pack "forall"
-          in docSeq ([open] ++ tyVarDocLineList)
-        , docPar
-          (docLit (Text.pack "forall"))
+      forallOneLine
+        | null tyVarDocLineList = docEmpty
+        | otherwise             = docSeq $
+           [forallDoc] ++ tyVarDocLineList ++ [docLit $ Text.pack ".", docSeparator]
+      forallMultiline =
+        docPar
+          forallDoc
           (docLines $ tyVarDocs <&> \case
             (tname, Nothing) -> docEnsureIndent BrIndentRegular $ docLit tname
             (tname, Just doc) -> docEnsureIndent BrIndentRegular $ docLines
@@ -50,7 +58,6 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
               , docLit $ Text.pack ")"
               ]
           )
-        ]
       contextDoc = case cntxtDocs of
         [] -> docLit $ Text.pack "()"
         [x] -> x
@@ -72,25 +79,54 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
             in docPar open $ docLines $ list ++ [close]
           ]
     docAlt
-      -- :: forall a b c . (Foo a b c) => a b -> c
+      -- :: forall a b c. (Foo a b c) => a b -> c
       [ docSeq
-        [ if null bndrs
-          then docEmpty
-          else
-            let
-              open = docLit $ Text.pack "forall"
-              close = docLit $ Text.pack " . "
-            in docSeq ([open, docSeparator] ++ tyVarDocLineList ++ [close])
+        [ forallOneLine
         , docForceSingleline contextDoc
         , docLit $ Text.pack " => "
         , docForceSingleline typeDoc
         ]
-      -- :: forall a b c
+
+      -- :: forall a (b :: k) c. (Foo a b c)
+      -- => a b
+      -- -> c
+      , docPar
+          (docSeq [forallOneLine, docForceSingleline contextDoc])
+          ( docCols ColTyOpPrefix
+              [ docLit $ Text.pack "=>"
+              , docSeparator
+              , docAddBaseY (BrIndentSpecial 3) $ maybeForceML $ typeDoc
+              ]
+          )
+
+      -- :: forall a (b :: k) c.
+      --    (Foo a b c)
+      -- => a b
+      -- -> c
+      , docPar
+          forallOneLine
+          ( docLines
+            [ docCols ColTyOpPrefix
+              [ docWrapNodeRest ltype $ docLit $ Text.pack "   "
+              , docAddBaseY (BrIndentSpecial 3)
+              $ contextDoc
+              ]
+            , docCols ColTyOpPrefix
+              [ docLit $ Text.pack "=>"
+              , docSeparator
+              , docAddBaseY (BrIndentSpecial 3) $ maybeForceML $ typeDoc
+              ]
+            ]
+          )
+      -- :: forall
+      --      a
+      --      (b :: k)
+      --      c
       --  . (Foo a b c)
       -- => a b
       -- -> c
       , docPar
-        forallDoc
+        forallMultiline
         (docLines
           [ docCols
             ColTyOpPrefix
@@ -115,24 +151,24 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
         _ -> id
     let tyVarDocLineList = processTyVarBndrsSingleline tyVarDocs
     docAlt
-      -- forall x . x
+      -- forall x. x
       [ docSeq
         [ if null bndrs
           then docEmpty
           else
             let
-              open = docLit $ Text.pack "forall"
-              close = docLit $ Text.pack " . "
-            in docSeq ([open] ++ tyVarDocLineList ++ [close])
+              open = forallDoc
+              close = docLit $ Text.pack "."
+            in docSeq ([open] ++ tyVarDocLineList ++ [close, docSeparator])
         , docForceSingleline $ return $ typeDoc
         ]
-      -- :: forall x
-      --  . x
+      -- :: forall x.
+      --    x
       , docPar
-        (docSeq $ docLit (Text.pack "forall") : tyVarDocLineList)
+        (docSeq $ forallDoc : tyVarDocLineList ++ [docLit $ Text.pack ".", docSeparator])
         (docCols
           ColTyOpPrefix
-          [ docWrapNodeRest ltype $ docLit $ Text.pack " . "
+          [ docWrapNodeRest ltype $ docLit $ Text.pack "   "
           , maybeForceML $ return typeDoc
           ]
         )
@@ -140,7 +176,7 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
       --      (x :: *)
       --  . x
       , docPar
-        (docLit (Text.pack "forall"))
+        forallDoc
         (docLines
         $ (tyVarDocs <&> \case
             (tname, Nothing) ->

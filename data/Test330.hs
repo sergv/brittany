@@ -1,7 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 func
-  :: forall a
-   . ()
+  :: forall a. ()
   => aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
   -> aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 func

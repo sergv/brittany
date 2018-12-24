@@ -1,7 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 data MyStruct
-  = forall a b
-  . ( Loooooooooooooooooooooooooooooooong a
+  = forall a b.
+    ( Loooooooooooooooooooooooooooooooong a
     , Loooooooooooooooooooooooooooooooong b
     ) =>
     MyConstructor (ToBriDocM BriDocNumbered)

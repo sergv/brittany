@@ -1,4 +1,4 @@
 {-# LANGUAGE ExistentialQuantification #-}
-data Foo = forall a . Show a => Bar
+data Foo = forall a. Show a => Bar
   { foo :: a
   }

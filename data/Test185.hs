@@ -1,2 +1,2 @@
 {-# LANGUAGE RankNTypes #-}
-type MySynonym = forall a . [a]
+type MySynonym = forall a. [a]

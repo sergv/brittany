@@ -1,7 +1,6 @@
 {-# LANGUAGE RankNTypes #-}
 addFlagStringParam
-  :: forall f out
-   . (Applicative f)
+  :: forall f out. (Applicative f)
   => String -- ^ short flag chars, i.e. "v" for -v
   -> [String] -- ^ list of long names, i.e. ["verbose"]
   -> String -- ^ param name

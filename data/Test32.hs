@@ -1,7 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 func
-  :: forall m
-   . Foo
+  :: forall m. Foo
   => ColMap2
   -> ColInfo
   -> ColInfo

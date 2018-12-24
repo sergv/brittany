@@ -1,8 +1,8 @@
 {-# LANGUAGE ExistentialQuantification #-}
-data MyRecord
+data MyRecord =
   -- test comment
-  = forall a b
-  . ( Loooooooooooooooooooooooooooooooong a
+    forall a b.
+    ( Loooooooooooooooooooooooooooooooong a
     , Loooooooooooooooooooooooooooooooong b
     ) =>
     MyConstructor a b
