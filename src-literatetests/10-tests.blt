@@ -209,13 +209,12 @@ test052 ::  lkasdlkjalsdjlakjsdlkjasldkjalskdjlkajsd
 
 #test forall oneliner
 {-# LANGUAGE ScopedTypeVariables #-}
-func :: forall (a :: *) b . a -> b
+func :: forall (a :: *) b. a -> b
 
 #test forall context multiline
 {-# LANGUAGE ScopedTypeVariables #-}
 func
-  :: forall m
-   . Foo
+  :: forall m. Foo
   => ColMap2
   -> ColInfo
   -> ColInfo
@@ -226,8 +225,8 @@ func
 #test forall no-context multiline
 {-# LANGUAGE ScopedTypeVariables #-}
 func
-  :: forall m
-   . ColMap2
+  :: forall m.
+     ColMap2
   -> ColInfo
   -> ColInfo
   -> ColInfo
@@ -238,8 +237,7 @@ func
 #test forall context multiline with comments
 {-# LANGUAGE RankNTypes #-}
 addFlagStringParam
-  :: forall f out
-   . (Applicative f)
+  :: forall f out. (Applicative f)
   => String -- ^ short flag chars, i.e. "v" for -v
   -> [String] -- ^ list of long names, i.e. ["verbose"]
   -> String -- ^ param name
@@ -978,7 +976,7 @@ type MySynonym a
 
 {-# LANGUAGE RankNTypes #-}
 
-type MySynonym = forall a . [a]
+type MySynonym = forall a. [a]
 
 #test synonym-operator
 

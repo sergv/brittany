@@ -506,8 +506,8 @@ test :: Proxy '[Bool]
 #test issue 64
 {-# LANGUAGE RankNTypes, KindSignatures #-}
 func
-  :: forall m str
-   . (Str str, Monad m)
+  :: forall m str.
+     (Str str, Monad m)
   => Int
   -> Proxy (str :: [*])
   -> m (Tagged str String)
@@ -592,8 +592,8 @@ alternatives = -- a
 #test issue 133
 {-# LANGUAGE ScopedTypeVariables #-}
 func
-  :: forall a
-   . ()
+  :: forall a.
+     ()
   => aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
   -> aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 func

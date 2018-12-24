@@ -211,13 +211,12 @@ test052
 
 #test forall oneliner
 {-# LANGUAGE ScopedTypeVariables #-}
-func :: forall (a :: *) b . a -> b
+func :: forall (a :: *) b. a -> b
 
 #test forall context multiline
 {-# LANGUAGE ScopedTypeVariables #-}
 func
-  :: forall m
-   . Foo
+  :: forall m. Foo
   => ColMap2
   -> ColInfo
   -> ColInfo
@@ -228,8 +227,8 @@ func
 #test forall no-context multiline
 {-# LANGUAGE ScopedTypeVariables #-}
 func
-  :: forall m
-   . ColMap2
+  :: forall m.
+     ColMap2
   -> ColInfo
   -> ColInfo
   -> ColInfo
@@ -239,7 +238,7 @@ func
 
 #test language pragma issue
 {-# LANGUAGE ScopedTypeVariables #-}
-func :: forall (a :: *) b . a -> b
+func :: forall (a :: *) b. a -> b
 
 #test comments 1
 func :: a -> b -- comment
