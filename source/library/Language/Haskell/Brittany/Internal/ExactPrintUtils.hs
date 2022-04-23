@@ -5,7 +5,14 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Language.Haskell.Brittany.Internal.ExactPrintUtils where
+module Language.Haskell.Brittany.Internal.ExactPrintUtils
+  ( parseModule
+  , parseModuleFromString
+  , foldedAnnKeys
+  , withTransformedAnns
+  , ToplevelAnns(..)
+  , extractToplevelAnns
+  ) where
 
 import qualified Control.Monad.State.Class as State.Class
 import qualified Control.Monad.Trans.MultiRWS.Strict as MultiRWSS
@@ -19,7 +26,6 @@ import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import GHC (GenLocated(L))
 import qualified GHC hiding (parseModule)
-import qualified GHC.Driver.CmdLine as GHC
 import GHC.Hs
 import qualified GHC.Types.SrcLoc as GHC
 import GHC.Types.SrcLoc (Located, SrcSpan)
@@ -189,14 +195,16 @@ commentAnnFixTransformGlob ast = do
 
 --   ExactPrint.modifyAnnsT moveComments
 
+newtype ToplevelAnns = ToplevelAnns { unToplevelAnns :: Map ExactPrint.AnnKey ExactPrint.Anns }
+
 -- | split a set of annotations in a module into a map from top-level module
 -- elements to the relevant annotations. Avoids quadratic behaviour a trivial
 -- implementation would have.
 extractToplevelAnns
   :: Located HsModule
   -> ExactPrint.Anns
-  -> Map ExactPrint.AnnKey ExactPrint.Anns
-extractToplevelAnns lmod anns = output
+  -> ToplevelAnns
+extractToplevelAnns lmod anns = ToplevelAnns output
  where
   (L _ (HsModule _ _ _ _ ldecls _ _)) = lmod
   declMap1 :: Map ExactPrint.AnnKey ExactPrint.AnnKey
@@ -222,20 +230,17 @@ groupMap f = Map.foldlWithKey'
 
 foldedAnnKeys :: Data.Data.Data ast => ast -> Set ExactPrint.AnnKey
 foldedAnnKeys ast = SYB.everything
-  Set.union
-  (\x -> maybe
-    Set.empty
+  (<>)
+  (\x -> foldMap
     Set.singleton
     [ SYB.gmapQi 1 (ExactPrint.mkAnnKey . L l) x
     | locTyCon == SYB.typeRepTyCon (SYB.typeOf x)
     , l :: SrcSpan <- SYB.gmapQi 0 SYB.cast x
-    ]
-      -- for some reason, ghc-8.8 has forgotten how to infer the type of l,
-      -- even though it is passed to mkAnnKey above, which only accepts
-      -- SrcSpan.
-  )
+    ])
   ast
-  where locTyCon = SYB.typeRepTyCon (SYB.typeOf (L () ()))
+  where
+    locTyCon :: TyCon
+    locTyCon = SYB.typeRepTyCon (SYB.typeOf (L () ()))
 
 
 withTransformedAnns
@@ -257,7 +262,3 @@ withTransformedAnns ast m = MultiRWSS.mGetRawR >>= \case
       ((), (annsBalanced, _), _) =
         ExactPrint.runTransform anns (commentAnnFixTransformGlob ast)
     in annsBalanced
-
-
-warnExtractorCompat :: GHC.Warn -> String
-warnExtractorCompat (GHC.Warn _ (L _ s)) = s

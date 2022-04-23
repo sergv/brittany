@@ -20,11 +20,12 @@ import qualified Data.Strict.Maybe as Strict
 import qualified Data.Text.Lazy.Builder as Text.Builder
 import GHC (AnnKeywordId, GenLocated, Located, SrcSpan)
 import Language.Haskell.Brittany.Internal.Config.Types
+import Language.Haskell.Brittany.Internal.ExactPrintUtils (ToplevelAnns)
 import Language.Haskell.Brittany.Internal.Prelude
-import qualified Language.Haskell.GHC.ExactPrint as ExactPrint
 import Language.Haskell.GHC.ExactPrint (AnnKey)
-import qualified Language.Haskell.GHC.ExactPrint.Types as ExactPrint.Types
+import qualified Language.Haskell.GHC.ExactPrint as ExactPrint
 import Language.Haskell.GHC.ExactPrint.Types (Anns)
+import qualified Language.Haskell.GHC.ExactPrint.Types as ExactPrint.Types
 import qualified Safe
 
 
@@ -35,7 +36,7 @@ data PerItemConfig = PerItemConfig
   deriving Data.Data.Data
 
 type PPM = MultiRWSS.MultiRWS
-  '[Map ExactPrint.AnnKey ExactPrint.Anns, PerItemConfig, Config, ExactPrint.Anns]
+  '[ToplevelAnns, PerItemConfig, Config, ExactPrint.Anns]
   '[Text.Builder.Builder, [BrittanyError], Seq String]
   '[]
 

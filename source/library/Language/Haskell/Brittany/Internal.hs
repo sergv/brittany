@@ -28,8 +28,8 @@ import qualified Data.Text as Text
 import qualified Data.Text.Lazy as TextL
 import qualified Data.Text.Lazy.Builder as Text.Builder
 import qualified Data.Yaml
-import qualified GHC hiding (parseModule)
 import GHC (GenLocated(L))
+import qualified GHC hiding (parseModule)
 import qualified GHC.Driver.Session as GHC
 import GHC.Hs
 import qualified GHC.LanguageExtensions.Type as GHC
@@ -462,7 +462,7 @@ toLocal conf anns m = do
 ppModule :: GenLocated SrcSpan HsModule -> PPM ()
 ppModule lmod@(L _loc _m@(HsModule _ _name _exports _ decls _ _)) = do
   defaultAnns <- do
-    anns <- mAsk
+    ToplevelAnns anns <- mAsk
     let annKey = ExactPrint.mkAnnKey lmod
     let annMap = Map.findWithDefault Map.empty annKey anns
     let isEof = (== ExactPrint.AnnEofPos)
@@ -478,7 +478,7 @@ ppModule lmod@(L _loc _m@(HsModule _ _name _exports _ decls _ _)) = do
     let
       mBindingConfs =
         declBindingNames <&> \n -> Map.lookup n $ _icd_perBinding inlineConf
-    filteredAnns <- mAsk <&> \annMap ->
+    filteredAnns <- mAsk <&> \(ToplevelAnns annMap) ->
       Map.union defaultAnns $ Map.findWithDefault Map.empty declAnnKey annMap
 
     traceIfDumpConf
@@ -541,7 +541,7 @@ ppPreamble
   :: GenLocated SrcSpan HsModule
   -> PPM [(ExactPrint.KeywordId, ExactPrint.DeltaPos)]
 ppPreamble lmod@(L loc m@HsModule{}) = do
-  filteredAnns <- mAsk <&> \annMap ->
+  filteredAnns <- mAsk <&> \(ToplevelAnns annMap) ->
     Map.findWithDefault Map.empty (ExactPrint.mkAnnKey lmod) annMap
     -- Since ghc-exactprint adds annotations following (implicit)
     -- modules to both HsModule and the elements in the module

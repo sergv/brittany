@@ -257,12 +257,12 @@ layoutPatternBind funId binderDoc lmatch@(L _ match) = do
              ColPatterns
              [ docParenL
              , appSep $ docForceSingleline p1
-             , appSep $ docLit $ idStr
+             , appSep $ docLit idStr
              , docForceSingleline p2
              , appSep $ docParenR
              ]
          ]
-        ++ (spacifyDocs $ docForceSingleline <$> pr)
+        ++ spacifyDocs (docForceSingleline <$> pr)
         )
     (Just idStr, []) -> docLit idStr
     (Just idStr, ps) ->
