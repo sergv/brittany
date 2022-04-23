@@ -10,7 +10,7 @@ module Language.Haskell.Brittany.Internal.ExactPrintUtils where
 import qualified Control.Monad.State.Class as State.Class
 import qualified Control.Monad.Trans.MultiRWS.Strict as MultiRWSS
 import Data.Data
-import qualified Data.Foldable as Foldable
+import Data.Foldable
 import qualified Data.Generics as SYB
 import Data.HList.HList
 import qualified Data.Map as Map
@@ -60,27 +60,33 @@ commentAnnFixTransformGlob ast = do
         `SYB.ext1Q` (\l@(L span _) ->
                       Seq.singleton (span, ExactPrint.mkAnnKey l)
                     )
-  let nodes = SYB.everything (<>) extract ast
+  let nodes :: Seq (SrcSpan, ExactPrint.AnnKey)
+      nodes = SYB.everything (<>) extract ast
   let
     annsMap :: Map GHC.RealSrcLoc ExactPrint.AnnKey
     annsMap = Map.fromListWith
       (const id)
       [ (GHC.realSrcSpanEnd span, annKey)
-      | (GHC.RealSrcSpan span _, annKey) <- Foldable.toList nodes
+      | (GHC.RealSrcSpan span _, annKey) <- toList nodes
       ]
-  nodes `forM_` (snd .> processComs annsMap)
+  traverse_ (processComs annsMap . snd) nodes
  where
+  processComs
+    :: Map GHC.RealSrcLoc ExactPrint.AnnKey -> ExactPrint.AnnKey -> ExactPrint.Transform ()
   processComs annsMap annKey1 = do
-    mAnn <- State.Class.gets fst <&> Map.lookup annKey1
-    mAnn `forM_` \ann1 -> do
+    mAnn <- Map.lookup annKey1 <$> State.Class.gets fst
+    mAnn `forM_` \(ann1 :: ExactPrint.Annotation) -> do
       let
-        priors = ExactPrint.annPriorComments ann1
+        priors :: [(ExactPrint.Comment, ExactPrint.DeltaPos)]
+        priors  = ExactPrint.annPriorComments ann1
+        follows :: [(ExactPrint.Comment, ExactPrint.DeltaPos)]
         follows = ExactPrint.annFollowingComments ann1
-        assocs = ExactPrint.annsDP ann1
+        assocs :: [(ExactPrint.KeywordId, ExactPrint.DeltaPos)]
+        assocs  = ExactPrint.annsDP ann1
       let
         processCom
           :: (ExactPrint.Comment, ExactPrint.DeltaPos)
-          -> ExactPrint.TransformT Identity Bool
+          -> ExactPrint.Transform Bool
         processCom comPair@(com, _) =
           case GHC.realSrcSpanStart $ ExactPrint.commentIdentifier com of
             comLoc -> case Map.lookupLE comLoc annsMap of
@@ -92,8 +98,10 @@ commentAnnFixTransformGlob ast = do
                where
                 ExactPrint.AnnKey annKeyLoc1 con1 = annKey1
                 ExactPrint.AnnKey annKeyLoc2 con2 = annKey2
+                loc1, loc2 :: GHC.RealSrcLoc
                 loc1 = GHC.realSrcSpanStart annKeyLoc1
                 loc2 = GHC.realSrcSpanStart annKeyLoc2
+                move :: ExactPrint.Transform ()
                 move = ExactPrint.modifyAnnsT $ \anns ->
                   let
                     ann2 = Data.Maybe.fromJust $ Map.lookup annKey2 anns
@@ -243,6 +251,7 @@ withTransformedAnns ast m = MultiRWSS.mGetRawR >>= \case
     MultiRWSS.mPutRawR readers
     pure x
  where
+  f :: ExactPrint.Anns -> ExactPrint.Anns
   f anns =
     let
       ((), (annsBalanced, _), _) =
