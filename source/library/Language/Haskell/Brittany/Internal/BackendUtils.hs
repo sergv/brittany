@@ -382,8 +382,12 @@ moveToY y = mModify $ \state ->
 ppmMoveToExactLoc
   :: MonadMultiWriter Text.Builder.Builder m => ExactPrint.DeltaPos -> m ()
 ppmMoveToExactLoc (ExactPrint.DP (x, y)) = do
-  replicateM_ x $ mTell $ Text.Builder.fromString "\n"
-  replicateM_ y $ mTell $ Text.Builder.fromString " "
+  mTell $ stimes' x $ Text.Builder.singleton '\n'
+  mTell $ stimes' y $ Text.Builder.singleton ' '
+  where
+    stimes' n z
+      | n < 1     = mempty
+      | otherwise = stimes n z
 
 -- TODO: update and use, or clean up. Currently dead code.
 layoutWritePriorComments
