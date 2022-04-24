@@ -240,11 +240,10 @@ getTopLevelDeclNameMap (L _ HsModule{hsmodDecls}) =
 -- won't do.
 parsePrintModule :: Config -> Text -> IO (Either [BrittanyError] Text)
 parsePrintModule configWithDebugs inputText = runExceptT $ do
-  let
-    config = configWithDebugs { _conf_debug = _conf_debug staticDefaultConfig }
-  let ghcOptions = config & _conf_forward & _options_ghc & runIdentity
-  let config_pp = config & _conf_preprocessor
-  let cppMode = config_pp & _ppconf_CPPMode & confUnpack
+  let config             = configWithDebugs { _conf_debug = _conf_debug staticDefaultConfig }
+  let ghcOptions         = config & _conf_forward & _options_ghc & runIdentity
+  let config_pp          = config & _conf_preprocessor
+  let cppMode            = config_pp & _ppconf_CPPMode & confUnpack
   let hackAroundIncludes = config_pp & _ppconf_hackAroundIncludes & confUnpack
   (anns, parsedSource, hasCPP) <- do
     let
@@ -257,18 +256,18 @@ parsePrintModule configWithDebugs inputText = runExceptT $ do
     let
       cppCheckFunc dynFlags = if GHC.xopt GHC.Cpp dynFlags
         then case cppMode of
-          CPPModeAbort -> return $ Left "Encountered -XCPP. Aborting."
-          CPPModeWarn -> return $ Right True
-          CPPModeNowarn -> return $ Right True
-        else return $ Right False
+          CPPModeAbort  -> Left "Encountered -XCPP. Aborting."
+          CPPModeWarn   -> Right True
+          CPPModeNowarn -> Right True
+        else Right False
     parseResult <- lift $ parseModuleFromString
       ghcOptions
       "stdin"
-      cppCheckFunc
+      (pure . cppCheckFunc)
       (hackTransform $ Text.unpack inputText)
     case parseResult of
       Left err -> throwE [ErrorInput err]
-      Right x -> pure x
+      Right x  -> pure x
   (inlineConf, perItemConf) <-
     either (throwE . (: []) . uncurry ErrorMacroConfig) pure
       $ extractCommentConfigs anns (getTopLevelDeclNameMap parsedSource)
