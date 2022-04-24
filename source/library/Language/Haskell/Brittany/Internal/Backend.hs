@@ -136,7 +136,7 @@ layoutBriDocM = \case
   BDForwardLineMode bd -> layoutBriDocM bd
   BDExternal annKey subKeys shouldAddComment t -> do
     let
-      tlines = Text.lines $ t <> Text.pack "\n"
+      tlines = Text.lines $ t <> Text.singleton '\n'
       tlineCount = length tlines
     anns :: ExactPrint.Anns <- mAsk
     when shouldAddComment $ do
@@ -150,7 +150,7 @@ layoutBriDocM = \case
       unless (i == tlineCount) layoutWriteNewlineBlock
     do
       state <- mGet
-      let filterF k _ = not $ k `Set.member` subKeys
+      let filterF k _ = k `Set.notMember` subKeys
       mSet $ state
         { _lstate_comments = Map.filterWithKey filterF $ _lstate_comments state
         }
