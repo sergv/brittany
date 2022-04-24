@@ -1,5 +1,6 @@
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE NamedFieldPuns      #-}
+{-# LANGUAGE NoImplicitPrelude   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Language.Haskell.Brittany.Internal
@@ -218,10 +219,10 @@ extractCommentConfigs anns (TopLevelDeclNameMap declNameMap) = do
 
 
 getTopLevelDeclNameMap :: GHC.ParsedSource -> TopLevelDeclNameMap
-getTopLevelDeclNameMap (L _ (HsModule _ _name _exports _ decls _ _)) =
+getTopLevelDeclNameMap (L _ HsModule{hsmodDecls}) =
   TopLevelDeclNameMap $ Map.fromList
     [ (ExactPrint.mkAnnKey decl, name)
-    | decl <- decls
+    | decl <- hsmodDecls
     , (name : _) <- [getDeclBindingNames decl]
     ]
 
@@ -460,8 +461,8 @@ toLocal conf anns m = do
   pure x
 
 ppModule :: GenLocated SrcSpan HsModule -> PPM ()
-ppModule lmod@(L _loc _m@(HsModule _ _name _exports _ decls _ _)) = do
-  defaultAnns <- do
+ppModule lmod@(L _loc _m@HsModule{hsmodDecls}) = do
+  (defaultAnns :: Map ExactPrint.AnnKey ExactPrint.Annotation) <- do
     ToplevelAnns anns <- mAsk
     let annKey = ExactPrint.mkAnnKey lmod
     let annMap = Map.findWithDefault Map.empty annKey anns
@@ -469,15 +470,15 @@ ppModule lmod@(L _loc _m@(HsModule _ _name _exports _ decls _ _)) = do
     let overAnnsDP f a = a { ExactPrint.annsDP = f $ ExactPrint.annsDP a }
     pure $ fmap (overAnnsDP . filter $ isEof . fst) annMap
 
-  post <- ppPreamble lmod
-  decls `forM_` \decl -> do
+  (post :: [(ExactPrint.KeywordId, ExactPrint.DeltaPos)]) <- ppPreamble lmod
+  hsmodDecls `forM_` \decl -> do
     let declAnnKey = ExactPrint.mkAnnKey decl
     let declBindingNames = getDeclBindingNames decl
-    inlineConf <- mAsk
+    (inlineConf :: PerItemConfig) <- mAsk
     let mDeclConf = Map.lookup declAnnKey $ _icd_perKey inlineConf
-    let
-      mBindingConfs =
-        declBindingNames <&> \n -> Map.lookup n $ _icd_perBinding inlineConf
+    let mBindingConfs :: [Maybe (CConfig Maybe)]
+        mBindingConfs =
+          declBindingNames <&> \n -> Map.lookup n $ _icd_perBinding inlineConf
     filteredAnns <- mAsk <&> \(ToplevelAnns annMap) ->
       Map.union defaultAnns $ Map.findWithDefault Map.empty declAnnKey annMap
 
@@ -486,13 +487,16 @@ ppModule lmod@(L _loc _m@(HsModule _ _name _exports _ decls _ _)) = do
         _dconf_dump_annotations
       $ annsDoc filteredAnns
 
-    config <- mAsk
+    (config :: CConfig Identity) <- mAsk
 
-    let
-      config' = cZipWith fromOptionIdentity config
-        $ mconcat (catMaybes (mBindingConfs ++ [mDeclConf]))
+    let config' :: CConfig Identity
+        config'
+          = cZipWith fromOptionIdentity config
+          $ mconcat (catMaybes (mBindingConfs ++ [mDeclConf]))
 
-    let exactprintOnly = config' & _conf_roundtrip_exactprint_only & confUnpack
+
+    let exactprintOnly :: Bool
+        exactprintOnly = config' & _conf_roundtrip_exactprint_only & confUnpack
     toLocal config' filteredAnns $ do
       bd <- if exactprintOnly
         then briDocMToPPM $ briDocByExactNoComment decl
