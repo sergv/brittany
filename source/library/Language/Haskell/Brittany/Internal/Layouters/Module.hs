@@ -1,4 +1,5 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
 module Language.Haskell.Brittany.Internal.Layouters.Module where
@@ -20,27 +21,20 @@ import Language.Haskell.GHC.ExactPrint as ExactPrint
 import Language.Haskell.GHC.ExactPrint.Types
   (DeltaPos(..), commentContents, deltaRow)
 
-
-
 layoutModule :: ToBriDoc' HsModule
 layoutModule lmod@(L _ mod') = case mod' of
     -- Implicit module Main
-  HsModule _ Nothing _ imports _ _ _ -> do
-    commentedImports <- transformToCommentedImport imports
-    -- groupify commentedImports `forM_` tellDebugMessShow
+  HsModule{hsmodName = Nothing, hsmodImports} -> do
+    commentedImports <- transformToCommentedImport hsmodImports
     docLines (commentedImportsToDoc <$> sortCommentedImports commentedImports)
-    -- sortedImports <- sortImports imports
-    -- docLines $ [layoutImport y i | (y, i) <- sortedImports]
-  HsModule _ (Just n) les imports _ _ _ -> do
-    commentedImports <- transformToCommentedImport imports
-    -- groupify commentedImports `forM_` tellDebugMessShow
-    -- sortedImports <- sortImports imports
+  HsModule{hsmodName = Just n, hsmodExports, hsmodImports} -> do
+    commentedImports <- transformToCommentedImport hsmodImports
     let tn = Text.pack $ moduleNameString $ unLoc n
     allowSingleLineExportList <-
       mAsk <&> _conf_layout .> _lconfig_allowSingleLineExportList .> confUnpack
     -- the config should not prevent single-line layout when there is no
     -- export list
-    let allowSingleLine = allowSingleLineExportList || Data.Maybe.isNothing les
+    let allowSingleLine = allowSingleLineExportList || Data.Maybe.isNothing hsmodExports
     docLines
       $ docSeq
           [ docNodeAnnKW lmod Nothing docEmpty
@@ -50,7 +44,7 @@ layoutModule lmod@(L _ mod') = case mod' of
             addAlternativeCond allowSingleLine $ docForceSingleline $ docSeq
               [ appSep $ docLit $ Text.pack "module"
               , appSep $ docLit tn
-              , docWrapNode lmod $ appSep $ case les of
+              , docWrapNode lmod $ appSep $ case hsmodExports of
                 Nothing -> docEmpty
                 Just x -> layoutLLIEs True KeepItemsUnsorted x
               , docSeparator
@@ -60,7 +54,7 @@ layoutModule lmod@(L _ mod') = case mod' of
               [ docAddBaseY BrIndentRegular $ docPar
                   (docSeq [appSep $ docLit $ Text.pack "module", docLit tn])
                   (docSeq
-                    [ docWrapNode lmod $ case les of
+                    [ docWrapNode lmod $ case hsmodExports of
                       Nothing -> docEmpty
                       Just x -> layoutLLIEs False KeepItemsUnsorted x
                     , docSeparator
@@ -69,7 +63,7 @@ layoutModule lmod@(L _ mod') = case mod' of
                   )
               ]
           ]
-      : (commentedImportsToDoc <$> sortCommentedImports commentedImports) -- [layoutImport y i | (y, i) <- sortedImports]
+      : (commentedImportsToDoc <$> sortCommentedImports commentedImports)
 
 data CommentedImport
   = EmptyLine
