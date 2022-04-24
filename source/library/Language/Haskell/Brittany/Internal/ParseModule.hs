@@ -1,6 +1,8 @@
 {-# OPTIONS_GHC -Wno-implicit-prelude #-}
 
-module Language.Haskell.Brittany.Internal.ParseModule where
+module Language.Haskell.Brittany.Internal.ParseModule
+  ( parseModule
+  ) where
 
 import qualified Control.Monad as Monad
 import qualified Control.Monad.IO.Class as IO
