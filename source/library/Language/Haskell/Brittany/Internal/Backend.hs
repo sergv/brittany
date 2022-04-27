@@ -34,8 +34,8 @@ import qualified Language.Haskell.GHC.ExactPrint.Types as ExactPrint.Types
 type ColIndex = Int
 
 data ColumnSpacing
-  = ColumnSpacingLeaf Int
-  | ColumnSpacingRef Int Int
+  = ColumnSpacingLeaf !Int
+  | ColumnSpacingRef !Int !Int
 
 type ColumnBlock a = [a]
 type ColumnBlocks a = Seq [a]
