@@ -3,7 +3,6 @@
 
 module Language.Haskell.Brittany.Internal.BackendUtils where
 
-import qualified Data.Either
 import qualified Data.Map as Map
 import qualified Data.Maybe
 import qualified Data.Semigroup as Semigroup
@@ -20,9 +19,13 @@ import qualified Language.Haskell.GHC.ExactPrint.Types as ExactPrint
 
 
 
-traceLocal :: (MonadMultiState LayoutState m) => a -> m ()
+traceLocal :: MonadMultiState LayoutState m => a -> m ()
 traceLocal _ = return ()
 
+stimes' :: Monoid a => Int -> a -> a
+stimes' n x
+  | n < 1     = mempty
+  | otherwise = stimes n x
 
 layoutWriteAppend
   :: (MonadMultiWriter Text.Builder.Builder m, MonadMultiState LayoutState m)
@@ -32,17 +35,15 @@ layoutWriteAppend t = do
   traceLocal ("layoutWriteAppend", t)
   state <- mGet
   case _lstate_curYOrAddNewline state of
-    Right i -> do
-      replicateM_ i $ mTell $ Text.Builder.fromString $ "\n"
-    Left{} -> do
-      return ()
+    InsertNewlines i -> mTell $ stimes' i $ Text.Builder.singleton '\n'
+    Cols{}           -> pure ()
   let spaces = fromMaybe 0 $ _lstate_addSepSpace state
-  mTell $ Text.Builder.fromText $ Text.pack (replicate spaces ' ')
-  mTell $ Text.Builder.fromText $ t
+  mTell $ stimes' spaces $ Text.Builder.singleton ' '
+  mTell $ Text.Builder.fromText t
   mModify $ \s -> s
-    { _lstate_curYOrAddNewline = Left $ case _lstate_curYOrAddNewline s of
-      Left c -> c + Text.length t + spaces
-      Right{} -> Text.length t + spaces
+    { _lstate_curYOrAddNewline = Cols $ case _lstate_curYOrAddNewline s of
+      Cols c           -> c + Text.length t + spaces
+      InsertNewlines{} -> Text.length t + spaces
     , _lstate_addSepSpace = Nothing
     }
 
@@ -80,8 +81,8 @@ layoutWriteNewlineBlock = do
   traceLocal ("layoutWriteNewlineBlock")
   state <- mGet
   mSet $ state
-    { _lstate_curYOrAddNewline = Right 1
-    , _lstate_addSepSpace = Just $ lstate_baseY state
+    { _lstate_curYOrAddNewline = InsertNewlines 1
+    , _lstate_addSepSpace      = Just $ lstate_baseY state
     }
 
 -- layoutMoveToIndentCol :: ( MonadMultiState LayoutState m
@@ -103,8 +104,8 @@ layoutSetCommentCol = do
   state <- mGet
   let
     col = case _lstate_curYOrAddNewline state of
-      Left i  -> i + fromMaybe 0 (_lstate_addSepSpace state)
-      Right{} -> lstate_baseY state
+      Cols i           -> i + fromMaybe 0 (_lstate_addSepSpace state)
+      InsertNewlines{} -> lstate_baseY state
   traceLocal ("layoutSetCommentCol", col)
   unless (Data.Maybe.isJust $ _lstate_commentCol state)
     $ mSet state { _lstate_commentCol = Just col }
@@ -122,19 +123,19 @@ layoutMoveToCommentPos y x commentLines = do
   state <- mGet
   mSet state
     { _lstate_curYOrAddNewline = case _lstate_curYOrAddNewline state of
-      Left i -> if y == 0 then Left i else Right y
-      Right{} -> Right y
+      Cols i           -> if y == 0 then Cols i else InsertNewlines y
+      InsertNewlines{} -> InsertNewlines y
     , _lstate_addSepSpace =
       Just $ if Data.Maybe.isJust (_lstate_commentCol state)
         then case _lstate_curYOrAddNewline state of
-          Left{} -> if y == 0 then x else _lstate_indLevelLinger state + x
-          Right{} -> _lstate_indLevelLinger state + x
+          Cols{}           -> if y == 0 then x else _lstate_indLevelLinger state + x
+          InsertNewlines{} -> _lstate_indLevelLinger state + x
         else if y == 0 then x else _lstate_indLevelLinger state + x
     , _lstate_commentCol = Just $ case _lstate_commentCol state of
       Just existing -> existing
       Nothing -> case _lstate_curYOrAddNewline state of
-        Left i -> i + fromMaybe 0 (_lstate_addSepSpace state)
-        Right{} -> lstate_baseY state
+        Cols i           -> i + fromMaybe 0 (_lstate_addSepSpace state)
+        InsertNewlines{} -> lstate_baseY state
     , _lstate_commentNewlines =
       _lstate_commentNewlines state + y + commentLines - 1
     }
@@ -148,8 +149,8 @@ layoutWriteNewline = do
   state <- mGet
   mSet $ state
     { _lstate_curYOrAddNewline = case _lstate_curYOrAddNewline state of
-      Left{} -> Right 1
-      Right i -> Right (i + 1)
+      Cols{}           -> InsertNewlines 1
+      InsertNewlines i -> InsertNewlines (i + 1)
     , _lstate_addSepSpace = Nothing
     }
 
@@ -165,8 +166,8 @@ layoutWriteEnsureNewlineBlock = do
   state <- mGet
   mSet $ state
     { _lstate_curYOrAddNewline = case _lstate_curYOrAddNewline state of
-      Left{} -> Right 1
-      Right i -> Right $ max 1 i
+      Cols{}           -> InsertNewlines 1
+      InsertNewlines i -> InsertNewlines $ max 1 i
     , _lstate_addSepSpace = Just $ lstate_baseY state
     , _lstate_commentCol = Nothing
     }
@@ -179,9 +180,9 @@ layoutWriteEnsureAbsoluteN n = do
   state <- mGet
   let
     diff = case (_lstate_commentCol state, _lstate_curYOrAddNewline state) of
-      (Just c, _) -> n - c
-      (Nothing, Left i) -> n - i
-      (Nothing, Right{}) -> n
+      (Just c, _)                 -> n - c
+      (Nothing, Cols i)           -> n - i
+      (Nothing, InsertNewlines{}) -> n
   traceLocal ("layoutWriteEnsureAbsoluteN", n, diff)
   when (diff > 0) $ do
     mSet $ state { _lstate_addSepSpace = Just diff } -- this always sets to
@@ -269,10 +270,10 @@ layoutWriteEnsureBlock = do
   state <- mGet
   let
     diff = case (_lstate_addSepSpace state, _lstate_curYOrAddNewline state) of
-      (Nothing, Left i) -> lstate_baseY state - i
-      (Nothing, Right{}) -> lstate_baseY state
-      (Just sp, Left i) -> max sp (lstate_baseY state - i)
-      (Just sp, Right{}) -> max sp (lstate_baseY state)
+      (Nothing, Cols i)           -> lstate_baseY state - i
+      (Nothing, InsertNewlines{}) -> lstate_baseY state
+      (Just sp, Cols i)           -> max sp (lstate_baseY state - i)
+      (Just sp, InsertNewlines{}) -> max sp (lstate_baseY state)
   -- when (diff>0) $ layoutWriteNewlineBlock
   when (diff > 0) $ do
     mSet $ state { _lstate_addSepSpace = Just $ diff }
@@ -295,9 +296,9 @@ layoutBaseYPushCur = do
   case _lstate_commentCol state of
     Nothing ->
       case (_lstate_curYOrAddNewline state, _lstate_addSepSpace state) of
-        (Left i, Just j) -> layoutBaseYPushInternal (i + j)
-        (Left i, Nothing) -> layoutBaseYPushInternal i
-        (Right{}, _) -> layoutBaseYPushInternal $ lstate_baseY state
+        (Cols i,           Just j)  -> layoutBaseYPushInternal (i + j)
+        (Cols i,           Nothing) -> layoutBaseYPushInternal i
+        (InsertNewlines{}, _)       -> layoutBaseYPushInternal $ lstate_baseY state
     Just cCol -> layoutBaseYPushInternal cCol
 
 layoutBaseYPop :: (MonadMultiState LayoutState m) => m ()
@@ -309,12 +310,11 @@ layoutIndentLevelPushCur :: (MonadMultiState LayoutState m) => m ()
 layoutIndentLevelPushCur = do
   traceLocal ("layoutIndentLevelPushCur")
   state <- mGet
-  let
-    y = case (_lstate_curYOrAddNewline state, _lstate_addSepSpace state) of
-      (Left i, Just j) -> i + j
-      (Left i, Nothing) -> i
-      (Right{}, Just j) -> j
-      (Right{}, Nothing) -> 0
+  let y = case (_lstate_curYOrAddNewline state, _lstate_addSepSpace state) of
+        (Cols i,           Just j)  -> i + j
+        (Cols i,           Nothing) -> i
+        (InsertNewlines{}, Just j)  -> j
+        (InsertNewlines{}, Nothing) -> 0
   layoutIndentLevelPushInternal y
 
 layoutIndentLevelPop :: (MonadMultiState LayoutState m) => m ()
@@ -358,15 +358,16 @@ moveToColumn :: MonadMultiState LayoutState m => Int -> m ()
 moveToColumn y = mModify $ \state ->
   let
     upd = case _lstate_curYOrAddNewline state of
-      Left i -> if y == 0 then Left i else Right y
-      Right i -> Right $ max y i
+      Cols i -> if y == 0 then Cols i else InsertNewlines y
+      InsertNewlines i -> InsertNewlines $ max y i
   in
     state
       { _lstate_curYOrAddNewline = upd
       , _lstate_addSepSpace =
-        if Data.Either.isRight upd
-        then _lstate_commentCol state <|> _lstate_addSepSpace state <|> Just (lstate_baseY state)
-        else Nothing
+        case upd of
+          Cols{}           -> Nothing
+          InsertNewlines{} ->
+            _lstate_commentCol state <|> _lstate_addSepSpace state <|> Just (lstate_baseY state)
       , _lstate_commentCol = Nothing
       }
 
@@ -375,10 +376,6 @@ ppmMoveToExactLoc
 ppmMoveToExactLoc (ExactPrint.DP (x, y)) = do
   mTell $ stimes' x $ Text.Builder.singleton '\n'
   mTell $ stimes' y $ Text.Builder.singleton ' '
-  where
-    stimes' n z
-      | n < 1     = mempty
-      | otherwise = stimes n z
 
 layoutIndentRestorePostComment
   :: (MonadMultiState LayoutState m, MonadMultiWriter Text.Builder.Builder m)
@@ -386,11 +383,11 @@ layoutIndentRestorePostComment
 layoutIndentRestorePostComment = do
   state <- mGet
   let mCommentCol = _lstate_commentCol state
-  let eCurYAddNL = _lstate_curYOrAddNewline state
+  let eCurYAddNL  = _lstate_curYOrAddNewline state
   mModify
     $ \s -> s { _lstate_commentCol = Nothing, _lstate_commentNewlines = 0 }
   case (mCommentCol, eCurYAddNL) of
-    (Just commentCol, Left{}) -> do
+    (Just commentCol, Cols{}) -> do
       layoutWriteEnsureNewlineBlock
       layoutWriteEnsureAbsoluteN $ commentCol + fromMaybe
         0

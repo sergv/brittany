@@ -1,13 +1,12 @@
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE ConstraintKinds     #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE NoImplicitPrelude   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Language.Haskell.Brittany.Internal.Backend where
 
 import qualified Control.Monad.Trans.State.Strict as StateS
-import qualified Data.Either as Either
 import Data.Foldable as Foldable
 import qualified Data.IntMap.Lazy as IntMapL
 import qualified Data.IntMap.Strict as IntMapS
@@ -407,11 +406,11 @@ alignColsLines bridocs = do -- colInfos `forM_` \colInfo -> do
   -- tellDebugMess ("alignColsLines: at " ++ take 100 (show $ briDocToDoc $ head bridocs))
   curX <- do
     state <- mGet
-    return $ Either.fromLeft 0 (_lstate_curYOrAddNewline state) + fromMaybe
-      0
-      (_lstate_addSepSpace state)
-  colMax <- mAsk <&> _conf_layout .> _lconfig_cols .> confUnpack
-  alignMax <- mAsk <&> _conf_layout .> _lconfig_alignmentLimit .> confUnpack
+    pure $ fromMaybe 0 (_lstate_addSepSpace state) + case _lstate_curYOrAddNewline state of
+      Cols x           -> x
+      InsertNewlines{} -> 0
+  colMax     <- mAsk <&> _conf_layout .> _lconfig_cols .> confUnpack
+  alignMax   <- mAsk <&> _conf_layout .> _lconfig_alignmentLimit .> confUnpack
   alignBreak <-
     mAsk <&> _conf_layout .> _lconfig_alignmentBreakOnMultiline .> confUnpack
   case () of
@@ -596,10 +595,10 @@ processInfo maxSpace m = \case
       -- tellDebugMess ("processInfo: " ++ show (_lstate_curYOrAddNewline state) ++ " - " ++ show ((_lstate_addSepSpace state)))
       let spaceAdd = fromMaybe 0 $ _lstate_addSepSpace state
       return $ case _lstate_curYOrAddNewline state of
-        Left i -> case _lstate_commentCol state of
+        Cols i           -> case _lstate_commentCol state of
           Nothing -> spaceAdd + i
-          Just c -> c
-        Right{} -> spaceAdd
+          Just c  -> c
+        InsertNewlines{} -> spaceAdd
     let colMax = min colMaxConf (curX + maxSpace)
     -- tellDebugMess $ show curX
     let Just (ratio, maxCols1, _colss) = IntMapS.lookup ind m

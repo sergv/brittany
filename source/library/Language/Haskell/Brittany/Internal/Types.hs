@@ -46,15 +46,18 @@ type PPMLocal = MultiRWSS.MultiRWS
 
 newtype TopLevelDeclNameMap = TopLevelDeclNameMap (Map ExactPrint.AnnKey String)
 
+data ColsOrNewlines
+  -- Number of chars in the current line.
+  = Cols {-# UNPACK #-} !Int
+  -- Number of newlines to be inserted before inserting any non-space elements.
+  | InsertNewlines {-# UNPACK #-} !Int
+  deriving (Eq, Ord, Show)
+
 data LayoutState = LayoutState
   { _lstate_baseYs         :: [Int]
      -- ^ stack of number of current indentation columns
      -- (not number of indentations).
-  , _lstate_curYOrAddNewline :: Either Int Int
-             -- ^ Either:
-             -- 1) number of chars in the current line.
-             -- 2) number of newlines to be inserted before inserting any
-             --    non-space elements.
+  , _lstate_curYOrAddNewline :: ColsOrNewlines
   , _lstate_indLevels      :: [Int]
     -- ^ stack of current indentation levels. set for
     -- any layout-affected elements such as

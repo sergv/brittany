@@ -650,19 +650,17 @@ layoutBriDoc briDoc = do
     -- simpl <- mGet <&> transformToSimple
     -- return simpl
 
-  let
-    state = LayoutState
-      { _lstate_baseYs = [0]
-      , _lstate_curYOrAddNewline = Right 0 -- important that we dont use left
-                                           -- here because moveToAnn stuff
-                                           -- of the first node needs to do
-                                           -- its thing properly.
-      , _lstate_indLevels = [0]
-      , _lstate_indLevelLinger = 0
-      , _lstate_commentCol = Nothing
-      , _lstate_addSepSpace = Nothing
-      , _lstate_commentNewlines = 0
-      }
+  let state = LayoutState
+        { _lstate_baseYs = [0]
+          -- Important that we dont use Cols here because moveToAnn
+          -- stuff of the first node needs to do its thing properly.
+        , _lstate_curYOrAddNewline = InsertNewlines 0
+        , _lstate_indLevels = [0]
+        , _lstate_indLevelLinger = 0
+        , _lstate_commentCol = Nothing
+        , _lstate_addSepSpace = Nothing
+        , _lstate_commentNewlines = 0
+        }
 
   _ <- MultiRWSS.withMultiStateS state $ layoutBriDocM briDoc'
 
