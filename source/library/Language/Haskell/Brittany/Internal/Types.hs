@@ -69,7 +69,6 @@ data LayoutState = LayoutState
                                   -- on the first indented element have an
                                   -- annotation offset relative to the last
                                   -- non-indented element, which is confusing.
-  , _lstate_comments      :: Anns
   , _lstate_commentCol    :: Maybe Int -- this communicates two things:
                                        -- firstly, that cursor is currently
                                        -- at the end of a comment (so needs

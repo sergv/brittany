@@ -3,14 +3,12 @@
 
 module Language.Haskell.Brittany.Internal.BackendUtils where
 
-import qualified Data.Data
 import qualified Data.Either
 import qualified Data.Map as Map
 import qualified Data.Maybe
 import qualified Data.Semigroup as Semigroup
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy.Builder as Text.Builder
-import GHC (Located)
 import qualified GHC.OldList as List
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.Prelude
@@ -100,12 +98,12 @@ layoutWriteNewlineBlock = do
 --         else _lstate_indLevelLinger state + i - _lstate_curY state
 --     }
 
-layoutSetCommentCol :: (MonadMultiState LayoutState m) => m ()
+layoutSetCommentCol :: MonadMultiState LayoutState m => m ()
 layoutSetCommentCol = do
   state <- mGet
   let
     col = case _lstate_curYOrAddNewline state of
-      Left i -> i + fromMaybe 0 (_lstate_addSepSpace state)
+      Left i  -> i + fromMaybe 0 (_lstate_addSepSpace state)
       Right{} -> lstate_baseY state
   traceLocal ("layoutSetCommentCol", col)
   unless (Data.Maybe.isJust $ _lstate_commentCol state)
@@ -354,10 +352,10 @@ moveToExactAnn annKey = do
       -- curY <- mGet <&> _lstate_curY
       let ExactPrint.DP (y, _x) = ExactPrint.annEntryDelta ann
       -- mModify $ \state -> state { _lstate_addNewline = Just x }
-      moveToY y
+      moveToColumn y
 
-moveToY :: MonadMultiState LayoutState m => Int -> m ()
-moveToY y = mModify $ \state ->
+moveToColumn :: MonadMultiState LayoutState m => Int -> m ()
+moveToColumn y = mModify $ \state ->
   let
     upd = case _lstate_curYOrAddNewline state of
       Left i -> if y == 0 then Left i else Right y
@@ -365,19 +363,12 @@ moveToY y = mModify $ \state ->
   in
     state
       { _lstate_curYOrAddNewline = upd
-      , _lstate_addSepSpace = if Data.Either.isRight upd
-        then _lstate_commentCol state <|> _lstate_addSepSpace state <|> Just
-          (lstate_baseY state)
+      , _lstate_addSepSpace =
+        if Data.Either.isRight upd
+        then _lstate_commentCol state <|> _lstate_addSepSpace state <|> Just (lstate_baseY state)
         else Nothing
       , _lstate_commentCol = Nothing
       }
--- fixMoveToLineByIsNewline :: MonadMultiState
---                                                   LayoutState m => Int -> m Int
--- fixMoveToLineByIsNewline x = do
---   newLineState <- mGet <&> _lstate_isNewline
---   return $ if newLineState == NewLineStateYes
---     then x-1
---     else x
 
 ppmMoveToExactLoc
   :: MonadMultiWriter Text.Builder.Builder m => ExactPrint.DeltaPos -> m ()
@@ -388,72 +379,6 @@ ppmMoveToExactLoc (ExactPrint.DP (x, y)) = do
     stimes' n z
       | n < 1     = mempty
       | otherwise = stimes n z
-
--- TODO: update and use, or clean up. Currently dead code.
-layoutWritePriorComments
-  :: ( Data.Data.Data ast
-     , MonadMultiWriter Text.Builder.Builder m
-     , MonadMultiState LayoutState m
-     )
-  => Located ast
-  -> m ()
-layoutWritePriorComments ast = do
-  mAnn <- do
-    state <- mGet
-    let key = ExactPrint.mkAnnKey ast
-    let anns = _lstate_comments state
-    let mAnn = ExactPrint.annPriorComments <$> Map.lookup key anns
-    mSet $ state
-      { _lstate_comments = Map.adjust
-        (\ann -> ann { ExactPrint.annPriorComments = [] })
-        key
-        anns
-      }
-    return mAnn
-  case mAnn of
-    Nothing -> return ()
-    Just priors -> do
-      unless (null priors) $ layoutSetCommentCol
-      priors `forM_` \(ExactPrint.Comment comment _ _, ExactPrint.DP (x, y)) ->
-        do
-          replicateM_ x layoutWriteNewline
-          layoutWriteAppendSpaces y
-          layoutWriteAppendMultiline $ Text.lines $ Text.pack comment
-
--- TODO: update and use, or clean up. Currently dead code.
--- this currently only extracs from the `annsDP` field of Annotations.
--- per documentation, this seems sufficient, as the
--- "..`annFollowingComments` are only added by AST transformations ..".
-layoutWritePostComments
-  :: ( Data.Data.Data ast
-     , MonadMultiWriter Text.Builder.Builder m
-     , MonadMultiState LayoutState m
-     )
-  => Located ast
-  -> m ()
-layoutWritePostComments ast = do
-  mAnn <- do
-    state <- mGet
-    let key = ExactPrint.mkAnnKey ast
-    let anns = _lstate_comments state
-    let mAnn = ExactPrint.annFollowingComments <$> Map.lookup key anns
-    mSet $ state
-      { _lstate_comments = Map.adjust
-        (\ann -> ann { ExactPrint.annFollowingComments = [] })
-        key
-        anns
-      }
-    return mAnn
-  case mAnn of
-    Nothing -> return ()
-    Just posts -> do
-      unless (null posts) $ layoutSetCommentCol
-      posts `forM_` \(ExactPrint.Comment comment _ _, ExactPrint.DP (x, y)) ->
-        do
-          replicateM_ x layoutWriteNewline
-          layoutWriteAppend $ Text.pack $ replicate y ' '
-          mModify $ \s -> s { _lstate_addSepSpace = Nothing }
-          layoutWriteAppendMultiline $ Text.lines $ Text.pack $ comment
 
 layoutIndentRestorePostComment
   :: (MonadMultiState LayoutState m, MonadMultiWriter Text.Builder.Builder m)
@@ -471,21 +396,3 @@ layoutIndentRestorePostComment = do
         0
         (_lstate_addSepSpace state)
     _ -> return ()
-
--- layoutWritePriorCommentsRestore :: (Data.Data.Data ast,
---                                                MonadMultiWriter Text.Builder.Builder m,
---                                                MonadMultiState LayoutState m
---                                   , MonadMultiWriter (Seq String) m)
---                                 => Located ast -> m ()
--- layoutWritePriorCommentsRestore x = do
---   layoutWritePriorComments x
---   layoutIndentRestorePostComment
---
--- layoutWritePostCommentsRestore :: (Data.Data.Data ast,
---                                                MonadMultiWriter Text.Builder.Builder m,
---                                                MonadMultiState LayoutState m
---                                                , MonadMultiWriter (Seq String) m)
---                                 => Located ast -> m ()
--- layoutWritePostCommentsRestore x = do
---   layoutWritePostComments x
---   layoutIndentRestorePostComment

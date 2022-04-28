@@ -331,7 +331,7 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
     -- TODO: apart from this, there probably are more nodes below which could
     --       be shared between alternatives.
     wherePartMultiLine :: [ToBriDocM BriDocNumbered] <- case mWhereDocs of
-      Nothing -> return $ []
+      Nothing -> return []
       Just (annKeyWhere, [w]) -> pure . pure <$> docAlt
         [ docEnsureIndent BrIndentRegular
           $ docSeq
