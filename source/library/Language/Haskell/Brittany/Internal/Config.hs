@@ -58,7 +58,6 @@ staticDefaultConfig = Config
     , _lconfig_reformatModulePreamble = coerce True
     , _lconfig_allowSingleLineExportList = coerce False
     , _lconfig_allowHangingQuasiQuotes = coerce True
-    , _lconfig_experimentalSemicolonNewlines = coerce False
     -- , _lconfig_allowSinglelineRecord     = coerce False
     }
   , _conf_errorHandling = ErrorHandlingConfig
@@ -158,7 +157,6 @@ cmdlineConfigParser = do
       , _lconfig_reformatModulePreamble = mempty
       , _lconfig_allowSingleLineExportList = mempty
       , _lconfig_allowHangingQuasiQuotes = mempty
-      , _lconfig_experimentalSemicolonNewlines = mempty
       -- , _lconfig_allowSinglelineRecord     = mempty
       }
     , _conf_errorHandling = ErrorHandlingConfig

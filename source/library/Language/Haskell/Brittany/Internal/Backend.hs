@@ -243,17 +243,6 @@ layoutBriDocM = \case
       let m = _lstate_comments state
       pure $ Map.lookup annKey m
     let mComments = nonEmpty . extractAllComments =<< annMay
-    let
-      semiCount = length
-        [ ()
-        | Just ann <- [annMay]
-        , (ExactPrint.Types.AnnSemiSep, _) <- ExactPrint.Types.annsDP ann
-        ]
-    shouldAddSemicolonNewlines <-
-      mAsk
-      <&> _conf_layout
-      .> _lconfig_experimentalSemicolonNewlines
-      .> confUnpack
     mModify $ \state -> state
       { _lstate_comments = Map.adjust
         (\ann -> ann
@@ -268,9 +257,8 @@ layoutBriDocM = \case
         (_lstate_comments state)
       }
     case mComments of
-      Nothing -> do
-        when shouldAddSemicolonNewlines $ do
-          [1 .. semiCount] `forM_` const layoutWriteNewline
+      Nothing ->
+        pure ()
       Just comments -> do
         comments
           `forM_` \(ExactPrint.Types.Comment comment _ _, ExactPrint.Types.DP (y, x)) ->
