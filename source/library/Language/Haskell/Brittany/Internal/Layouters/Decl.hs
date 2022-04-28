@@ -34,8 +34,6 @@ import Language.Haskell.Brittany.Internal.Layouters.Type
 import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.PreludeUtils
 import Language.Haskell.Brittany.Internal.Types
-import qualified Language.Haskell.GHC.ExactPrint as ExactPrint
-import Language.Haskell.GHC.ExactPrint.Types (mkAnnKey)
 import qualified Language.Haskell.GHC.ExactPrint.Utils as ExactPrint
 
 
@@ -148,8 +146,8 @@ layoutBind
   :: ToBriDocC (HsBindLR GhcPs GhcPs) (Either [BriDocNumbered] BriDocNumbered)
 layoutBind lbind@(L _ bind) = case bind of
   FunBind _ fId (MG _ lmatches@(L _ matches) _) [] -> do
-    idStr <- lrdrNameToTextAnn fId
-    binderDoc <- docLit $ Text.pack "="
+    idStr       <- lrdrNameToTextAnn fId
+    binderDoc   <- docLit $ Text.pack "="
     funcPatDocs <-
       docWrapNode lbind
       $ docWrapNode lmatches
@@ -157,18 +155,17 @@ layoutBind lbind@(L _ bind) = case bind of
       `mapM` matches
     return $ Left $ funcPatDocs
   PatBind _ pat (GRHSs _ grhss whereBinds) ([], []) -> do
-    patDocs <- colsWrapPat =<< layoutPat pat
-    clauseDocs <- layoutGrhs `mapM` grhss
-    mWhereDocs <- layoutLocalBinds whereBinds
-    let mWhereArg = mWhereDocs <&> (,) (mkAnnKey lbind) -- TODO: is this the right AnnKey?
-    binderDoc <- docLit $ Text.pack "="
+    patDocs     <- colsWrapPat =<< layoutPat pat
+    clauseDocs  <- layoutGrhs `mapM` grhss
+    mWhereDocs  <- layoutLocalBinds whereBinds
+    binderDoc   <- docLit $ Text.pack "="
     hasComments <- hasAnyCommentsBelow lbind
     fmap Right $ docWrapNode lbind $ layoutPatternBindFinal
       Nothing
       binderDoc
       (Just patDocs)
       clauseDocs
-      mWhereArg
+      mWhereDocs
       hasComments
   PatSynBind _ (PSB _ patID lpat rpat dir) -> do
     fmap Right $ docWrapNode lbind $ layoutPatSynBind patID lpat dir rpat
@@ -274,7 +271,6 @@ layoutPatternBind funId binderDoc lmatch@(L _ match) = do
         $ (List.intersperse docSeparator $ docForceSingleline <$> ps)
   clauseDocs <- docWrapNodeRest lmatch $ layoutGrhs `mapM` grhss
   mWhereDocs <- layoutLocalBinds whereBinds
-  let mWhereArg = mWhereDocs <&> (,) (mkAnnKey lmatch)
   let alignmentToken = if null pats then Nothing else funId
   hasComments <- hasAnyCommentsBelow lmatch
   layoutPatternBindFinal
@@ -282,7 +278,7 @@ layoutPatternBind funId binderDoc lmatch@(L _ match) = do
     binderDoc
     (Just patDoc)
     clauseDocs
-    mWhereArg
+    mWhereDocs
     hasComments
 
 fixPatternBindIdentifier :: Match GhcPs (LHsExpr GhcPs) -> Text -> Text
@@ -307,7 +303,7 @@ layoutPatternBindFinal
   -> BriDocNumbered
   -> Maybe BriDocNumbered
   -> [([BriDocNumbered], BriDocNumbered, LHsExpr GhcPs)]
-  -> Maybe (ExactPrint.AnnKey, [BriDocNumbered])
+  -> Maybe [BriDocNumbered]
      -- ^ AnnKey for the node that contains the AnnWhere position annotation
   -> Bool
   -> ToBriDocM BriDocNumbered
@@ -332,14 +328,14 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
     --       be shared between alternatives.
     wherePartMultiLine :: [ToBriDocM BriDocNumbered] <- case mWhereDocs of
       Nothing -> return []
-      Just (annKeyWhere, [w]) -> pure . pure <$> docAlt
+      Just [w] -> pure . pure <$> docAlt
         [ docEnsureIndent BrIndentRegular
           $ docSeq
               [ docLit $ Text.pack "where"
               , docSeparator
               , docForceSingleline $ return w
               ]
-        , docMoveToKWDP annKeyWhere AnnWhere False
+        , docMoveToKWDP AnnWhere False
         $ docEnsureIndent whereIndent
         $ docLines
             [ docLit $ Text.pack "where"
@@ -349,9 +345,9 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
             $ return w
             ]
         ]
-      Just (annKeyWhere, ws) ->
+      Just ws ->
         fmap (pure . pure)
-          $ docMoveToKWDP annKeyWhere AnnWhere False
+          $ docMoveToKWDP AnnWhere False
           $ docEnsureIndent whereIndent
           $ docLines
               [ docLit $ Text.pack "where"
@@ -375,13 +371,13 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
                  (docForceSingleline . return <$> gs)
                )
       wherePart = case mWhereDocs of
-        Nothing -> Just docEmpty
-        Just (_, [w]) -> Just $ docSeq
+        Nothing  -> Just docEmpty
+        Just [w] -> Just $ docSeq
           [ docSeparator
           , appSep $ docLit $ Text.pack "where"
           , docSetIndentLevel $ docForceSingleline $ return w
           ]
-        _ -> Nothing
+        _        -> Nothing
 
     indentPolicy <- mAsk <&> _conf_layout .> _lconfig_indentPolicy .> confUnpack
 
@@ -910,8 +906,8 @@ layoutClsInst lcid@(L _ cid) = docLines
 
   -- | ExactPrint adds indentation/newlines to @data@/@type@ declarations
   stripWhitespace :: BriDocF f -> BriDocF f
-  stripWhitespace (BDFExternal ann anns b t) =
-    BDFExternal ann anns b $ stripWhitespace' t
+  stripWhitespace (BDFExternal b t) =
+    BDFExternal b $ stripWhitespace' t
   stripWhitespace b = b
 
   -- | This fixes two issues of output coming from Exactprinting

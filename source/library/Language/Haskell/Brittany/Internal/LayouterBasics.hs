@@ -1,8 +1,8 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE NoImplicitPrelude          #-}
 
 module Language.Haskell.Brittany.Internal.LayouterBasics where
 
@@ -32,9 +32,9 @@ import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.Brittany.Internal.Utils
 import qualified Language.Haskell.GHC.ExactPrint as ExactPrint
 import qualified Language.Haskell.GHC.ExactPrint.Annotate as ExactPrint.Annotate
-import qualified Language.Haskell.GHC.ExactPrint.Types as ExactPrint.Types
-import qualified Language.Haskell.GHC.ExactPrint.Types as ExactPrint
 import Language.Haskell.GHC.ExactPrint.Types (AnnKey, Annotation)
+import qualified Language.Haskell.GHC.ExactPrint.Types as ExactPrint
+import qualified Language.Haskell.GHC.ExactPrint.Types as ExactPrint.Types
 import qualified Language.Haskell.GHC.ExactPrint.Utils as ExactPrint.Utils
 
 
@@ -109,11 +109,7 @@ briDocByExactInlineOnly infoStr ast = do
   fallbackMode <-
     mAsk <&> _conf_errorHandling .> _econf_ExactPrintFallback .> confUnpack
   let
-    exactPrintNode t = allocateNode $ BDFExternal
-      (ExactPrint.Types.mkAnnKey ast)
-      (foldedAnnKeys ast)
-      False
-      t
+    exactPrintNode t = allocateNode $ BDFExternal False t
   let
     errorAction = do
       mTell [ErrorUnknownNode infoStr ast]
@@ -444,8 +440,6 @@ docExt
   -> Bool
   -> ToBriDocM BriDocNumbered
 docExt x anns shouldAddComment = allocateNode $ BDFExternal
-  (ExactPrint.Types.mkAnnKey x)
-  (foldedAnnKeys x)
   shouldAddComment
   (Text.pack $ ExactPrint.exactPrint x anns)
 
@@ -501,30 +495,28 @@ docSeparator :: ToBriDocM BriDocNumbered
 docSeparator = allocateNode BDFSeparator
 
 docAnnotationPrior
-  :: AnnKey -> ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
-docAnnotationPrior annKey bdm =
-  allocateNode . BDFAnnotationPrior annKey =<< bdm
+  :: ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
+docAnnotationPrior bdm =
+  allocateNode . BDFAnnotationPrior =<< bdm
 
 docAnnotationKW
-  :: AnnKey
-  -> Maybe AnnKeywordId
+  :: Maybe AnnKeywordId
   -> ToBriDocM BriDocNumbered
   -> ToBriDocM BriDocNumbered
-docAnnotationKW annKey kw bdm =
-  allocateNode . BDFAnnotationKW annKey kw =<< bdm
+docAnnotationKW kw bdm =
+  allocateNode . BDFAnnotationKW kw =<< bdm
 
 docMoveToKWDP
-  :: AnnKey
-  -> AnnKeywordId
+  :: AnnKeywordId
   -> Bool
   -> ToBriDocM BriDocNumbered
   -> ToBriDocM BriDocNumbered
-docMoveToKWDP annKey kw shouldRestoreIndent bdm =
-  allocateNode . BDFMoveToKWDP annKey kw shouldRestoreIndent =<< bdm
+docMoveToKWDP kw shouldRestoreIndent bdm =
+  allocateNode . BDFMoveToKWDP kw shouldRestoreIndent =<< bdm
 
 docAnnotationRest
-  :: AnnKey -> ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
-docAnnotationRest annKey bdm = allocateNode . BDFAnnotationRest annKey =<< bdm
+  :: ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
+docAnnotationRest bdm = allocateNode . BDFAnnotationRest =<< bdm
 
 docNonBottomSpacing :: ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
 docNonBottomSpacing bdm = allocateNode . BDFNonBottomSpacing False =<< bdm
@@ -579,57 +571,46 @@ docTick :: ToBriDocM BriDocNumbered
 docTick = docLit $ Text.pack "'"
 
 docNodeAnnKW
-  :: Data.Data.Data ast
-  => Located ast
+  :: Located ast
   -> Maybe AnnKeywordId
   -> ToBriDocM BriDocNumbered
   -> ToBriDocM BriDocNumbered
-docNodeAnnKW ast kw bdm =
-  docAnnotationKW (ExactPrint.Types.mkAnnKey ast) kw bdm
+docNodeAnnKW _ast kw bdm =
+  docAnnotationKW kw bdm
 
 docNodeMoveToKWDP
-  :: Data.Data.Data ast
-  => Located ast
+  :: Located ast
   -> AnnKeywordId
   -> Bool
   -> ToBriDocM BriDocNumbered
   -> ToBriDocM BriDocNumbered
-docNodeMoveToKWDP ast kw shouldRestoreIndent bdm =
-  docMoveToKWDP (ExactPrint.Types.mkAnnKey ast) kw shouldRestoreIndent bdm
+docNodeMoveToKWDP _ast kw shouldRestoreIndent bdm =
+  docMoveToKWDP kw shouldRestoreIndent bdm
 
 class DocWrapable a where
-  docWrapNode :: ( Data.Data.Data ast)
-              => Located ast
-              -> a
-              -> a
-  docWrapNodePrior :: ( Data.Data.Data ast)
-                   => Located ast
-                   -> a
-                   -> a
-  docWrapNodeRest  :: ( Data.Data.Data ast)
-                   => Located ast
-                   -> a
-                   -> a
+  docWrapNode      :: Data.Data.Data ast => Located ast -> a -> a
+  docWrapNodePrior :: Data.Data.Data ast => Located ast -> a -> a
+  docWrapNodeRest  :: Data.Data.Data ast => Located ast -> a -> a
 
 instance DocWrapable (ToBriDocM BriDocNumbered) where
-  docWrapNode ast bdm = do
+  docWrapNode _ast bdm = do
     bd <- bdm
     i1 <- allocNodeIndex
     i2 <- allocNodeIndex
     return
       $ (,) i1
-      $ BDFAnnotationPrior (ExactPrint.Types.mkAnnKey ast)
+      $ BDFAnnotationPrior
       $ (,) i2
-      $ BDFAnnotationRest (ExactPrint.Types.mkAnnKey ast)
+      $ BDFAnnotationRest
       $ bd
-  docWrapNodePrior ast bdm = do
+  docWrapNodePrior _ast bdm = do
     bd <- bdm
     i1 <- allocNodeIndex
-    return $ (,) i1 $ BDFAnnotationPrior (ExactPrint.Types.mkAnnKey ast) $ bd
-  docWrapNodeRest ast bdm = do
+    return $ (,) i1 $ BDFAnnotationPrior bd
+  docWrapNodeRest _ast bdm = do
     bd <- bdm
     i2 <- allocNodeIndex
-    return $ (,) i2 $ BDFAnnotationRest (ExactPrint.Types.mkAnnKey ast) $ bd
+    return $ (,) i2 $ BDFAnnotationRest bd
 
 instance DocWrapable (ToBriDocM a) => DocWrapable [ToBriDocM a] where
   docWrapNode ast bdms = case bdms of

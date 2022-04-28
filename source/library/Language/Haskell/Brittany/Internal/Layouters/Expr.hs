@@ -927,7 +927,7 @@ layoutExpr lexpr@(L _ expr) = do
       briDocByExactInlineOnly "HsPragE{}" lexpr
 
 recordExpression
-  :: (Data.Data.Data lExpr, Data.Data.Data name)
+  :: Data.Data.Data name
   => Bool
   -> IndentPolicy
   -> GenLocated SrcSpan lExpr

@@ -126,15 +126,11 @@ transformAlts =
     let reWrap = (,) brDcId
     -- debugAcp :: AltCurPos <- mGet
     case brDc of
-      -- BDWrapAnnKey annKey bd -> do
-      --   acp <- mGet
-      --   mSet $ acp { _acp_forceMLFlag = altLineModeDecay $ _acp_forceMLFlag acp }
-      --   BDWrapAnnKey annKey <$> rec bd
-      BDFEmpty{} -> processSpacingSimple bdX $> bdX
-      BDFLit{} -> processSpacingSimple bdX $> bdX
-      BDFSeq list -> reWrap . BDFSeq <$> list `forM` rec
-      BDFCols sig list -> reWrap . BDFCols sig <$> list `forM` rec
-      BDFSeparator -> processSpacingSimple bdX $> bdX
+      BDFEmpty{}            -> processSpacingSimple bdX $> bdX
+      BDFLit{}              -> processSpacingSimple bdX $> bdX
+      BDFSeq list           -> reWrap . BDFSeq <$> list `forM` rec
+      BDFCols sig list      -> reWrap . BDFCols sig <$> list `forM` rec
+      BDFSeparator          -> processSpacingSimple bdX $> bdX
       BDFAddBaseY indent bd -> do
         acp <- mGet
         indAdd <- fixIndentationForMultiple acp indent
@@ -267,18 +263,18 @@ transformAlts =
         return $ x
       BDFExternal{} -> processSpacingSimple bdX $> bdX
       BDFPlain{} -> processSpacingSimple bdX $> bdX
-      BDFAnnotationPrior annKey bd -> do
+      BDFAnnotationPrior bd -> do
         acp <- mGet
         mSet
           $ acp { _acp_forceMLFlag = altLineModeDecay $ _acp_forceMLFlag acp }
         bd' <- rec bd
-        return $ reWrap $ BDFAnnotationPrior annKey bd'
-      BDFAnnotationRest annKey bd ->
-        reWrap . BDFAnnotationRest annKey <$> rec bd
-      BDFAnnotationKW annKey kw bd ->
-        reWrap . BDFAnnotationKW annKey kw <$> rec bd
-      BDFMoveToKWDP annKey kw b bd ->
-        reWrap . BDFMoveToKWDP annKey kw b <$> rec bd
+        return $ reWrap $ BDFAnnotationPrior bd'
+      BDFAnnotationRest bd ->
+        reWrap . BDFAnnotationRest <$> rec bd
+      BDFAnnotationKW kw bd ->
+        reWrap . BDFAnnotationKW kw <$> rec bd
+      BDFMoveToKWDP kw b bd ->
+        reWrap . BDFMoveToKWDP kw b <$> rec bd
       BDFLines [] -> return $ reWrap BDFEmpty -- evil transformation. or harmless.
       BDFLines (l : lr) -> do
         ind <- _acp_indent <$> mGet
@@ -366,7 +362,6 @@ getSpacing !bridoc = rec bridoc
     config <- mAsk
     let colMax = config & _conf_layout & _lconfig_cols & confUnpack
     result <- case brDc of
-      -- BDWrapAnnKey _annKey bd -> rec bd
       BDFEmpty ->
         return $ LineModeValid $ VerticalSpacing 0 VerticalSpacingParNone False
       BDFLit t -> return $ LineModeValid $ VerticalSpacing
@@ -456,16 +451,16 @@ getSpacing !bridoc = rec bridoc
           VerticalSpacingParNone -> mVs
           _ -> LineModeInvalid
       BDFForwardLineMode bd -> rec bd
-      BDFExternal _ _ _ txt -> return $ LineModeValid $ case Text.lines txt of
+      BDFExternal _ txt -> return $ LineModeValid $ case Text.lines txt of
         [t] -> VerticalSpacing (Text.length t) VerticalSpacingParNone False
         _ -> VerticalSpacing 999 VerticalSpacingParNone False
       BDFPlain txt -> return $ LineModeValid $ case Text.lines txt of
         [t] -> VerticalSpacing (Text.length t) VerticalSpacingParNone False
         _ -> VerticalSpacing 999 VerticalSpacingParNone False
-      BDFAnnotationPrior _annKey bd -> rec bd
-      BDFAnnotationKW _annKey _kw bd -> rec bd
-      BDFAnnotationRest _annKey bd -> rec bd
-      BDFMoveToKWDP _annKey _kw _b bd -> rec bd
+      BDFAnnotationPrior bd -> rec bd
+      BDFAnnotationKW _kw bd -> rec bd
+      BDFAnnotationRest bd -> rec bd
+      BDFMoveToKWDP _kw _b bd -> rec bd
       BDFLines [] ->
         return $ LineModeValid $ VerticalSpacing 0 VerticalSpacingParNone False
       BDFLines ls@(_ : _) -> do
@@ -665,7 +660,6 @@ getSpacings limit bridoc = preFilterLimit <$> rec bridoc
                        -- total.
           . preFilterLimit
     result <- case brdc of
-      -- BDWrapAnnKey _annKey bd -> rec bd
       BDFEmpty -> return $ [VerticalSpacing 0 VerticalSpacingParNone False]
       BDFLit t ->
         return $ [VerticalSpacing (Text.length t) VerticalSpacingParNone False]
@@ -751,7 +745,7 @@ getSpacings limit bridoc = preFilterLimit <$> rec bridoc
         mVs <- filterAndLimit <$> rec bd
         return $ filter ((== VerticalSpacingParNone) . _vs_paragraph) mVs
       BDFForwardLineMode bd -> rec bd
-      BDFExternal _ _ _ txt | [t] <- Text.lines txt ->
+      BDFExternal _ txt | [t] <- Text.lines txt ->
         return $ [VerticalSpacing (Text.length t) VerticalSpacingParNone False]
       BDFExternal{} -> return $ [] -- yes, we just assume that we cannot properly layout
                     -- this.
@@ -764,12 +758,12 @@ getSpacings limit bridoc = preFilterLimit <$> rec bridoc
               VerticalSpacing (Text.length t1) (VerticalSpacingParAlways 0) True
         | allowHangingQuasiQuotes
         ]
-      BDFAnnotationPrior _annKey bd -> rec bd
-      BDFAnnotationKW _annKey _kw bd -> rec bd
-      BDFAnnotationRest _annKey bd -> rec bd
-      BDFMoveToKWDP _annKey _kw _b bd -> rec bd
-      BDFLines [] -> return $ [VerticalSpacing 0 VerticalSpacingParNone False]
-      BDFLines ls@(_ : _) -> do
+      BDFAnnotationPrior bd   -> rec bd
+      BDFAnnotationKW _kw bd  -> rec bd
+      BDFAnnotationRest bd    -> rec bd
+      BDFMoveToKWDP _kw _b bd -> rec bd
+      BDFLines []             -> return [VerticalSpacing 0 VerticalSpacingParNone False]
+      BDFLines ls@(_ : _)     -> do
         -- we simply assume that lines is only used "properly", i.e. in
         -- such a way that the first line can be treated "as a part of the
         -- paragraph". That most importantly means that Lines should never

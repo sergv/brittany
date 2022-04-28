@@ -11,7 +11,6 @@ import qualified Data.Either as Either
 import Data.Foldable as Foldable
 import qualified Data.IntMap.Lazy as IntMapL
 import qualified Data.IntMap.Strict as IntMapS
-import qualified Data.Map as Map
 import qualified Data.Semigroup as Semigroup
 import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
@@ -23,7 +22,6 @@ import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.PreludeUtils
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.Brittany.Internal.Utils
-import qualified Language.Haskell.GHC.ExactPrint as ExactPrint
 import qualified Language.Haskell.GHC.ExactPrint.Types as ExactPrint.Types
 
 
@@ -125,29 +123,26 @@ layoutBriDocM = \case
     indentF $ do
       layoutWriteNewlineBlock
       layoutBriDocM indented
-  BDLines lines -> alignColsLines lines
-  BDAlt [] -> error "empty BDAlt"
-  BDAlt (alt : _) -> layoutBriDocM alt
-  BDForceMultiline bd -> layoutBriDocM bd
-  BDForceSingleline bd -> layoutBriDocM bd
-  BDForwardLineMode bd -> layoutBriDocM bd
-  BDExternal annKey _subKeys shouldAddComment t -> do
+  BDLines lines                 -> alignColsLines lines
+  BDAlt []                      -> error "empty BDAlt"
+  BDAlt (alt : _)               -> layoutBriDocM alt
+  BDForceMultiline bd           -> layoutBriDocM bd
+  BDForceSingleline bd          -> layoutBriDocM bd
+  BDForwardLineMode bd          -> layoutBriDocM bd
+  BDExternal shouldAddComment t -> do
     let
       tlines = Text.lines $ t <> Text.singleton '\n'
       tlineCount = length tlines
-    anns :: ExactPrint.Anns <- mAsk
     when shouldAddComment $ do
       layoutWriteAppend
         $ Text.pack
-        $ "{-"
-        ++ show (annKey, Map.lookup annKey anns)
-        ++ "-}"
-    zip [1 ..] tlines `forM_` \(i, l) -> do
-      layoutWriteAppend $ l
-      unless (i == tlineCount) layoutWriteNewlineBlock
-  BDPlain t -> do
-    layoutWriteAppend t
-  BDAnnotationPrior _annKey bd -> do
+        $ "{- BRITTANY TODO SHOULD ADD COMMENT -}"
+    for_ (zip [1 ..] tlines) $ \(i, l) -> do
+      layoutWriteAppend l
+      unless (i == tlineCount) $
+        layoutWriteNewlineBlock
+  BDPlain t -> layoutWriteAppend t
+  BDAnnotationPrior bd -> do
     -- getLoc         :: LocatedAn ann a -> SrcAnn ann
     -- ann            :: SrcAnn ann -> EpAnn ann
     -- ann            :: SrcSpanAnn' (EpAnn ann) -> EpAnn ann
@@ -190,7 +185,7 @@ layoutBriDocM = \case
           -- mModify $ \s -> s { _lstate_curYOrAddNewline = Right 0 }
         moveToExactLocationAction
     layoutBriDocM bd
-  BDAnnotationKW _annKey _keyword bd -> do
+  BDAnnotationKW _keyword bd -> do
     layoutBriDocM bd
     let comments = []
     for_ comments $ \(ExactPrint.Types.Comment comment _ _, ExactPrint.Types.DP (y, x)) ->
@@ -206,7 +201,7 @@ layoutBriDocM = \case
         -- layoutMoveToIndentCol y
         layoutWriteAppendMultiline commentLines
       -- mModify $ \s -> s { _lstate_curYOrAddNewline = Right 0 }
-  BDAnnotationRest _annKey bd -> do
+  BDAnnotationRest bd -> do
     layoutBriDocM bd
     let followingComments = []
     case followingComments of
@@ -226,7 +221,7 @@ layoutBriDocM = \case
             -- layoutMoveToIndentCol y
             layoutWriteAppendMultiline commentLines
       -- mModify $ \s -> s { _lstate_curYOrAddNewline = Right 0 }
-  BDMoveToKWDP _annKey _keyword _shouldRestoreIndent bd -> do
+  BDMoveToKWDP _keyword _shouldRestoreIndent bd -> do
     -- mDP <- do
     --   state <- mGet
     --   let m = _lstate_comments state
@@ -262,75 +257,75 @@ briDocLineLength :: BriDoc -> Int
 briDocLineLength briDoc = flip StateS.evalState False $ rec briDoc
                           -- the state encodes whether a separator was already
                           -- appended at the current position.
- where
-  rec = \case
-    BDEmpty -> return $ 0
-    BDLit t -> StateS.put False $> Text.length t
-    BDSeq bds -> sum <$> rec `mapM` bds
-    BDCols _ bds -> sum <$> rec `mapM` bds
-    BDSeparator -> StateS.get >>= \b -> StateS.put True $> if b then 0 else 1
-    BDAddBaseY _ bd -> rec bd
-    BDBaseYPushCur bd -> rec bd
-    BDBaseYPop bd -> rec bd
-    BDIndentLevelPushCur bd -> rec bd
-    BDIndentLevelPop bd -> rec bd
-    BDPar _ line _ -> rec line
-    BDAlt{} -> error "briDocLineLength BDAlt"
-    BDForceMultiline bd -> rec bd
-    BDForceSingleline bd -> rec bd
-    BDForwardLineMode bd -> rec bd
-    BDExternal _ _ _ t -> return $ Text.length t
-    BDPlain t -> return $ Text.length t
-    BDAnnotationPrior _ bd -> rec bd
-    BDAnnotationKW _ _ bd -> rec bd
-    BDAnnotationRest _ bd -> rec bd
-    BDMoveToKWDP _ _ _ bd -> rec bd
-    BDLines ls@(_ : _) -> do
-      x <- StateS.get
-      return $ maximum $ ls <&> \l -> StateS.evalState (rec l) x
-    BDLines [] -> error "briDocLineLength BDLines []"
-    BDEnsureIndent _ bd -> rec bd
-    BDSetParSpacing bd -> rec bd
-    BDForceParSpacing bd -> rec bd
-    BDNonBottomSpacing _ bd -> rec bd
-    BDDebug _ bd -> rec bd
+  where
+    rec = \case
+      BDEmpty -> return $ 0
+      BDLit t -> StateS.put False $> Text.length t
+      BDSeq bds -> sum <$> rec `mapM` bds
+      BDCols _ bds -> sum <$> rec `mapM` bds
+      BDSeparator -> StateS.get >>= \b -> StateS.put True $> if b then 0 else 1
+      BDAddBaseY _ bd -> rec bd
+      BDBaseYPushCur bd -> rec bd
+      BDBaseYPop bd -> rec bd
+      BDIndentLevelPushCur bd -> rec bd
+      BDIndentLevelPop bd -> rec bd
+      BDPar _ line _ -> rec line
+      BDAlt{} -> error "briDocLineLength BDAlt"
+      BDForceMultiline bd -> rec bd
+      BDForceSingleline bd -> rec bd
+      BDForwardLineMode bd -> rec bd
+      BDExternal _ t -> return $ Text.length t
+      BDPlain t -> return $ Text.length t
+      BDAnnotationPrior bd -> rec bd
+      BDAnnotationKW _ bd -> rec bd
+      BDAnnotationRest bd -> rec bd
+      BDMoveToKWDP _ _ bd -> rec bd
+      BDLines ls@(_ : _) -> do
+        x <- StateS.get
+        return $ maximum $ ls <&> \l -> StateS.evalState (rec l) x
+      BDLines [] -> error "briDocLineLength BDLines []"
+      BDEnsureIndent _ bd -> rec bd
+      BDSetParSpacing bd -> rec bd
+      BDForceParSpacing bd -> rec bd
+      BDNonBottomSpacing _ bd -> rec bd
+      BDDebug _ bd -> rec bd
 
 briDocIsMultiLine :: BriDoc -> Bool
 briDocIsMultiLine briDoc = rec briDoc
- where
-  rec :: BriDoc -> Bool
-  rec = \case
-    BDEmpty -> False
-    BDLit _ -> False
-    BDSeq bds -> any rec bds
-    BDCols _ bds -> any rec bds
-    BDSeparator -> False
-    BDAddBaseY _ bd -> rec bd
-    BDBaseYPushCur bd -> rec bd
-    BDBaseYPop bd -> rec bd
-    BDIndentLevelPushCur bd -> rec bd
-    BDIndentLevelPop bd -> rec bd
-    BDPar{} -> True
-    BDAlt{} -> error "briDocIsMultiLine BDAlt"
-    BDForceMultiline _ -> True
-    BDForceSingleline bd -> rec bd
-    BDForwardLineMode bd -> rec bd
-    BDExternal _ _ _ t | [_] <- Text.lines t -> False
-    BDExternal{} -> True
-    BDPlain t | [_] <- Text.lines t -> False
-    BDPlain _ -> True
-    BDAnnotationPrior _ bd -> rec bd
-    BDAnnotationKW _ _ bd -> rec bd
-    BDAnnotationRest _ bd -> rec bd
-    BDMoveToKWDP _ _ _ bd -> rec bd
-    BDLines (_ : _ : _) -> True
-    BDLines [_] -> False
-    BDLines [] -> error "briDocIsMultiLine BDLines []"
-    BDEnsureIndent _ bd -> rec bd
-    BDSetParSpacing bd -> rec bd
-    BDForceParSpacing bd -> rec bd
-    BDNonBottomSpacing _ bd -> rec bd
-    BDDebug _ bd -> rec bd
+  where
+    rec :: BriDoc -> Bool
+    rec = \case
+      BDEmpty                              -> False
+      BDLit _                              -> False
+      BDSeq bds                            -> any rec bds
+      BDCols _ bds                         -> any rec bds
+      BDSeparator                          -> False
+      BDAddBaseY _ bd                      -> rec bd
+      BDBaseYPushCur bd                    -> rec bd
+      BDBaseYPop bd                        -> rec bd
+      BDIndentLevelPushCur bd              -> rec bd
+      BDIndentLevelPop bd                  -> rec bd
+      BDPar{}                              -> True
+      BDAlt{}                              -> error "briDocIsMultiLine BDAlt"
+      BDForceMultiline _                   -> True
+      BDForceSingleline bd                 -> rec bd
+      BDForwardLineMode bd                 -> rec bd
+      BDExternal _ t | [_] <- Text.lines t -> False
+      BDExternal{}                         -> True
+      BDPlain t | [_] <- Text.lines t      -> False
+      BDPlain _                            -> True
+      BDAnnotationPrior bd                 -> rec bd
+      BDAnnotationKW _ bd                  -> rec bd
+      BDAnnotationRest bd                  -> rec bd
+      BDMoveToKWDP _ _ bd                  -> rec bd
+      BDLines (_ : _ : _)                  -> True
+      BDLines [_]                          -> False
+      BDLines []                           -> error "briDocIsMultiLine BDLines []"
+      BDEnsureIndent _ bd                  -> rec bd
+      BDSetParSpacing bd                   -> rec bd
+      BDForceParSpacing bd                 -> rec bd
+      BDNonBottomSpacing _ bd              -> rec bd
+      BDDebug _ bd                         -> rec bd
 
 -- In theory
 -- =========

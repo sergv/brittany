@@ -218,10 +218,10 @@ briDocToDoc :: BriDoc -> PP.Doc
 briDocToDoc = astToDoc . removeAnnotations
  where
   removeAnnotations = Uniplate.transform $ \case
-    BDAnnotationPrior _ x -> x
-    BDAnnotationKW _ _ x -> x
-    BDAnnotationRest _ x -> x
-    x -> x
+    BDAnnotationPrior x -> x
+    BDAnnotationKW _ x  -> x
+    BDAnnotationRest x  -> x
+    x                   -> x
 
 briDocToDocWithAnns :: BriDoc -> PP.Doc
 briDocToDocWithAnns = astToDoc

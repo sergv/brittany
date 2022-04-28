@@ -39,12 +39,12 @@ transformSimplifyIndent = Uniplate.rewrite $ \case
       BDLines l -> l
       x -> [x]
   BDLines [l] -> Just l
-  BDAddBaseY i (BDAnnotationPrior k x) ->
-    Just $ BDAnnotationPrior k (BDAddBaseY i x)
-  BDAddBaseY i (BDAnnotationKW k kw x) ->
-    Just $ BDAnnotationKW k kw (BDAddBaseY i x)
-  BDAddBaseY i (BDAnnotationRest k x) ->
-    Just $ BDAnnotationRest k (BDAddBaseY i x)
+  BDAddBaseY i (BDAnnotationPrior x) ->
+    Just $ BDAnnotationPrior (BDAddBaseY i x)
+  BDAddBaseY i (BDAnnotationKW kw x) ->
+    Just $ BDAnnotationKW kw (BDAddBaseY i x)
+  BDAddBaseY i (BDAnnotationRest x) ->
+    Just $ BDAnnotationRest (BDAddBaseY i x)
   BDAddBaseY i (BDSeq l) ->
     Just $ BDSeq $ List.init l ++ [BDAddBaseY i $ List.last l]
   BDAddBaseY i (BDCols sig l) ->

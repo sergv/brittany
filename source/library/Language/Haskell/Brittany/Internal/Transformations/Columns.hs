@@ -48,40 +48,40 @@ transformSimplifyColumns = Uniplate.rewrite $ \case
       BDLines l -> l
       x -> [x]
   -- prior floating in
-  BDAnnotationPrior annKey1 (BDSeq (l : lr)) ->
-    Just $ BDSeq (BDAnnotationPrior annKey1 l : lr)
-  BDAnnotationPrior annKey1 (BDLines (l : lr)) ->
-    Just $ BDLines (BDAnnotationPrior annKey1 l : lr)
-  BDAnnotationPrior annKey1 (BDCols sig (l : lr)) ->
-    Just $ BDCols sig (BDAnnotationPrior annKey1 l : lr)
+  BDAnnotationPrior (BDSeq (l : lr)) ->
+    Just $ BDSeq (BDAnnotationPrior l : lr)
+  BDAnnotationPrior (BDLines (l : lr)) ->
+    Just $ BDLines (BDAnnotationPrior l : lr)
+  BDAnnotationPrior (BDCols sig (l : lr)) ->
+    Just $ BDCols sig (BDAnnotationPrior l : lr)
   -- post floating in
-  BDAnnotationRest annKey1 (BDSeq list) ->
-    Just $ BDSeq $ List.init list ++ [BDAnnotationRest annKey1 $ List.last list]
-  BDAnnotationRest annKey1 (BDLines list) ->
+  BDAnnotationRest (BDSeq list) ->
+    Just $ BDSeq $ List.init list ++ [BDAnnotationRest $ List.last list]
+  BDAnnotationRest (BDLines list) ->
     Just
       $ BDLines
       $ List.init list
-      ++ [BDAnnotationRest annKey1 $ List.last list]
-  BDAnnotationRest annKey1 (BDCols sig cols) ->
+      ++ [BDAnnotationRest $ List.last list]
+  BDAnnotationRest (BDCols sig cols) ->
     Just
       $ BDCols sig
       $ List.init cols
-      ++ [BDAnnotationRest annKey1 $ List.last cols]
-  BDAnnotationKW annKey1 kw (BDSeq list) ->
+      ++ [BDAnnotationRest $ List.last cols]
+  BDAnnotationKW kw (BDSeq list) ->
     Just
       $ BDSeq
       $ List.init list
-      ++ [BDAnnotationKW annKey1 kw $ List.last list]
-  BDAnnotationKW annKey1 kw (BDLines list) ->
+      ++ [BDAnnotationKW kw $ List.last list]
+  BDAnnotationKW kw (BDLines list) ->
     Just
       $ BDLines
       $ List.init list
-      ++ [BDAnnotationKW annKey1 kw $ List.last list]
-  BDAnnotationKW annKey1 kw (BDCols sig cols) ->
+      ++ [BDAnnotationKW kw $ List.last list]
+  BDAnnotationKW kw (BDCols sig cols) ->
     Just
       $ BDCols sig
       $ List.init cols
-      ++ [BDAnnotationKW annKey1 kw $ List.last cols]
+      ++ [BDAnnotationKW kw $ List.last cols]
   -- ensureIndent float-in
   -- not sure if the following rule is necessary; tests currently are
   -- unaffected.
