@@ -24,18 +24,10 @@ import Language.Haskell.Brittany.Internal.ExactPrintUtils (ToplevelAnns)
 import Language.Haskell.Brittany.Internal.Prelude
 import qualified Language.Haskell.GHC.ExactPrint as ExactPrint
 import Language.Haskell.GHC.ExactPrint.Types (Anns)
-import qualified Language.Haskell.GHC.ExactPrint.Types as ExactPrint.Types
 import qualified Safe
 
-
-data PerItemConfig = PerItemConfig
-  { _icd_perBinding :: Map String (CConfig Maybe)
-  , _icd_perKey :: Map ExactPrint.Types.AnnKey (CConfig Maybe)
-  }
-  deriving Data.Data.Data
-
 type PPM = MultiRWSS.MultiRWS
-  '[ToplevelAnns, PerItemConfig, Config, ExactPrint.Anns]
+  '[ToplevelAnns, Config, ExactPrint.Anns]
   '[Text.Builder.Builder, [BrittanyError], Seq String]
   '[]
 

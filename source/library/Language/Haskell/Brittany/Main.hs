@@ -1,12 +1,11 @@
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE MultiWayIf #-}
+{-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE MultiWayIf        #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
-module Language.Haskell.Brittany.Main where
+module Language.Haskell.Brittany.Main (main, mainWith) where
 
 import Control.Monad (zipWithM)
 import qualified Control.Monad.Trans.Except as ExceptT
-import Data.CZipWith
 import qualified Data.Either
 import qualified Data.List.Extra
 import qualified Data.Monoid
@@ -337,18 +336,7 @@ coreIO putErrorLnIO config suppressOutput checkMode inputPathM outputPathM =
         putErrorLn left
         ExceptT.throwE 60
       Right (anns, parsedSource, hasCPP) -> do
-        (inlineConf, perItemConf) <-
-          case
-            extractCommentConfigs anns (getTopLevelDeclNameMap parsedSource)
-          of
-            Left (err, input) -> do
-              putErrorLn $ "Error: parse error in inline configuration:"
-              putErrorLn err
-              putErrorLn $ "  in the string \"" ++ input ++ "\"."
-              ExceptT.throwE 61
-            Right c -> -- trace (showTree c) $
-              pure c
-        let moduleConf = cZipWith fromOptionIdentity config inlineConf
+        let moduleConf = config
         when (config & _conf_debug & _dconf_dump_ast_full & confUnpack) $ do
           let val = printTreeWithCustom 100 (customLayouterF anns) parsedSource
           trace ("---- ast ----\n" ++ show val) $ return ()
@@ -370,13 +358,8 @@ coreIO putErrorLnIO config suppressOutput checkMode inputPathM outputPathM =
                     .> _econf_omit_output_valid_check
                     .> confUnpack
               (ews, outRaw) <- if hasCPP || omitCheck
-                then return
-                  $ pPrintModule moduleConf perItemConf anns parsedSource
-                else liftIO $ pPrintModuleAndCheck
-                  moduleConf
-                  perItemConf
-                  anns
-                  parsedSource
+                then pure $ pPrintModule moduleConf anns parsedSource
+                else liftIO $ pPrintModuleAndCheck moduleConf anns parsedSource
               let
                 hackF s = fromMaybe s $ TextL.stripPrefix
                   (TextL.pack "-- BRITANY_INCLUDE_HACK ")
