@@ -276,11 +276,6 @@ astConnectedComments ast = do
   anns <- filterAnns ast <$> mAsk
   pure $ extractAllComments =<< Map.elems anns
 
-hasAnyCommentsPrior :: Data ast => GHC.Located ast -> ToBriDocM Bool
-hasAnyCommentsPrior ast = astAnn ast <&> \case
-  Nothing -> False
-  Just (ExactPrint.Types.Ann _ priors _ _ _ _) -> not $ null priors
-
 hasAnyRegularCommentsRest :: Data ast => GHC.Located ast -> ToBriDocM Bool
 hasAnyRegularCommentsRest ast = astAnn ast <&> \case
   Nothing -> False
