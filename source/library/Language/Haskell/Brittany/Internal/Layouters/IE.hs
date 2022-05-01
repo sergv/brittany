@@ -30,9 +30,9 @@ layoutIE :: ToBriDoc IE
 layoutIE lie@(L _ ie) = docWrapNode lie $ case ie of
   IEVar _ x -> layoutWrapped lie x
   IEThingAbs _ x -> layoutWrapped lie x
-  IEThingAll _ x -> docSeq [layoutWrapped lie x, docLit $ Text.pack "(..)"]
+  IEThingAll _ x -> docSeq [layoutWrapped lie x, docLitS "(..)"]
   IEThingWith _ x (IEWildcard _) _ _ ->
-    docSeq [layoutWrapped lie x, docLit $ Text.pack "(..)"]
+    docSeq [layoutWrapped lie x, docLitS "(..)"]
   IEThingWith _ x _ ns _ -> do
     hasComments <- orM
       (hasCommentsBetween lie AnnOpenP AnnCloseP
@@ -43,7 +43,7 @@ layoutIE lie@(L _ ie) = docWrapNode lie $ case ie of
     runFilteredAlternative $ do
       addAlternativeCond (not hasComments)
         $ docSeq
-        $ [layoutWrapped lie x, docLit $ Text.pack "("]
+        $ [layoutWrapped lie x, docParenL]
         ++ intersperse docCommaSep (map nameDoc sortedNs)
         ++ [docParenR]
       addAlternative
@@ -70,9 +70,9 @@ layoutIE lie@(L _ ie) = docWrapNode lie $ case ie of
            , docParenR
            ]
   IEModuleContents _ n -> docSeq
-    [ docLit $ Text.pack "module"
+    [ docLitS "module"
     , docSeparator
-    , docLit . Text.pack . moduleNameString $ unLoc n
+    , docLitS . moduleNameString $ unLoc n
     ]
   _ -> docEmpty
  where
@@ -177,14 +177,14 @@ layoutLLIEs enableSingleline shouldSort llies = do
   hasComments <- hasAnyCommentsBelow llies
   runFilteredAlternative $ case ieDs of
     [] -> do
-      addAlternativeCond (not hasComments) $ docLit $ Text.pack "()"
+      addAlternativeCond (not hasComments) $ docLitS "()"
       addAlternativeCond hasComments $ docPar
         (docSeq [docParenLSep, docWrapNodeRest llies docEmpty])
         docParenR
     (ieDsH : ieDsT) -> do
       addAlternativeCond (not hasComments && enableSingleline)
         $ docSeq
-        $ [docLit (Text.pack "(")]
+        $ [docParenL]
         ++ (docForceSingleline <$> ieDs)
         ++ [docParenR]
       addAlternative

@@ -38,38 +38,34 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
     let
       tyVarDocLineList = processTyVarBndrsSingleline tyVarDocs
       forallDoc = docAlt
-        [ let open = docLit $ Text.pack "forall"
+        [ let open = docLitS "forall"
           in docSeq ([open] ++ tyVarDocLineList)
         , docPar
-          (docLit (Text.pack "forall"))
+          (docLitS "forall")
           (docLines $ tyVarDocs <&> \case
             (tname, Nothing) -> docEnsureIndent BrIndentRegular $ docLit tname
             (tname, Just doc) -> docEnsureIndent BrIndentRegular $ docLines
               [ docCols ColTyOpPrefix [docParenLSep, docLit tname]
-              , docCols ColTyOpPrefix [docLit $ Text.pack ":: ", doc]
-              , docLit $ Text.pack ")"
+              , docCols ColTyOpPrefix [docLitS ":: ", doc]
+              , docParenR
               ]
           )
         ]
       contextDoc = case cntxtDocs of
-        [] -> docLit $ Text.pack "()"
+        [] -> docLitS "()"
         [x] -> x
         _ -> docAlt
           [ let
-              open = docLit $ Text.pack "("
-              close = docLit $ Text.pack ")"
-              list =
-                List.intersperse docCommaSep $ docForceSingleline <$> cntxtDocs
-            in docSeq ([open] ++ list ++ [close])
+              list = List.intersperse docCommaSep $ docForceSingleline <$> cntxtDocs
+            in docSeq ([docParenL] ++ list ++ [docParenR])
           , let
               open = docCols
                 ColTyOpPrefix
                 [docParenLSep, docAddBaseY (BrIndentSpecial 2) $ head cntxtDocs]
-              close = docLit $ Text.pack ")"
               list = List.tail cntxtDocs <&> \cntxtDoc -> docCols
                 ColTyOpPrefix
                 [docCommaSep, docAddBaseY (BrIndentSpecial 2) cntxtDoc]
-            in docPar open $ docLines $ list ++ [close]
+            in docPar open $ docLines $ list ++ [docParenR]
           ]
     docAlt
       -- :: forall a b c . (Foo a b c) => a b -> c
@@ -78,11 +74,11 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
           then docEmpty
           else
             let
-              open = docLit $ Text.pack "forall"
-              close = docLit $ Text.pack " . "
+              open = docLitS "forall"
+              close = docLitS " . "
             in docSeq ([open, docSeparator] ++ tyVarDocLineList ++ [close])
         , docForceSingleline contextDoc
-        , docLit $ Text.pack " => "
+        , docLitS " => "
         , docForceSingleline typeDoc
         ]
       -- :: forall a b c
@@ -94,12 +90,12 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
         (docLines
           [ docCols
             ColTyOpPrefix
-            [ docWrapNodeRest ltype $ docLit $ Text.pack " . "
+            [ docWrapNodeRest ltype $ docLitS " . "
             , docAddBaseY (BrIndentSpecial 3) $ contextDoc
             ]
           , docCols
             ColTyOpPrefix
-            [ docLit $ Text.pack "=> "
+            [ docLitS "=> "
             , docAddBaseY (BrIndentSpecial 3) $ maybeForceML $ typeDoc
             ]
           ]
@@ -121,18 +117,18 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
           then docEmpty
           else
             let
-              open = docLit $ Text.pack "forall"
-              close = docLit $ Text.pack " . "
+              open = docLitS "forall"
+              close = docLitS " . "
             in docSeq ([open] ++ tyVarDocLineList ++ [close])
         , docForceSingleline $ return $ typeDoc
         ]
       -- :: forall x
       --  . x
       , docPar
-        (docSeq $ docLit (Text.pack "forall") : tyVarDocLineList)
+        (docSeq $ docLitS "forall" : tyVarDocLineList)
         (docCols
           ColTyOpPrefix
-          [ docWrapNodeRest ltype $ docLit $ Text.pack " . "
+          [ docWrapNodeRest ltype $ docLitS " . "
           , maybeForceML $ return typeDoc
           ]
         )
@@ -140,20 +136,20 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
       --      (x :: *)
       --  . x
       , docPar
-        (docLit (Text.pack "forall"))
+        (docLitS "forall")
         (docLines
         $ (tyVarDocs <&> \case
             (tname, Nothing) ->
               docEnsureIndent BrIndentRegular $ docLit tname
             (tname, Just doc) -> docEnsureIndent BrIndentRegular $ docLines
               [ docCols ColTyOpPrefix [docParenLSep, docLit tname]
-              , docCols ColTyOpPrefix [docLit $ Text.pack ":: ", doc]
-              , docLit $ Text.pack ")"
+              , docCols ColTyOpPrefix [docLitS ":: ", doc]
+              , docParenR
               ]
           )
         ++ [ docCols
                ColTyOpPrefix
-               [ docWrapNodeRest ltype $ docLit $ Text.pack " . "
+               [ docWrapNodeRest ltype $ docLitS " . "
                , maybeForceML $ return typeDoc
                ]
            ]
@@ -164,24 +160,21 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
     cntxtDocs <- cntxts `forM` docSharedWrapper layoutType
     let
       contextDoc = docWrapNode lcntxts $ case cntxtDocs of
-        [] -> docLit $ Text.pack "()"
+        [] -> docLitS "()"
         [x] -> x
         _ -> docAlt
           [ let
-              open = docLit $ Text.pack "("
-              close = docLit $ Text.pack ")"
               list =
                 List.intersperse docCommaSep $ docForceSingleline <$> cntxtDocs
-            in docSeq ([open] ++ list ++ [close])
+            in docSeq ([docParenL] ++ list ++ [docParenR])
           , let
               open = docCols
                 ColTyOpPrefix
                 [docParenLSep, docAddBaseY (BrIndentSpecial 2) $ head cntxtDocs]
-              close = docLit $ Text.pack ")"
               list = List.tail cntxtDocs <&> \cntxtDoc -> docCols
                 ColTyOpPrefix
                 [docCommaSep, docAddBaseY (BrIndentSpecial 2) $ cntxtDoc]
-            in docPar open $ docLines $ list ++ [close]
+            in docPar open $ docLines $ list ++ [docParenR]
           ]
     let
       maybeForceML = case typ1 of
@@ -191,7 +184,7 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
       -- (Foo a b c) => a b -> c
       [ docSeq
         [ docForceSingleline contextDoc
-        , docLit $ Text.pack " => "
+        , docLitS " => "
         , docForceSingleline typeDoc
         ]
       --    (Foo a b c)
@@ -201,7 +194,7 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
         (docForceSingleline contextDoc)
         (docCols
           ColTyOpPrefix
-          [ docLit $ Text.pack "=> "
+          [ docLitS "=> "
           , docAddBaseY (BrIndentSpecial 3) $ maybeForceML typeDoc
           ]
         )
@@ -217,7 +210,7 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
     docAlt
       $ [ docSeq
             [ appSep $ docForceSingleline typeDoc1
-            , appSep $ docLit $ Text.pack "->"
+            , appSep $ docLitS "->"
             , docForceSingleline typeDoc2
             ]
         | not hasComments
@@ -226,7 +219,7 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
              (docNodeAnnKW ltype Nothing typeDoc1)
              (docCols
                ColTyOpPrefix
-               [ docWrapNodeRest ltype $ appSep $ docLit $ Text.pack "->"
+               [ docWrapNodeRest ltype $ appSep $ docLitS "->"
                , docAddBaseY (BrIndentSpecial 3) $ maybeForceML typeDoc2
                ]
              )
@@ -235,9 +228,9 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
     typeDoc1 <- docSharedWrapper layoutType typ1
     docAlt
       [ docSeq
-        [ docWrapNodeRest ltype $ docLit $ Text.pack "("
+        [ docWrapNodeRest ltype $ docParenL
         , docForceSingleline typeDoc1
-        , docLit $ Text.pack ")"
+        , docParenR
         ]
       , docPar
         (docCols
@@ -246,7 +239,7 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
           , docAddBaseY (BrIndentSpecial 2) $ typeDoc1
           ]
         )
-        (docLit $ Text.pack ")")
+        docParenR
       ]
   HsAppTy _ typ1@(L _ HsAppTy{}) typ2 -> do
     let
@@ -276,18 +269,18 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
     typeDoc1 <- docSharedWrapper layoutType typ1
     docAlt
       [ docSeq
-        [ docWrapNodeRest ltype $ docLit $ Text.pack "["
+        [ docWrapNodeRest ltype $ docLitS "["
         , docForceSingleline typeDoc1
-        , docLit $ Text.pack "]"
+        , docLitS "]"
         ]
       , docPar
         (docCols
           ColTyOpPrefix
-          [ docWrapNodeRest ltype $ docLit $ Text.pack "[ "
+          [ docWrapNodeRest ltype $ docLitS "[ "
           , docAddBaseY (BrIndentSpecial 2) $ typeDoc1
           ]
         )
-        (docLit $ Text.pack "]")
+        (docLitS "]")
       ]
   HsTupleTy _ tupleSort typs -> case tupleSort of
     HsUnboxedTuple -> unboxed
@@ -299,11 +292,11 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
       then error "brittany internal error: unboxed unit"
       else unboxedL
     simple = if null typs then unitL else simpleL
-    unitL = docLit $ Text.pack "()"
+    unitL = docLitS "()"
     simpleL = do
       docs <- docSharedWrapper layoutType `mapM` typs
       let
-        end = docLit $ Text.pack ")"
+        end = docParenR
         lines =
           List.tail docs
             <&> \d -> docAddBaseY (BrIndentSpecial 2)
@@ -311,7 +304,7 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
         commaDocs = List.intersperse docCommaSep (docForceSingleline <$> docs)
       docAlt
         [ docSeq
-        $ [docLit $ Text.pack "("]
+        $ [docParenL]
         ++ docWrapNodeRest ltype commaDocs
         ++ [end]
         , let line1 = docCols ColTyOpPrefix [docParenLSep, head docs]
@@ -404,15 +397,14 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
     typeDoc1 <- docSharedWrapper layoutType typ1
     docAlt
       [ docSeq
-        [ docWrapNodeRest ltype $ docLit $ Text.pack
-          ("?" ++ showSDocUnsafe (ftext ipName) ++ "::")
+        [ docWrapNodeRest ltype $ docLitS $ "?" ++ showSDocUnsafe (ftext ipName) ++ "::"
         , docForceSingleline typeDoc1
         ]
       , docPar
-        (docLit $ Text.pack ("?" ++ showSDocUnsafe (ftext ipName)))
+        (docLitS $ "?" ++ showSDocUnsafe (ftext ipName))
         (docCols
           ColTyOpPrefix
-          [ docWrapNodeRest ltype $ docLit $ Text.pack ":: "
+          [ docWrapNodeRest ltype $ docLitS ":: "
           , docAddBaseY (BrIndentSpecial 2) typeDoc1
           ]
         )
@@ -425,18 +417,18 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
     docAlt
       [ if hasParens
         then docSeq
-          [ docLit $ Text.pack "("
+          [ docParenL
           , docForceSingleline typeDoc1
           , docSeparator
-          , docLit $ Text.pack "::"
+          , docLitS "::"
           , docSeparator
           , docForceSingleline kindDoc1
-          , docLit $ Text.pack ")"
+          , docParenR
           ]
         else docSeq
           [ docForceSingleline typeDoc1
           , docSeparator
-          , docLit $ Text.pack "::"
+          , docLitS "::"
           , docSeparator
           , docForceSingleline kindDoc1
           ]
@@ -449,16 +441,16 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
             ]
           , docCols
             ColTyOpPrefix
-            [ docWrapNodeRest ltype $ docLit $ Text.pack ":: "
+            [ docWrapNodeRest ltype $ docLitS ":: "
             , docAddBaseY (BrIndentSpecial 3) kindDoc1
             ]
-          , (docLit $ Text.pack ")")
+          , (docParenR)
           ]
         else docPar
           typeDoc1
           (docCols
             ColTyOpPrefix
-            [ docWrapNodeRest ltype $ docLit $ Text.pack ":: "
+            [ docWrapNodeRest ltype $ docLitS ":: "
             , docAddBaseY (BrIndentSpecial 3) kindDoc1
             ]
           )
@@ -524,68 +516,68 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
   HsExplicitListTy _ _ typs -> do
     typDocs <- docSharedWrapper layoutType `mapM` typs
     hasComments <- hasAnyCommentsBelow ltype
-    let specialCommaSep = appSep $ docLit $ Text.pack " ,"
+    let specialCommaSep = appSep $ docLitS " ,"
     docAlt
       [ docSeq
-      $ [docLit $ Text.pack "'["]
+      $ [docLitS "'["]
       ++ List.intersperse specialCommaSep (docForceSingleline <$> typDocs)
-      ++ [docLit $ Text.pack "]"]
+      ++ [docLitS "]"]
       , case splitFirstLast typDocs of
         FirstLastEmpty -> docSeq
-          [ docLit $ Text.pack "'["
-          , docNodeAnnKW ltype (Just AnnOpenS) $ docLit $ Text.pack "]"
+          [ docLitS "'["
+          , docNodeAnnKW ltype (Just AnnOpenS) $ docLitS "]"
           ]
         FirstLastSingleton e -> docAlt
           [ docSeq
-            [ docLit $ Text.pack "'["
+            [ docLitS "'["
             , docNodeAnnKW ltype (Just AnnOpenS) $ docForceSingleline e
-            , docLit $ Text.pack "]"
+            , docLitS "]"
             ]
           , docSetBaseY $ docLines
             [ docSeq
-              [ docLit $ Text.pack "'["
+              [ docLitS "'["
               , docSeparator
               , docSetBaseY $ docNodeAnnKW ltype (Just AnnOpenS) e
               ]
-            , docLit $ Text.pack " ]"
+            , docLitS " ]"
             ]
           ]
         FirstLast e1 ems eN -> runFilteredAlternative $ do
           addAlternativeCond (not hasComments)
             $ docSeq
-            $ [docLit $ Text.pack "'["]
+            $ [docLitS "'["]
             ++ List.intersperse
                  specialCommaSep
                  (docForceSingleline
                  <$> (e1 : ems ++ [docNodeAnnKW ltype (Just AnnOpenS) eN])
                  )
-            ++ [docLit $ Text.pack " ]"]
+            ++ [docLitS " ]"]
           addAlternative
             $ let
-                start = docCols ColList [appSep $ docLit $ Text.pack "'[", e1]
+                start = docCols ColList [appSep $ docLitS "'[", e1]
                 linesM = ems <&> \d -> docCols ColList [specialCommaSep, d]
                 lineN = docCols
                   ColList
                   [specialCommaSep, docNodeAnnKW ltype (Just AnnOpenS) eN]
-                end = docLit $ Text.pack " ]"
+                end = docLitS " ]"
               in docSetBaseY $ docLines $ [start] ++ linesM ++ [lineN] ++ [end]
       ]
   HsExplicitTupleTy{} -> -- TODO
     briDocByExactInlineOnly "HsExplicitTupleTy{}" ltype
   HsTyLit _ lit -> case lit of
-    HsNumTy (SourceText srctext) _ -> docLit $ Text.pack srctext
+    HsNumTy (SourceText srctext) _ -> docLitS srctext
     HsNumTy NoSourceText _ ->
       error "overLitValBriDoc: literal with no SourceText"
-    HsStrTy (SourceText srctext) _ -> docLit $ Text.pack srctext
+    HsStrTy (SourceText srctext) _ -> docLitS srctext
     HsStrTy NoSourceText _ ->
       error "overLitValBriDoc: literal with no SourceText"
-  HsWildCardTy _ -> docLit $ Text.pack "_"
+  HsWildCardTy _ -> docLitS "_"
   HsSumTy{} -> -- TODO
     briDocByExactInlineOnly "HsSumTy{}" ltype
   HsStarTy _ isUnicode -> do
     if isUnicode
-      then docLit $ Text.pack "\x2605" -- Unicode star
-      else docLit $ Text.pack "*"
+      then docLitS "\x2605" -- Unicode star
+      else docLitS "*"
   XHsType{} -> error "brittany internal error: XHsType"
   HsAppKindTy _ ty kind -> do
     t <- docSharedWrapper layoutType ty
@@ -594,10 +586,10 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
       [ docSeq
         [ docForceSingleline t
         , docSeparator
-        , docLit $ Text.pack "@"
+        , docLitS "@"
         , docForceSingleline k
         ]
-      , docPar t (docSeq [docLit $ Text.pack "@", k])
+      , docPar t (docSeq [docLitS "@", k])
       ]
 
 layoutTyVarBndrs
@@ -619,7 +611,7 @@ processTyVarBndrsSingleline bndrDocs = bndrDocs >>= \case
     [ docSeparator
     , docLit $ Text.pack "(" <> tname <> Text.pack " :: "
     , docForceSingleline $ doc
-    , docLit $ Text.pack ")"
+    , docParenR
     ]
 
 getBinders :: HsForAllTelescope pass -> [LHsTyVarBndr () pass]

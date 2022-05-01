@@ -55,13 +55,13 @@ layoutImport importD = case importD of
       hidingParenCost = if hiding then length "hiding ( " else length "( "
       nameCost = Text.length modNameT + qLength
       importQualifiers = docSeq
-        [ appSep $ docLit $ Text.pack "import"
+        [ appSep $ docLitS "import"
         , case src of
-          IsBoot -> appSep $ docLit $ Text.pack "{-# SOURCE #-}"
+          IsBoot -> appSep $ docLitS "{-# SOURCE #-}"
           NotBoot -> docEmpty
-        , if safe then appSep $ docLit $ Text.pack "safe" else docEmpty
+        , if safe then appSep $ docLitS "safe" else docEmpty
         , if q /= NotQualified
-          then appSep $ docLit $ Text.pack "qualified"
+          then appSep $ docLitS "qualified"
           else docEmpty
         , maybe docEmpty (appSep . docLit) pkgNameT
         ]
@@ -71,7 +71,7 @@ layoutImport importD = case importD of
       hidDocCol = if hiding then importCol - hidingParenCost else importCol - 2
       hidDocColDiff = importCol - 2 - hidDocCol
       hidDoc =
-        if hiding then appSep $ docLit $ Text.pack "hiding" else docEmpty
+        if hiding then appSep $ docLitS "hiding" else docEmpty
       importHead = docSeq [importQualifiers, modNameD]
       bindingsD = case mllies of
         Nothing -> docEmpty
@@ -134,7 +134,7 @@ layoutImport importD = case importD of
                       ++ [docParenR]
                       )
       makeAsDoc asT =
-        docSeq [appSep $ docLit $ Text.pack "as", appSep $ docLit asT]
+        docSeq [appSep $ docLitS "as", appSep $ docLit asT]
     if compact
       then
         let asDoc = maybe docEmpty makeAsDoc masT

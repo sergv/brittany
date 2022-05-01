@@ -86,7 +86,7 @@ layoutSig lsig@(L _loc sig) = case sig of
   layoutNamesAndType mKeyword names typ = docWrapNode lsig $ do
     let
       keyDoc = case mKeyword of
-        Just key -> [appSep . docLit $ Text.pack key]
+        Just key -> [appSep $ docLitS key]
         Nothing -> []
     nameStrs <- names `forM` lrdrNameToTextAnn
     let nameStr = Text.intercalate (Text.pack ", ") $ nameStrs
@@ -105,8 +105,8 @@ layoutSig lsig@(L _loc sig) = case sig of
             , docSetBaseY $ docLines
               [ docCols
                   ColTyOpPrefix
-                  [ docLit $ Text.pack ":: "
-                  , docAddBaseY (BrIndentSpecial 3) $ typeDoc
+                  [ docLitS ":: "
+                  , docAddBaseY (BrIndentSpecial 3) typeDoc
                   ]
               ]
             ]
@@ -133,7 +133,7 @@ layoutGuardLStmt lgstmt@(L _ stmtLR) = docWrapNode lgstmt $ case stmtLR of
     docCols
       ColBindStmt
       [ appSep $ colsWrapPat =<< patDoc
-      , docSeq [appSep $ docLit $ Text.pack "<-", expDoc]
+      , docSeq [appSep $ docLitS "<-", expDoc]
       ]
   _ -> unknownNodeError "" lgstmt -- TODO
 
@@ -147,7 +147,7 @@ layoutBind
 layoutBind lbind@(L _ bind) = case bind of
   FunBind _ fId (MG _ lmatches@(L _ matches) _) [] -> do
     idStr       <- lrdrNameToTextAnn fId
-    binderDoc   <- docLit $ Text.pack "="
+    binderDoc   <- docLitS "="
     funcPatDocs <-
       docWrapNode lbind
       $ docWrapNode lmatches
@@ -158,7 +158,7 @@ layoutBind lbind@(L _ bind) = case bind of
     patDocs     <- colsWrapPat =<< layoutPat pat
     clauseDocs  <- layoutGrhs `mapM` grhss
     mWhereDocs  <- layoutLocalBinds whereBinds
-    binderDoc   <- docLit $ Text.pack "="
+    binderDoc   <- docLitS "="
     hasComments <- hasAnyCommentsBelow lbind
     fmap Right $ docWrapNode lbind $ layoutPatternBindFinal
       Nothing
@@ -174,8 +174,8 @@ layoutIPBind :: ToBriDoc IPBind
 layoutIPBind lipbind@(L _ bind) = case bind of
   IPBind _ (Right _) _ -> error "brittany internal error: IPBind Right"
   IPBind _ (Left (L _ (HsIPName name))) expr -> do
-    ipName <- docLit $ Text.pack $ '?' : FastString.unpackFS name
-    binderDoc <- docLit $ Text.pack "="
+    ipName <- docLitS $ '?' : FastString.unpackFS name
+    binderDoc <- docLitS "="
     exprDoc <- layoutExpr expr
     hasComments <- hasAnyCommentsBelow lipbind
     layoutPatternBindFinal
@@ -245,7 +245,7 @@ layoutPatternBind funId binderDoc lmatch@(L _ match) = do
       then docCols
         ColPatternsFuncInfix
         [ appSep $ docForceSingleline p1
-        , appSep $ docLit $ idStr
+        , appSep $ docLit idStr
         , docForceSingleline p2
         ]
       else docCols
@@ -264,7 +264,7 @@ layoutPatternBind funId binderDoc lmatch@(L _ match) = do
     (Just idStr, []) -> docLit idStr
     (Just idStr, ps) ->
       docCols ColPatternsFuncPrefix
-        $ appSep (docLit $ idStr)
+        $ appSep (docLit idStr)
         : (spacifyDocs $ docForceSingleline <$> ps)
     (Nothing, ps) ->
       docCols ColPatterns
@@ -331,14 +331,14 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
       Just [w] -> pure . pure <$> docAlt
         [ docEnsureIndent BrIndentRegular
           $ docSeq
-              [ docLit $ Text.pack "where"
+              [ docLitS "where"
               , docSeparator
               , docForceSingleline $ return w
               ]
         , docMoveToKWDP AnnWhere False
         $ docEnsureIndent whereIndent
         $ docLines
-            [ docLit $ Text.pack "where"
+            [ docLitS "where"
             , docEnsureIndent whereIndent
             $ docSetIndentLevel
             $ docNonBottomSpacing
@@ -350,7 +350,7 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
           $ docMoveToKWDP AnnWhere False
           $ docEnsureIndent whereIndent
           $ docLines
-              [ docLit $ Text.pack "where"
+              [ docLitS "where"
               , docEnsureIndent whereIndent
               $ docSetIndentLevel
               $ docNonBottomSpacing
@@ -362,10 +362,10 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
       singleLineGuardsDoc guards = appSep $ case guards of
         [] -> docEmpty
         [g] -> docSeq
-          [appSep $ docLit $ Text.pack "|", docForceSingleline $ return g]
+          [appSep $ docLitS "|", docForceSingleline $ return g]
         gs ->
           docSeq
-            $ [appSep $ docLit $ Text.pack "|"]
+            $ [appSep $ docLitS "|"]
             ++ (List.intersperse
                  docCommaSep
                  (docForceSingleline . return <$> gs)
@@ -374,7 +374,7 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
         Nothing  -> Just docEmpty
         Just [w] -> Just $ docSeq
           [ docSeparator
-          , appSep $ docLit $ Text.pack "where"
+          , appSep $ docLitS "where"
           , docSetIndentLevel $ docForceSingleline $ return w
           ]
         _        -> Nothing
@@ -523,12 +523,12 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
                         [] -> []
                         [g] ->
                           [ docForceSingleline $ docSeq
-                              [appSep $ docLit $ Text.pack "|", return g]
+                              [appSep $ docLitS "|", return g]
                           ]
                         gs ->
                           [ docForceSingleline
                               $ docSeq
-                              $ [appSep $ docLit $ Text.pack "|"]
+                              $ [appSep $ docLitS "|"]
                               ++ List.intersperse docCommaSep (return <$> gs)
                           ]
                       )
@@ -557,12 +557,12 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
                       [] -> []
                       [g] ->
                         [ docForceSingleline
-                            $ docSeq [appSep $ docLit $ Text.pack "|", return g]
+                            $ docSeq [appSep $ docLitS "|", return g]
                         ]
                       gs ->
                         [ docForceSingleline
                             $ docSeq
-                            $ [appSep $ docLit $ Text.pack "|"]
+                            $ [appSep $ docLitS "|"]
                             ++ List.intersperse docCommaSep (return <$> gs)
                         ]
                     )
@@ -587,11 +587,11 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
             >>= \(guardDocs, bodyDoc, _) ->
                   (case guardDocs of
                       [] -> []
-                      [g] -> [docSeq [appSep $ docLit $ Text.pack "|", return g]]
+                      [g] -> [docSeq [appSep $ docLitS "|", return g]]
                       (g1 : gr) ->
-                        (docSeq [appSep $ docLit $ Text.pack "|", return g1]
+                        (docSeq [appSep $ docLitS "|", return g1]
                         : (gr <&> \g ->
-                            docSeq [appSep $ docLit $ Text.pack ",", return g]
+                            docSeq [docCommaSep, return g]
                           )
                         )
                     )
@@ -613,12 +613,12 @@ layoutPatSynBind
   -> ToBriDocM BriDocNumbered
 layoutPatSynBind name patSynDetails patDir rpat = do
   let
-    patDoc = docLit $ Text.pack "pattern"
+    patDoc = docLitS "pattern"
     binderDoc = case patDir of
-      ImplicitBidirectional -> docLit $ Text.pack "="
-      _ -> docLit $ Text.pack "<-"
+      ImplicitBidirectional -> docLitS "="
+      _ -> docLitS "<-"
     body = colsWrapPat =<< layoutPat rpat
-    whereDoc = docLit $ Text.pack "where"
+    whereDoc = docLitS "where"
   mWhereDocs <- layoutPatSynWhere patDir
   headDoc <-
     fmap pure
@@ -686,7 +686,7 @@ layoutPatSynWhere
   :: HsPatSynDir GhcPs -> ToBriDocM (Maybe [ToBriDocM BriDocNumbered])
 layoutPatSynWhere hs = case hs of
   ExplicitBidirectional (MG _ (L _ lbinds) _) -> do
-    binderDoc <- docLit $ Text.pack "="
+    binderDoc <- docLitS "="
     Just
       <$> mapM (docSharedWrapper $ layoutPatternBind Nothing binderDoc) lbinds
   _ -> pure Nothing
@@ -730,7 +730,7 @@ layoutSynDecl isInfix wrapNodeRest name vars typ = do
         -- This isn't quite right, but does give syntactically valid results
         let needsParens = not (null rest) || hasOwnParens
         docSeq
-          $ [docLit $ Text.pack "type", docSeparator]
+          $ [docLitS "type", docSeparator]
           ++ [ docParenL | needsParens ]
           ++ [ layoutTyVarBndr False a
              , docSeparator
@@ -742,7 +742,7 @@ layoutSynDecl isInfix wrapNodeRest name vars typ = do
           ++ fmap (layoutTyVarBndr True) rest
       else
         docSeq
-        $ [ docLit $ Text.pack "type"
+        $ [ docLitS "type"
           , docSeparator
           , docWrapNode name $ docLit nameStr
           ]
@@ -762,11 +762,11 @@ layoutTyVarBndr needsSep lbndr@(L _ bndr) = do
       nameStr <- lrdrNameToTextAnn name
       docSeq
         $ [ docSeparator | needsSep ]
-        ++ [ docLit $ Text.pack "("
+        ++ [ docParenL
            , appSep $ docLit nameStr
-           , appSep . docLit $ Text.pack "::"
+           , appSep $ docLitS "::"
            , docForceSingleline $ layoutType kind
-           , docLit $ Text.pack ")"
+           , docParenR
            ]
 
 
@@ -793,14 +793,14 @@ layoutTyFamInstDecl inClass outerNode tfid = do
     needsParens <- hasAnnKeyword outerNode AnnOpenP
     let
       instanceDoc = if inClass
-        then docLit $ Text.pack "type"
+        then docLitS "type"
         else docSeq
-          [appSep . docLit $ Text.pack "type", docLit $ Text.pack "instance"]
+          [appSep $ docLitS "type", docLitS "instance"]
       makeForallDoc :: [LHsTyVarBndr () GhcPs] -> ToBriDocM BriDocNumbered
       makeForallDoc bndrs = do
         bndrDocs <- layoutTyVarBndrs bndrs
         docSeq
-          ([docLit (Text.pack "forall")] ++ processTyVarBndrsSingleline bndrDocs
+          ([docLitS "forall"] ++ processTyVarBndrsSingleline bndrDocs
           )
       lhs =
         docWrapNode innerNode
@@ -823,7 +823,7 @@ layoutHsTyPats
   :: [HsArg (LHsType GhcPs) (LHsKind GhcPs)] -> [ToBriDocM BriDocNumbered]
 layoutHsTyPats pats = pats <&> \case
   HsValArg tm -> layoutType tm
-  HsTypeArg _l ty -> docSeq [docLit $ Text.pack "@", layoutType ty]
+  HsTypeArg _l ty -> docSeq [docLitS "@", layoutType ty]
     -- we ignore the SourceLoc here.. this LPat not being (L _ Pat{}) change
     -- is a bit strange. Hopefully this does not ignore any important
     -- annotations.

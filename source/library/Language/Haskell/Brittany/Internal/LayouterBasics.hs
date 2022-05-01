@@ -113,7 +113,7 @@ briDocByExactInlineOnly infoStr ast = do
   let
     errorAction = do
       mTell [ErrorUnknownNode infoStr ast]
-      docLit $ Text.pack "{- BRITTANY ERROR UNHANDLED SYNTACTICAL CONSTRUCT -}"
+      docLitS "{- BRITTANY ERROR UNHANDLED SYNTACTICAL CONSTRUCT -}"
   case (fallbackMode, Text.lines exactPrinted) of
     (ExactPrintFallbackModeNever, _) -> errorAction
     (_, [t]) -> exactPrintNode
@@ -298,10 +298,10 @@ docEmpty :: ToBriDocM BriDocNumbered
 docEmpty = allocateNode BDFEmpty
 
 docLit :: Text -> ToBriDocM BriDocNumbered
-docLit t = allocateNode $ BDFLit t
+docLit = allocateNode . BDFLit
 
 docLitS :: String -> ToBriDocM BriDocNumbered
-docLitS s = allocateNode $ BDFLit $ Text.pack s
+docLitS = docLit . Text.pack
 
 docExt
   :: (ExactPrint.Annotate.Annotate ast)
@@ -407,7 +407,7 @@ appSep :: ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
 appSep x = docSeq [x, docSeparator]
 
 docCommaSep :: ToBriDocM BriDocNumbered
-docCommaSep = appSep $ docLit $ Text.pack ","
+docCommaSep = appSep $ docLitS ","
 
 docParenLSep :: ToBriDocM BriDocNumbered
 docParenLSep = appSep docParenL
@@ -419,26 +419,26 @@ docParenLSep = appSep docParenL
 -- lit "("  and  appSep (lit "(")  are understandable and short without
 -- introducing a new top-level binding for all types of parentheses.
 docParenL :: ToBriDocM BriDocNumbered
-docParenL = docLit $ Text.pack "("
+docParenL = docLitS "("
 
 docParenR :: ToBriDocM BriDocNumbered
-docParenR = docLit $ Text.pack ")"
+docParenR = docLitS ")"
 
 docParenHashLSep :: ToBriDocM BriDocNumbered
-docParenHashLSep = docSeq [docLit $ Text.pack "(#", docSeparator]
+docParenHashLSep = docSeq [docLitS "(#", docSeparator]
 
 docParenHashRSep :: ToBriDocM BriDocNumbered
-docParenHashRSep = docSeq [docSeparator, docLit $ Text.pack "#)"]
+docParenHashRSep = docSeq [docSeparator, docLitS "#)"]
 
 docBracketL :: ToBriDocM BriDocNumbered
-docBracketL = docLit $ Text.pack "["
+docBracketL = docLitS "["
 
 docBracketR :: ToBriDocM BriDocNumbered
-docBracketR = docLit $ Text.pack "]"
+docBracketR = docLitS "]"
 
 
 docTick :: ToBriDocM BriDocNumbered
-docTick = docLit $ Text.pack "'"
+docTick = docLitS "'"
 
 docNodeAnnKW
   :: Located ast
@@ -601,7 +601,7 @@ unknownNodeError
   -> ToBriDocM BriDocNumbered
 unknownNodeError infoStr ast = do
   mTell [ErrorUnknownNode infoStr ast]
-  docLit $ Text.pack "{- BRITTANY ERROR UNHANDLED SYNTACTICAL CONSTRUCT -}"
+  docLitS "{- BRITTANY ERROR UNHANDLED SYNTACTICAL CONSTRUCT -}"
 
 spacifyDocs :: [ToBriDocM BriDocNumbered] -> [ToBriDocM BriDocNumbered]
 spacifyDocs [] = []

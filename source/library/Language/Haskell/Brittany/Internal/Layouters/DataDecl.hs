@@ -5,7 +5,6 @@ module Language.Haskell.Brittany.Internal.Layouters.DataDecl where
 
 import qualified Data.Data
 import qualified Data.Semigroup as Semigroup
-import qualified Data.Text as Text
 import GHC (GenLocated(L), Located)
 import qualified GHC
 import GHC.Hs
@@ -330,7 +329,7 @@ createDetailsDoc consNameStr details = case details of
       IndentPolicyFree ->
         docAlt [singleLine, multiAppended, multiIndented, leftIndented]
   RecCon (L _ []) ->
-    docSeq [docLit consNameStr, docSeparator, docLit $ Text.pack "{}"]
+    docSeq [docLit consNameStr, docSeparator, docLitS "{}"]
   RecCon lRec@(L _ fields@(_ : _)) -> do
     let ((fName1, fType1) : fDocR) = mkFieldDocs fields
     -- allowSingleline <- mAsk <&> _conf_layout .> _lconfig_allowSinglelineRecord .> confUnpack
