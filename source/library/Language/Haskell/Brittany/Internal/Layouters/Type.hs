@@ -2,24 +2,22 @@
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
-module Language.Haskell.Brittany.Internal.Layouters.Type where
+module Language.Haskell.Brittany.Internal.Layouters.Type (layoutType) where
 
 import qualified Data.Text as Text
 import GHC (AnnKeywordId(..), GenLocated(L))
 import GHC.Hs
 import qualified GHC.OldList as List
 import GHC.Types.Basic
+import GHC.Types.SourceText
 import GHC.Utils.Outputable (ftext, showSDocUnsafe)
 import Language.Haskell.Brittany.Internal.LayouterBasics
 import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.PreludeUtils
 import Language.Haskell.Brittany.Internal.Types
-import Language.Haskell.Brittany.Internal.Utils
-  (FirstLastView(..), splitFirstLast)
+import Language.Haskell.Brittany.Internal.Utils (FirstLastView(..), splitFirstLast)
 
-
-
-layoutType :: ToBriDoc HsType
+layoutType :: LHsType GhcPs -> ToBriDocM BriDocNumbered
 layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
   -- _ | traceShow (ExactPrint.Types.mkAnnKey ltype) False -> error "impossible"
   HsTyVar _ promoted name -> do
@@ -33,10 +31,9 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
     typeDoc <- docSharedWrapper layoutType hst_body
     tyVarDocs <- layoutTyVarBndrs bndrs
     cntxtDocs <- cntxts `forM` docSharedWrapper layoutType
-    let
-      maybeForceML = case hst_body of
-        (L _ HsFunTy{}) -> docForceMultiline
-        _ -> id
+    let maybeForceML = case hst_body of
+          L _ HsFunTy{} -> docForceMultiline
+          _             -> id
     let
       tyVarDocLineList = processTyVarBndrsSingleline tyVarDocs
       forallDoc = docAlt
@@ -285,9 +282,7 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
         (docLitS "]")
       ]
   HsTupleTy _ tupleSort typs -> case tupleSort of
-    HsUnboxedTuple -> unboxed
-    HsBoxedTuple -> simple
-    HsConstraintTuple -> simple
+    HsUnboxedTuple           -> unboxed
     HsBoxedOrConstraintTuple -> simple
    where
     unboxed = if null typs

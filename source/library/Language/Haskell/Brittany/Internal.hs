@@ -72,10 +72,7 @@ pPrintModule conf anns parsedModule =
         $ MultiRWSS.withMultiReader anns
         $ MultiRWSS.withMultiReader conf
         $ MultiRWSS.withMultiReader (extractToplevelAnns parsedModule anns)
-        $ do
-            traceIfDumpConf "bridoc annotations raw" _dconf_dump_annotations
-              $ annsDoc anns
-            ppModule parsedModule
+        $ ppModule parsedModule
   in (TL.toStrict (TLB.toLazyText out), errs, logs)
 
 -- | Additionally checks that the output can be parssed again,
@@ -106,14 +103,18 @@ toLocal conf anns m = do
   pure x
 
 ppModule :: GenLocated SrcSpan HsModule -> PPM ()
-ppModule lmod@(L _loc _m@HsModule{hsmodDecls}) = do
-  (defaultAnns :: Map ExactPrint.AnnKey ExactPrint.Annotation) <- do
-    ToplevelAnns anns <- mAsk
-    let annKey = ExactPrint.mkAnnKey lmod
-    let annMap = Map.findWithDefault Map.empty annKey anns
-    let isEof = (== ExactPrint.AnnEofPos)
-    let overAnnsDP f a = a { ExactPrint.annsDP = f $ ExactPrint.annsDP a }
-    pure $ fmap (overAnnsDP . filter $ isEof . fst) annMap
+ppModule lmod@(L _ HsModule{hsmodAnn, hsmodDecls}) = do
+  let defaultAnns = hsModAnn
+  -- (defaultAnns :: Map ExactPrint.AnnKey ExactPrint.Annotation) <- do
+  --   ToplevelAnns anns <- mAsk
+  --   let annKey = ExactPrint.mkAnnKey lmod
+  --   let annMap = Map.findWithDefault Map.empty annKey anns
+  --
+  --   let annMap = hsModAnn
+  --
+  --   let isEof = (== ExactPrint.AnnEofPos)
+  --   let overAnnsDP f a = a { ExactPrint.annsDP = f $ ExactPrint.annsDP a }
+  --   pure $ fmap (overAnnsDP . filter $ isEof . fst) annMap
 
   (post :: [(ExactPrint.KeywordId, ExactPrint.DeltaPos)]) <- ppPreamble lmod
   hsmodDecls `forM_` \decl -> do
@@ -121,11 +122,6 @@ ppModule lmod@(L _loc _m@HsModule{hsmodDecls}) = do
 
     filteredAnns <- mAsk <&> \(ToplevelAnns annMap) ->
       Map.union defaultAnns $ Map.findWithDefault Map.empty declAnnKey annMap
-
-    traceIfDumpConf
-        "bridoc annotations filtered/transformed"
-        _dconf_dump_annotations
-      $ annsDoc filteredAnns
 
     (config :: CConfig Identity) <- mAsk
 
@@ -182,45 +178,39 @@ getDeclBindingNames (L _ decl) = case decl of
 ppPreamble
   :: GenLocated SrcSpan HsModule
   -> PPM [(ExactPrint.KeywordId, ExactPrint.DeltaPos)]
-ppPreamble lmod@(L loc m@HsModule{}) = do
-  filteredAnns <- mAsk <&> \(ToplevelAnns annMap) ->
-    Map.findWithDefault Map.empty (ExactPrint.mkAnnKey lmod) annMap
-    -- Since ghc-exactprint adds annotations following (implicit)
-    -- modules to both HsModule and the elements in the module
-    -- this can cause duplication of comments. So strip
-    -- attached annotations that come after the module's where
-    -- from the module node
+ppPreamble lmod@(L loc m@HsModule{hsmodAnn, hsmodDecls}) = do
+  --  let filteredAnns = hsmodAnn
+  -- filteredAnns <- mAsk <&> \(ToplevelAnns annMap) ->
+  --   Map.findWithDefault Map.empty (ExactPrint.mkAnnKey lmod) annMap
+  --   -- Since ghc-exactprint adds annotations following (implicit)
+  --   -- modules to both HsModule and the elements in the module
+  --   -- this can cause duplication of comments. So strip
+  --   -- attached annotations that come after the module's where
+  --   -- from the module node
+
   config <- mAsk
   let
     shouldReformatPreamble =
       config & _conf_layout & _lconfig_reformatModulePreamble & confUnpack
 
-  let
-    (filteredAnns', post) =
-      case Map.lookup (ExactPrint.mkAnnKey lmod) filteredAnns of
-        Nothing -> (filteredAnns, [])
-        Just mAnn ->
-          let
-            modAnnsDp = ExactPrint.annsDP mAnn
-            isWhere (ExactPrint.G AnnWhere) = True
-            isWhere _ = False
-            isEof (ExactPrint.AnnEofPos) = True
-            isEof _ = False
-            whereInd = List.findIndex (isWhere . fst) modAnnsDp
-            eofInd = List.findIndex (isEof . fst) modAnnsDp
-            (pre, post') = case (whereInd, eofInd) of
-              (Nothing, Nothing) -> ([], modAnnsDp)
-              (Just i, Nothing) -> List.splitAt (i + 1) modAnnsDp
-              (Nothing, Just _i) -> ([], modAnnsDp)
-              (Just i, Just j) -> List.splitAt (min (i + 1) j) modAnnsDp
-            mAnn' = mAnn { ExactPrint.annsDP = pre }
-            filteredAnns'' =
-              Map.insert (ExactPrint.mkAnnKey lmod) mAnn' filteredAnns
-          in (filteredAnns'', post')
-  traceIfDumpConf
-      "bridoc annotations filtered/transformed"
-      _dconf_dump_annotations
-    $ annsDoc filteredAnns'
+  -- let mAnn = hsmodAn
+  --     (filteredAnns', post) =
+  --       let modAnnsDp = ExactPrint.annsDP mAnn
+  --           isWhere (ExactPrint.G AnnWhere) = True
+  --           isWhere _ = False
+  --           isEof (ExactPrint.AnnEofPos) = True
+  --           isEof _ = False
+  --           whereInd = List.findIndex (isWhere . fst) modAnnsDp
+  --           eofInd = List.findIndex (isEof . fst) modAnnsDp
+  --           (pre, post') = case (whereInd, eofInd) of
+  --             (Nothing, Nothing) -> ([], modAnnsDp)
+  --             (Just i, Nothing) -> List.splitAt (i + 1) modAnnsDp
+  --             (Nothing, Just _i) -> ([], modAnnsDp)
+  --             (Just i, Just j) -> List.splitAt (min (i + 1) j) modAnnsDp
+  --           mAnn' = mAnn { ExactPrint.annsDP = pre }
+  --           filteredAnns'' =
+  --             Map.insert (ExactPrint.mkAnnKey lmod) mAnn' filteredAnns
+  --       in (filteredAnns'', post')
 
   if shouldReformatPreamble
     then toLocal config filteredAnns' $ withTransformedAnns lmod $ do
@@ -229,7 +219,7 @@ ppPreamble lmod@(L loc m@HsModule{}) = do
     else
       let emptyModule = L loc m { hsmodDecls = [] }
       in MultiRWSS.withMultiReader filteredAnns' $ processDefault emptyModule
-  return post
+  pure post
 
 layoutBriDoc :: BriDocNumbered -> PPMLocal ()
 layoutBriDoc briDoc = do
@@ -276,15 +266,15 @@ layoutBriDoc briDoc = do
     -- return simpl
 
   let state = LayoutState
-        { _lstate_baseYs = [0]
+        { _lstate_baseYs           = [0]
           -- Important that we dont use Cols here because moveToAnn
           -- stuff of the first node needs to do its thing properly.
         , _lstate_curYOrAddNewline = InsertNewlines 0
-        , _lstate_indLevels = [0]
-        , _lstate_indLevelLinger = 0
-        , _lstate_commentCol = Nothing
-        , _lstate_addSepSpace = Nothing
-        , _lstate_commentNewlines = 0
+        , _lstate_indLevels        = [0]
+        , _lstate_indLevelLinger   = 0
+        , _lstate_commentCol       = Nothing
+        , _lstate_addSepSpace      = Nothing
+        , _lstate_commentNewlines  = 0
         }
 
   _ <- MultiRWSS.withMultiStateS state $ layoutBriDocM briDoc'

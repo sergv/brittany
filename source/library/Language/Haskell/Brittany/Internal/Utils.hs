@@ -16,6 +16,7 @@ import qualified Data.Semigroup as Semigroup
 import qualified Data.Sequence as Seq
 import DataTreePrint
 import qualified GHC.Data.FastString as GHC
+import qualified GHC.Driver.Ppr as GHC
 import qualified GHC.Driver.Session as GHC
 import qualified GHC.Hs.Extension as HsExtension
 import qualified GHC.OldList as List
@@ -29,6 +30,7 @@ import Language.Haskell.Brittany.Internal.Types
 import qualified Language.Haskell.GHC.ExactPrint.Types as ExactPrint.Types
 import qualified Language.Haskell.GHC.ExactPrint.Utils as ExactPrint.Utils
 import qualified Text.PrettyPrint as PP
+import qualified Language.Haskell.Syntax.Extension as HsExtension
 
 parDoc :: String -> PP.Doc
 parDoc = PP.fsep . fmap PP.text . List.words
@@ -38,10 +40,10 @@ parDocW = PP.fsep . fmap PP.text . List.words . List.unwords
 
 
 showSDoc_ :: GHC.SDoc -> String
-showSDoc_ = GHC.showSDoc GHC.unsafeGlobalDynFlags
+showSDoc_ = GHC.showSDocUnsafe
 
-showOutputable :: (GHC.Outputable a) => a -> String
-showOutputable = GHC.showPpr GHC.unsafeGlobalDynFlags
+showOutputable :: GHC.Outputable a => a -> String
+showOutputable = GHC.showPprUnsafe
 
 fromMaybeIdentity :: Identity a -> Maybe a -> Identity a
 fromMaybeIdentity x y = Data.Coerce.coerce $ fromMaybe (Data.Coerce.coerce x) y
@@ -70,45 +72,45 @@ instance Show ShowIsId where
 data A x = A ShowIsId x
   deriving Data
 
-customLayouterF :: ExactPrint.Types.Anns -> LayouterF
-customLayouterF anns layoutF =
-  DataToLayouter
-    $ f
-    `extQ` showIsId
-    `extQ` fastString
-    `extQ` bytestring
-    `extQ` occName
-    `extQ` srcSpan
-    `ext2Q` located
- where
-  DataToLayouter f = defaultLayouterF layoutF
-  simpleLayouter :: String -> NodeLayouter
-  simpleLayouter s = NodeLayouter (length s) False (const $ PP.text s)
-  showIsId :: ShowIsId -> NodeLayouter
-  showIsId (ShowIsId s) = NodeLayouter (length s + 2) True $ \case
-    Left True -> PP.parens $ PP.text s
-    Left False -> PP.text s
-    Right _ -> PP.text s
-  fastString =
-    simpleLayouter . ("{FastString: " ++) . (++ "}") . show :: GHC.FastString
-      -> NodeLayouter
-  bytestring = simpleLayouter . show :: B.ByteString -> NodeLayouter
-  occName =
-    simpleLayouter . ("{OccName: " ++) . (++ "}") . OccName.occNameString
-  srcSpan :: GHC.SrcSpan -> NodeLayouter
-  srcSpan ss =
-    simpleLayouter
-             -- - $ "{"++ showSDoc_ (GHC.ppr ss)++"}"
-      $ "{"
-      ++ showOutputable ss
-      ++ "}"
-  located :: (Data b, Data loc) => GHC.GenLocated loc b -> NodeLayouter
-  located (GHC.L ss a) = runDataToLayouter layoutF $ A annStr a
-   where
-    annStr = case cast ss of
-      Just (s :: GHC.SrcSpan) ->
-        ShowIsId $ show (ExactPrint.Utils.getAnnotationEP (GHC.L s a) anns)
-      Nothing -> ShowIsId "nnnnnnnn"
+-- customLayouterF :: ExactPrint.Types.Anns -> LayouterF
+-- customLayouterF anns layoutF =
+--   DataToLayouter
+--     $ f
+--     `extQ` showIsId
+--     `extQ` fastString
+--     `extQ` bytestring
+--     `extQ` occName
+--     `extQ` srcSpan
+--     `ext2Q` located
+--  where
+--   DataToLayouter f = defaultLayouterF layoutF
+--   simpleLayouter :: String -> NodeLayouter
+--   simpleLayouter s = NodeLayouter (length s) False (const $ PP.text s)
+--   showIsId :: ShowIsId -> NodeLayouter
+--   showIsId (ShowIsId s) = NodeLayouter (length s + 2) True $ \case
+--     Left True -> PP.parens $ PP.text s
+--     Left False -> PP.text s
+--     Right _ -> PP.text s
+--   fastString =
+--     simpleLayouter . ("{FastString: " ++) . (++ "}") . show :: GHC.FastString
+--       -> NodeLayouter
+--   bytestring = simpleLayouter . show :: B.ByteString -> NodeLayouter
+--   occName =
+--     simpleLayouter . ("{OccName: " ++) . (++ "}") . OccName.occNameString
+--   srcSpan :: GHC.SrcSpan -> NodeLayouter
+--   srcSpan ss =
+--     simpleLayouter
+--              -- - $ "{"++ showSDoc_ (GHC.ppr ss)++"}"
+--       $ "{"
+--       ++ showOutputable ss
+--       ++ "}"
+--   located :: (Data b, Data loc) => GHC.GenLocated loc b -> NodeLayouter
+--   located (GHC.L ss a) = runDataToLayouter layoutF $ A annStr a
+--    where
+--     annStr = case cast ss of
+--       Just (s :: GHC.SrcSpan) ->
+--         ShowIsId $ show (ExactPrint.Utils.getAnnotationEP (GHC.L s a) anns)
+--       Nothing -> ShowIsId "nnnnnnnn"
 
 customLayouterNoAnnsF :: LayouterF
 customLayouterNoAnnsF layoutF =
@@ -223,10 +225,6 @@ briDocToDoc = astToDoc . removeAnnotations
 
 briDocToDocWithAnns :: BriDoc -> PP.Doc
 briDocToDocWithAnns = astToDoc
-
-annsDoc :: ExactPrint.Types.Anns -> PP.Doc
-annsDoc =
-  printTreeWithCustom 100 customLayouterNoAnnsF . fmap (ShowIsId . show)
 
 breakEither :: (a -> Either b c) -> [a] -> ([b], [c])
 breakEither _ [] = ([], [])

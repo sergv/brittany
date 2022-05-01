@@ -1,9 +1,1 @@
 packages: .
-
-allow-newer:
-    -- https://github.com/lspitzner/butcher/issues/7
-    , butcher:base
-    -- https://github.com/lspitzner/data-tree-print/pull/2
-    , data-tree-print:base
-    -- https://github.com/lspitzner/multistate/pull/8
-    , multistate:base

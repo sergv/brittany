@@ -148,7 +148,10 @@ layoutBriDocM = \case
     -- epAnnComments  :: EpAnn an -> EpAnnComments
     -- priorComments  :: EpAnnComments -> [LEpaComment]
     -- getEntryDP     :: LocatedAn ann a -> DeltaPos
+    --
+    -- ExactPrint.Utils.tokComment :: LEpaComment -> Comment
     -- ghcCommentText :: LEpaComment -> String
+    -- epaLocationRealSrcSpan :: EpaLocation -> RealSrcSpan
     let priorCmnts = []
     let moveToExactLocationAction = pure ()
 

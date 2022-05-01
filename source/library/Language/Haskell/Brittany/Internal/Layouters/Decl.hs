@@ -773,9 +773,9 @@ layoutTyVarBndr needsSep lbndr@(L _ bndr) = do
 
 
 layoutTyFamInstDecl
-  :: Data.Data.Data a
+  :: (Data.Data.Data ann, Data.Data.Data a)
   => Bool
-  -> Located a
+  -> LocatedAn ann a
   -> TyFamInstDecl GhcPs
   -> ToBriDocM BriDocNumbered
 layoutTyFamInstDecl inClass outerNode tfid = do
@@ -799,14 +799,14 @@ layoutTyFamInstDecl inClass outerNode tfid = do
           ([docLitS "forall"] ++ processTyVarBndrsSingleline bndrDocs
           )
       lhs =
-        docWrapNode innerNode
-          . docSeq
-          $ [appSep instanceDoc]
-          ++ [ makeForallDoc foralls | Just foralls <- [bndrsMay] ]
-          ++ [ docParenL | needsParens ]
-          ++ [appSep $ docWrapNode name $ docLit nameStr]
-          ++ intersperse docSeparator (layoutHsTyPats pats)
-          ++ [ docParenR | needsParens ]
+        docWrapNode innerNode . docSeq $ concat
+          [ [appSep instanceDoc]
+          , [makeForallDoc foralls | Just foralls <- [bndrsMay]]
+          , [docParenL | needsParens]
+          , [appSep $ docWrapNode name $ docLit nameStr]
+          , intersperse docSeparator (layoutHsTyPats pats)
+          , [docParenR | needsParens]
+          ]
     hasComments <-
       (||)
       <$> hasAnyRegularCommentsConnected outerNode

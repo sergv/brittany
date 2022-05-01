@@ -14,28 +14,28 @@ module Language.Haskell.Brittany.Internal.Types where
 import qualified Control.Monad.Trans.MultiRWS.Strict as MultiRWSS
 import qualified Data.Data
 import Data.Generics.Uniplate.Direct as Uniplate
-import qualified Data.Kind as Kind
+import Data.Kind (Type)
 import qualified Data.Strict.Maybe as Strict
 import qualified Data.Text.Lazy.Builder as Text.Builder
-import GHC (AnnKeywordId, GenLocated, Located, SrcSpan)
+import GHC (AnnKeywordId, GenLocated, LocatedAn, SrcSpan)
 import Language.Haskell.Brittany.Internal.Config.Types
-import Language.Haskell.Brittany.Internal.ExactPrintUtils (ToplevelAnns)
 import Language.Haskell.Brittany.Internal.Prelude
 import qualified Language.Haskell.GHC.ExactPrint as ExactPrint
-import Language.Haskell.GHC.ExactPrint.Types (Anns)
+import qualified Language.Haskell.GHC.ExactPrint.Types as ExactPrint.Types
 import qualified Safe
+import GHC.Parser.Annotation
 
 type PPM = MultiRWSS.MultiRWS
-  '[ToplevelAnns, Config, ExactPrint.Anns]
+  '[Config]
   '[Text.Builder.Builder, [BrittanyError], Seq String]
   '[]
 
 type PPMLocal = MultiRWSS.MultiRWS
-  '[Config, ExactPrint.Anns]
+  '[Config]
   '[Text.Builder.Builder, [BrittanyError], Seq String]
   '[]
 
-newtype TopLevelDeclNameMap = TopLevelDeclNameMap (Map ExactPrint.AnnKey String)
+-- newtype TopLevelDeclNameMap = TopLevelDeclNameMap (Map ExactPrint.AnnKey String)
 
 data ColsOrNewlines
   -- Number of chars in the current line.
@@ -114,7 +114,7 @@ data BrittanyError
     --   output and second the corresponding, ill-formed input.
   | LayoutWarning String
     -- ^ some warning
-  | forall ast . Data.Data.Data ast => ErrorUnknownNode String (GenLocated SrcSpan ast)
+  | forall ast ann. ErrorUnknownNode String (LocatedAn ann ast)
     -- ^ internal error: pretty-printing is not implemented for type of node
     --   in the syntax-tree
   | ErrorOutputCheck String
@@ -184,13 +184,13 @@ data BrIndent
   deriving (Eq, Ord, Data.Data.Data, Show)
 
 type ToBriDocM = MultiRWSS.MultiRWS
-                   '[Config, Anns] -- reader
+                   '[Config] -- reader
                    '[[BrittanyError], Seq String] -- writer
                    '[NodeAllocIndex] -- state
 
-type ToBriDoc (sym :: Kind.Type -> Kind.Type) = Located (sym GhcPs) -> ToBriDocM BriDocNumbered
-type ToBriDoc' sym            = Located sym         -> ToBriDocM BriDocNumbered
-type ToBriDocC sym c          = Located sym         -> ToBriDocM c
+-- type ToBriDoc  an (sym :: Type -> Type) = LocatedAn an (sym GhcPs) -> ToBriDocM BriDocNumbered
+-- type ToBriDoc' an sym                   = LocatedAn an sym         -> ToBriDocM BriDocNumbered
+-- type ToBriDocC an sym c                 = LocatedAn an sym         -> ToBriDocM c
 
 data DocMultiLine
   = MultiLineNo

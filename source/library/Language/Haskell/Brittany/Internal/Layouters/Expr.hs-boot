@@ -6,8 +6,7 @@ import GHC.Hs
 import Language.Haskell.Brittany.Internal.Types
 
 
-
-layoutExpr :: ToBriDoc HsExpr
+layoutExpr :: LHsExpr GhcPs -> ToBriDocM BriDocNumbered
 
 -- layoutStmt :: ToBriDoc' (StmtLR GhcPs GhcPs (LHsExpr GhcPs))
 

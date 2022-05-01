@@ -25,9 +25,7 @@ import Language.Haskell.Brittany.Internal.PreludeUtils
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.Brittany.Internal.Utils
 
-
-
-layoutExpr :: ToBriDoc HsExpr
+layoutExpr :: LHsExpr GhcPs -> ToBriDocM BriDocNumbered
 layoutExpr lexpr@(L _ expr) = do
   indentPolicy <- mAsk <&> _conf_layout .> _lconfig_indentPolicy .> confUnpack
   let allowFreeIndent = indentPolicy == IndentPolicyFree
@@ -708,7 +706,7 @@ layoutExpr lexpr@(L _ expr) = do
       -- docSeq [appSep $ docLitS "let in", expDoc1]
     HsDo _ stmtCtx (L _ stmts) -> case stmtCtx of
       DoExpr _ -> do
-        stmtDocs <- docSharedWrapper layoutStmt `mapM` stmts
+        stmtDocs <- traverse (docSharedWrapper layoutStmt) stmts
         docSetParSpacing $ docAddBaseY BrIndentRegular $ docPar
           (docLitS "do")
           (docSetBaseAndIndent $ docNonBottomSpacing $ docLines stmtDocs)
