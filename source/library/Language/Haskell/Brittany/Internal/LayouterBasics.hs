@@ -174,10 +174,6 @@ lrdrNameToTextAnnTypeEqualityIsSpecial ast = do
       else x
   lrdrNameToTextAnnGen f ast
 
-askIndent :: MonadMultiReader Config m => m Int
-askIndent = confUnpack . _lconfig_indentAmount . _conf_layout <$> mAsk
-
-
 extractAllComments
   :: ExactPrint.Annotation -> [(ExactPrint.Comment, ExactPrint.DeltaPos)]
 extractAllComments ann =
