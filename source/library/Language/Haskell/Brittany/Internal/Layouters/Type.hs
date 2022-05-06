@@ -1,4 +1,5 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
 module Language.Haskell.Brittany.Internal.Layouters.Type where
@@ -26,13 +27,14 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
     case promoted of
       IsPromoted -> docSeq [docSeparator, docTick, docWrapNode name $ docLit t]
       NotPromoted -> docWrapNode name $ docLit t
-  HsForAllTy _ hsf (L _ (HsQualTy _ (L _ cntxts) typ2)) -> do
+
+  HsForAllTy _ hsf (L _ HsQualTy{hst_ctxt = L _ cntxts, hst_body}) -> do
     let bndrs = getBinders hsf
-    typeDoc <- docSharedWrapper layoutType typ2
+    typeDoc <- docSharedWrapper layoutType hst_body
     tyVarDocs <- layoutTyVarBndrs bndrs
     cntxtDocs <- cntxts `forM` docSharedWrapper layoutType
     let
-      maybeForceML = case typ2 of
+      maybeForceML = case hst_body of
         (L _ HsFunTy{}) -> docForceMultiline
         _ -> id
     let
