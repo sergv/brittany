@@ -21,11 +21,6 @@ import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.Brittany.Internal.Utils
 
-
-
-prepareName :: LIEWrappedName name -> Located name
-prepareName = ieLWrappedName
-
 layoutIE :: ToBriDoc IE
 layoutIE lie@(L _ ie) = docWrapNode lie $ case ie of
   IEVar _ x -> layoutWrapped lie x
@@ -51,7 +46,7 @@ layoutIE lie@(L _ ie) = docWrapNode lie $ case ie of
         $ docAddBaseY BrIndentRegular
         $ docPar (layoutWrapped lie x) (layoutItems (splitFirstLast sortedNs))
    where
-    nameDoc = docLit <=< lrdrNameToTextAnn . prepareName
+    nameDoc = docLit <=< lrdrNameToTextAnn . ieLWrappedName
     layoutItem n = docSeq [docCommaSep, docWrapNode n $ nameDoc n]
     layoutItems FirstLastEmpty = docSetBaseY $ docLines
       [ docSeq [docParenLSep, docNodeAnnKW lie (Just AnnOpenP) docEmpty]
