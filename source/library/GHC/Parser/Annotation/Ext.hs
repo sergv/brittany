@@ -1,3 +1,5 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 module GHC.Parser.Annotation.Ext where

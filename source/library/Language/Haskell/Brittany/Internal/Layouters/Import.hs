@@ -7,6 +7,7 @@ import qualified Data.Text as Text
 import GHC (GenLocated(L), moduleNameString, unLoc)
 import GHC.Hs
 import GHC.Types.Basic
+import GHC.Types.SourceText
 import GHC.Unit.Types (IsBootInterface(..))
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.LayouterBasics
