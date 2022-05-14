@@ -1,14 +1,18 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
-module Language.Haskell.Brittany.Internal.Layouters.Pattern where
+module Language.Haskell.Brittany.Internal.Layouters.Pattern (layoutPat) where
 
+import Data.Bifunctor
 import qualified Data.Foldable as Foldable
 import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
+import Data.Traversable
 import GHC (GenLocated(L), ol_val)
 import GHC.Hs
 import qualified GHC.OldList as List
+import GHC.Parser.Annotation.Ext
 import GHC.Types.Basic
 import Language.Haskell.Brittany.Internal.LayouterBasics
 import {-# SOURCE #-} Language.Haskell.Brittany.Internal.Layouters.Expr
@@ -17,9 +21,7 @@ import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.PreludeUtils
 import Language.Haskell.Brittany.Internal.Types
 
-
-
--- | layouts patterns (inside function bindings, case alternatives, let
+-- | Layouts patterns (inside function bindings, case alternatives, let
 -- bindings or do notation). E.g. for input
 --        > case computation of
 --        >   (warnings, Success a b) -> ..
@@ -57,24 +59,31 @@ layoutPat lpat@(L _ pat) = docWrapNode lpat $ case pat of
     --       x1' <- docSeq [docLit $ Text.pack "(", return x1]
     --       xN' <- docSeq [return xN, docLit $ Text.pack ")"]
     --       return $ (x1' Seq.<| middle) Seq.|> xN'
-  ConPat _ lname (PrefixCon args) -> do
-    -- Abc a b c -> expr
-    nameDoc <- lrdrNameToTextAnn lname
-    argDocs <- layoutPat `mapM` args
-    if null argDocs
-      then return <$> docLit nameDoc
-      else do
+  ConPat _ lname (PrefixCon tyargs args) -> do
+    -- Abc @x @y @z a b c -> expr
+    let nameDoc = lrdrNameToTextAnn lname
+    -- HsPatSigType
+    tyargs' <- traverse layoutHsPatSigType tyargs
+    args'   <- traverse layoutPat args
+    case tyargs' ++ args' of
+      [] -> pure <$> docLit nameDoc
+      xs -> do
         x1 <- appSep (docLit nameDoc)
-        xR <- fmap Seq.fromList $ sequence $ spacifyDocs $ fmap
-          colsWrapPat
-          argDocs
-        return $ x1 Seq.<| xR
+        xR <- fmap Seq.fromList $ sequence $ spacifyDocs $ fmap colsWrapPat xs
+        pure $ x1 Seq.<| xR
+
+    -- if null args'
+    --   then return <$> docLit nameDoc
+    --   else do
+    --     x1 <- appSep (docLit nameDoc)
+    --     xR <- fmap Seq.fromList $ sequence $ spacifyDocs $ fmap colsWrapPat args'
+    --     return $ x1 Seq.<| xR
   ConPat _ lname (InfixCon left right) -> do
     -- a :< b -> expr
-    nameDoc <- lrdrNameToTextAnn lname
-    leftDoc <- appSep . colsWrapPat =<< layoutPat left
+    let nameDoc = lrdrNameToTextAnn lname
+    leftDoc  <- appSep . colsWrapPat =<< layoutPat left
     rightDoc <- colsWrapPat =<< layoutPat right
-    middle <- appSep $ docLit nameDoc
+    middle   <- appSep $ docLit nameDoc
     return $ Seq.empty Seq.|> leftDoc Seq.|> middle Seq.|> rightDoc
   ConPat _ lname (RecCon (HsRecFields [] Nothing)) -> do
     -- Abc{} -> expr
@@ -84,7 +93,7 @@ layoutPat lpat@(L _ pat) = docWrapNode lpat $ case pat of
     -- Abc { a = locA, b = locB, c = locC } -> expr1
     -- Abc { a, b, c } -> expr2
     let t = lrdrNameToText lname
-    fds <- fs `forM` \(L _ (HsRecField (L _ fieldOcc) fPat pun)) -> do
+    fds <- fs `forM` \(L _ (HsRecField _ann (L _ fieldOcc) fPat pun)) -> do
       let FieldOcc _ lnameF = fieldOcc
       fExpDoc <- if pun
         then return Nothing
@@ -111,7 +120,7 @@ layoutPat lpat@(L _ pat) = docWrapNode lpat $ case pat of
     | dotdoti == length fs -> do
     -- Abc { a = locA, .. }
       let t = lrdrNameToText lname
-      fds <- fs `forM` \(L _ (HsRecField (L _ fieldOcc) fPat pun)) -> do
+      fds <- fs `forM` \(L _ (HsRecField _ann (L _ fieldOcc) fPat pun)) -> do
         let FieldOcc _ lnameF = fieldOcc
         fExpDoc <- if pun
           then return Nothing
@@ -169,9 +178,11 @@ layoutPat lpat@(L _ pat) = docWrapNode lpat $ case pat of
   LazyPat _ pat1 -> do
     -- ~nestedpat -> expr
     wrapPatPrepend pat1 (docLitS "~")
-  NPat _ llit@(L _ ol) mNegative _ -> do
+  NPat ann llit@(L _ ol) mNegative _ -> do
     -- -13 -> expr
-    litDoc <- docWrapNode llit $ allocateNode $ overLitValBriDoc $ GHC.ol_val ol
+    -- _ llit
+    let llit' = first (SrcSpanAnn ann) llit
+    litDoc <- docWrapNode llit' $ allocateNode $ overLitValBriDoc $ GHC.ol_val ol
     negDoc <- docLitS "-"
     pure $ case mNegative of
       Just{} -> Seq.fromList [negDoc, litDoc]
@@ -201,9 +212,13 @@ wrapPatListy
 wrapPatListy elems both start end = do
   elemDocs <- Seq.fromList elems `forM` (layoutPat >=> colsWrapPat)
   case Seq.viewl elemDocs of
-    Seq.EmptyL -> fmap Seq.singleton $ docLitS both
+    Seq.EmptyL     -> fmap Seq.singleton $ docLitS both
     x1 Seq.:< rest -> do
-      sDoc <- start
-      eDoc <- end
+      sDoc  <- start
+      eDoc  <- end
       rest' <- rest `forM` \bd -> docSeq [docCommaSep, return bd]
       return $ (sDoc Seq.<| x1 Seq.<| rest') Seq.|> eDoc
+
+layoutHsPatSigType :: HsPatSigType GhcPs -> ToBriDocM (Seq BriDocNumbered)
+layoutHsPatSigType HsPS{hsps_ext = ann, hsps_body = typ} =
+  Seq.singleton <$> docSeq [docLitS "@", layoutType typ]

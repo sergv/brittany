@@ -21,14 +21,14 @@ layoutType :: LHsType GhcPs -> ToBriDocM BriDocNumbered
 layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
   -- _ | traceShow (ExactPrint.Types.mkAnnKey ltype) False -> error "impossible"
   HsTyVar _ promoted name -> do
-    t <- lrdrNameToTextAnnTypeEqualityIsSpecial name
+    let t = lrdrNameToTextAnnTypeEqualityIsSpecial name
     case promoted of
-      IsPromoted -> docSeq [docSeparator, docTick, docWrapNode name $ docLit t]
+      IsPromoted  -> docSeq [docSeparator, docTick, docWrapNode name $ docLit t]
       NotPromoted -> docWrapNode name $ docLit t
 
-  HsForAllTy _ hsf (L _ HsQualTy{hst_ctxt = L _ cntxts, hst_body}) -> do
+  HsForAllTy _ hsf (L _ HsQualTy{hst_ctxt = Just (L _ cntxts), hst_body}) -> do
     let bndrs = getBinders hsf
-    typeDoc <- docSharedWrapper layoutType hst_body
+    typeDoc   <- docSharedWrapper layoutType hst_body
     tyVarDocs <- layoutTyVarBndrs bndrs
     cntxtDocs <- cntxts `forM` docSharedWrapper layoutType
     let maybeForceML = case hst_body of
@@ -102,12 +102,11 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
       ]
   HsForAllTy _ hsf typ2 -> do
     let bndrs = getBinders hsf
-    typeDoc <- layoutType typ2
+    typeDoc   <- layoutType typ2
     tyVarDocs <- layoutTyVarBndrs bndrs
-    let
-      maybeForceML = case typ2 of
-        (L _ HsFunTy{}) -> docForceMultiline
-        _ -> id
+    let maybeForceML = case typ2 of
+          L _ HsFunTy{} -> docForceMultiline
+          _             -> id
     let tyVarDocLineList = processTyVarBndrsSingleline tyVarDocs
     docAlt
       -- forall x . x
@@ -154,31 +153,45 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
            ]
         )
       ]
-  HsQualTy _ lcntxts@(L _ cntxts) typ1 -> do
+  -- TODO: confirm this implementation makes sense, maybe unify with
+  -- the following case.
+  HsQualTy _ Nothing typ1 -> do
+    typeDoc <- docSharedWrapper layoutType typ1
+    let maybeForceML = case typ1 of
+          L _ HsFunTy{} -> docForceMultiline
+          _             -> id
+    docAlt
+      -- a b -> c
+      [ docForceSingleline typeDoc
+      --    a b
+      -- -> c
+      , docCols
+          ColTyOpPrefix
+          [ docLitS "   "
+          , docAddBaseY (BrIndentSpecial 3) $ maybeForceML typeDoc
+          ]
+      ]
+  HsQualTy _ (Just lcntxts@(L _ cntxts)) typ1 -> do
     typeDoc <- docSharedWrapper layoutType typ1
     cntxtDocs <- cntxts `forM` docSharedWrapper layoutType
-    let
-      contextDoc = docWrapNode lcntxts $ case cntxtDocs of
-        [] -> docLitS "()"
-        [x] -> x
-        _ -> docAlt
-          [ let
-              list =
-                List.intersperse docCommaSep $ docForceSingleline <$> cntxtDocs
-            in docSeq ([docParenL] ++ list ++ [docParenR])
-          , let
-              open = docCols
-                ColTyOpPrefix
-                [docParenLSep, docAddBaseY (BrIndentSpecial 2) $ head cntxtDocs]
-              list = List.tail cntxtDocs <&> \cntxtDoc -> docCols
-                ColTyOpPrefix
-                [docCommaSep, docAddBaseY (BrIndentSpecial 2) $ cntxtDoc]
-            in docPar open $ docLines $ list ++ [docParenR]
-          ]
-    let
-      maybeForceML = case typ1 of
-        (L _ HsFunTy{}) -> docForceMultiline
-        _ -> id
+    let contextDoc = docWrapNode lcntxts $ case cntxtDocs of
+          []  -> docLitS "()"
+          [x] -> x
+          _   -> docAlt
+            [ let list = List.intersperse docCommaSep $ docForceSingleline <$> cntxtDocs
+              in docSeq ([docParenL] ++ list ++ [docParenR])
+            , let
+                open = docCols
+                  ColTyOpPrefix
+                  [docParenLSep, docAddBaseY (BrIndentSpecial 2) $ head cntxtDocs]
+                list = List.tail cntxtDocs <&> \cntxtDoc -> docCols
+                  ColTyOpPrefix
+                  [docCommaSep, docAddBaseY (BrIndentSpecial 2) $ cntxtDoc]
+              in docPar open $ docLines $ list ++ [docParenR]
+            ]
+    let maybeForceML = case typ1 of
+          L _ HsFunTy{} -> docForceMultiline
+          _             -> id
     docAlt
       -- (Foo a b c) => a b -> c
       [ docSeq
@@ -201,11 +214,10 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
   HsFunTy _ _ typ1 typ2 -> do
     typeDoc1 <- docSharedWrapper layoutType typ1
     typeDoc2 <- docSharedWrapper layoutType typ2
-    let
-      maybeForceML = case typ2 of
-        (L _ HsFunTy{}) -> docForceMultiline
-        _ -> id
-    hasComments <- hasAnyCommentsBelow ltype
+    let maybeForceML = case typ2 of
+          L _ HsFunTy{} -> docForceMultiline
+          _             -> id
+        hasComments  = hasAnyCommentsBelow ltype
     docAlt
       $ [ docSeq
             [ appSep $ docForceSingleline typeDoc1
@@ -410,7 +422,7 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
   HsKindSig _ typ1 kind1 -> do
     typeDoc1 <- docSharedWrapper layoutType typ1
     kindDoc1 <- docSharedWrapper layoutType kind1
-    hasParens <- hasAnnKeyword ltype AnnOpenP
+    let hasParens = hasAnnKeyword ltype AnnOpenP
     docAlt
       [ if hasParens
         then docSeq
@@ -512,8 +524,8 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
     briDocByExactInlineOnly "HsRecTy{}" ltype
   HsExplicitListTy _ _ typs -> do
     typDocs <- docSharedWrapper layoutType `mapM` typs
-    hasComments <- hasAnyCommentsBelow ltype
-    let specialCommaSep = appSep $ docLitS " ,"
+    let hasComments     = hasAnyCommentsBelow ltype
+        specialCommaSep = appSep $ docLitS " ,"
     docAlt
       [ docSeq
       $ [docLitS "'["]
@@ -561,13 +573,15 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
       ]
   HsExplicitTupleTy{} -> -- TODO
     briDocByExactInlineOnly "HsExplicitTupleTy{}" ltype
-  HsTyLit _ lit -> case lit of
-    HsNumTy (SourceText srctext) _ -> docLitS srctext
-    HsNumTy NoSourceText _ ->
-      error "overLitValBriDoc: literal with no SourceText"
-    HsStrTy (SourceText srctext) _ -> docLitS srctext
-    HsStrTy NoSourceText _ ->
-      error "overLitValBriDoc: literal with no SourceText"
+  HsTyLit _ lit -> do
+    let srctext = case lit of
+          HsNumTy x _ -> x
+          HsStrTy x _ -> x
+          HsCharTy x _ -> x
+    case srctext of
+      SourceText x -> docLitS x
+      NoSourceText ->
+        error "overLitValBriDoc: literal without SourceText"
   HsWildCardTy _ -> docLitS "_"
   HsSumTy{} -> -- TODO
     briDocByExactInlineOnly "HsSumTy{}" ltype
@@ -611,14 +625,12 @@ processTyVarBndrsSingleline bndrDocs = bndrDocs >>= \case
     , docParenR
     ]
 
-getBinders :: HsForAllTelescope pass -> [LHsTyVarBndr () pass]
+getBinders :: HsForAllTelescope GhcPs -> [LHsTyVarBndr () GhcPs]
 getBinders x = case x of
-  HsForAllVis _ b -> b
+  HsForAllVis _ b   -> b
   HsForAllInvis _ b -> fmap withoutSpecificity b
-  XHsForAllTelescope _ -> []
 
-withoutSpecificity :: LHsTyVarBndr flag pass -> LHsTyVarBndr () pass
+withoutSpecificity :: LHsTyVarBndr flag GhcPs -> LHsTyVarBndr () GhcPs
 withoutSpecificity = fmap $ \case
-  UserTyVar a _ c -> UserTyVar a () c
+  UserTyVar a _ c     -> UserTyVar a () c
   KindedTyVar a _ c d -> KindedTyVar a () c d
-  XTyVarBndr a -> XTyVarBndr a

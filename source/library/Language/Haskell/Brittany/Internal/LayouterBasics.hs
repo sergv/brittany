@@ -10,6 +10,7 @@ module Language.Haskell.Brittany.Internal.LayouterBasics where
 import qualified Control.Monad.Trans.MultiRWS.Strict as MultiRWSS
 import qualified Control.Monad.Writer.Strict as Writer
 import qualified Data.Char as Char
+import Data.Coerce (coerce)
 import Data.Data
 import qualified Data.Generics as SYB
 import qualified Data.Map as Map
@@ -121,17 +122,23 @@ lrdrNameToText :: GenLocated l RdrName -> Text
 lrdrNameToText (L _ n) = rdrNameToText n
 
 lrdrNameToTextAnnGen
-  ::
+  :: Occurrences AnnKeywordId ann
   => (Text -> Text)
   -> LocatedAn ann RdrName
-  -> m Text
-lrdrNameToTextAnnGen f ast@(L _ n) =
-  case (n, ) of
-    Exact{} | t == Text.pack "()" -> t
+  -> Text
+lrdrNameToTextAnnGen f (L ann n) =
+  case (n, foldAllOccurrences check ann) of
+    (Exact{}, _)
+      | t == Text.pack "()" -> t
+    (_, (Any True, _,        _))        -> Text.pack "`" <> t <> Text.pack "`"
+    (_, (_,        Any True, _))        -> t
+    (_, (_,        _,        Any True)) -> Text.pack "(" <> t <> Text.pack ")"
+    _                                   -> t
   where
     t :: Text
     t = f $ rdrNameToText n
-  undefined
+
+    check x = coerce (x == AnnBackquote, x == AnnCommaTuple, x == AnnOpenP)
   -- anns <- mAsk
   -- let t = f $ rdrNameToText n
   -- let
@@ -151,7 +158,8 @@ lrdrNameToTextAnnGen f ast@(L _ n) =
   --     _ | otherwise -> t
 
 lrdrNameToTextAnn
-  :: LocatedAn ann RdrName
+  :: Occurrences AnnKeywordId ann
+  => LocatedAn ann RdrName
   -> Text
 lrdrNameToTextAnn = lrdrNameToTextAnnGen id
 
@@ -165,7 +173,8 @@ specialCaseDataTypeEquality x
   | otherwise            = x
 
 lrdrNameToTextAnnTypeEqualityIsSpecial
-  :: LocatedAn ann RdrName
+  :: Occurrences AnnKeywordId ann
+  => LocatedAn ann RdrName
   -> Text
 lrdrNameToTextAnnTypeEqualityIsSpecial =
   lrdrNameToTextAnnGen specialCaseDataTypeEquality
@@ -425,7 +434,7 @@ docTick :: ToBriDocM BriDocNumbered
 docTick = docLitS "'"
 
 docNodeAnnKW
-  :: Located ast
+  :: LocatedAn ann ast
   -> Maybe AnnKeywordId
   -> ToBriDocM BriDocNumbered
   -> ToBriDocM BriDocNumbered
@@ -433,7 +442,7 @@ docNodeAnnKW _ast kw bdm =
   docAnnotationKW kw bdm
 
 docNodeMoveToKWDP
-  :: Located ast
+  :: LocatedAn ann ast
   -> AnnKeywordId
   -> Bool
   -> ToBriDocM BriDocNumbered

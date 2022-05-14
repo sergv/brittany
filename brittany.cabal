@@ -136,6 +136,7 @@ library
   hs-source-dirs: source/library
   exposed-modules:
     Data.Occurrences
+    GHC.Parser.Annotation.Ext
     Language.Haskell.Brittany
     Language.Haskell.Brittany.Internal
     Language.Haskell.Brittany.Internal.Backend
@@ -218,7 +219,6 @@ executable brittany-investigation
     , ghc-exactprint ^>= 1.5
     , prettyprinter-combinators
     , text
-    -- , th-reify-many
     , transformers
   ghc-options:
     -rtsopts

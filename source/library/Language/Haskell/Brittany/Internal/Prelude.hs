@@ -3,7 +3,7 @@ module Language.Haskell.Brittany.Internal.Prelude
   ) where
 
 import Control.Applicative as E (Alternative(..), Applicative(..))
-import Control.Arrow as E ((&&&), (***), (<<<), (>>>), first, second)
+import Control.Arrow as E ((&&&), (***), (<<<), (>>>))
 import Control.Concurrent as E (forkIO, forkOS, threadDelay)
 import Control.Concurrent.Chan as E (Chan)
 import Control.Concurrent.MVar as E
@@ -47,6 +47,7 @@ import Control.Monad.Trans.Maybe as E (MaybeT(..))
 import Control.Monad.Trans.MultiRWS as E
   (MonadMultiReader(..), MonadMultiState(..), MonadMultiWriter(..), mGet)
 import Data.Bifunctor as E (bimap)
+import Data.Bifunctor as E (first, second)
 import Data.Bool as E (Bool(..))
 import Data.Char as E (Char, chr, ord)
 import Data.Data as E (toConstr)
