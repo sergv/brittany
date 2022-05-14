@@ -23,8 +23,6 @@ prepPkg rawN = case rawN of
   -- This would be odd to encounter and the
   -- result will most certainly be wrong
   NoSourceText -> ""
-prepModName :: Located e -> e
-prepModName = unLoc
 
 layoutImport :: ImportDecl GhcPs -> ToBriDocM BriDocNumbered
 layoutImport importD = case importD of
@@ -37,7 +35,7 @@ layoutImport importD = case importD of
       compact = indentPolicy /= IndentPolicyFree
       modNameT = Text.pack $ moduleNameString modName
       pkgNameT = Text.pack . prepPkg . sl_st <$> pkg
-      masT = Text.pack . moduleNameString . prepModName <$> mas
+      masT = Text.pack . moduleNameString . unLoc <$> mas
       hiding = maybe False fst mllies
       minQLength = length "import qualified "
       qLengthReal =
