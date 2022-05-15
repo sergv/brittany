@@ -232,7 +232,7 @@ mainCmdParser helpDesc = do
       $ return ()
 
     results <- zipWithM
-      (coreIO putStrErrLn config suppressOutput checkMode)
+      (coreIO config suppressOutput checkMode)
       inputPaths
       outputPaths
 
@@ -251,19 +251,15 @@ data ChangeStatus = Changes | NoChanges
 -- | The main IO parts for the default mode of operation, and after commandline
 -- and config stuff is processed.
 coreIO
-  :: (String -> IO ()) -- ^ error output function. In parallel operation, you
-                       -- may want serialize the different outputs and
-                       -- consequently not directly print to stderr.
-  -> Config -- ^ global program config.
-  -> Bool   -- ^ whether to supress output (to stdout). Purely IO flag, so
-            -- currently not part of program config.
-  -> Bool   -- ^ whether we are (just) in check mode.
-  -> Maybe FilePath.FilePath -- ^ input filepath; stdin if Nothing.
-  -> Maybe FilePath.FilePath -- ^ output filepath; stdout if Nothing.
-  -> IO (Either Int ChangeStatus)      -- ^ Either an errorNo, or the change status.
-coreIO putErrorLnIO config suppressOutput checkMode inputPathM outputPathM =
+  :: Config                       -- ^ global program config.
+  -> Bool                         -- ^ whether to supress output (to stdout). Purely IO flag, so
+                                  -- currently not part of program config.
+  -> Bool                         -- ^ whether we are (just) in check mode.
+  -> Maybe FilePath.FilePath      -- ^ input filepath; stdin if Nothing.
+  -> Maybe FilePath.FilePath      -- ^ output filepath; stdout if Nothing.
+  -> IO (Either Int ChangeStatus) -- ^ Either an errorNo, or the change status.
+coreIO config suppressOutput checkMode inputPathM outputPathM =
   ExceptT.runExceptT $ do
-    let putErrorLn = liftIO . putErrorLnIO :: String -> ExceptT.ExceptT e IO ()
     let ghcOptions = config & _conf_forward & _options_ghc & runIdentity
     -- there is a good of code duplication between the following code and the
     -- `pureModuleTransform` function. Unfortunately, there are also a good
@@ -293,7 +289,7 @@ coreIO putErrorLnIO config suppressOutput checkMode inputPathM outputPathM =
           CPPModeAbort -> do
             return $ Left "Encountered -XCPP. Aborting."
           CPPModeWarn -> do
-            putErrorLnIO
+            putStrErrLn
               $ "Warning: Encountered -XCPP."
               ++ " Be warned that -XCPP is not supported and that"
               ++ " brittany cannot check that its output is syntactically"
@@ -332,8 +328,8 @@ coreIO putErrorLnIO config suppressOutput checkMode inputPathM outputPathM =
         return (parseRes, inputText)
     case parseResult of
       Left left -> do
-        putErrorLn "parse error:"
-        putErrorLn left
+        putStrErrLn "parse error:"
+        putStrErrLn left
         ExceptT.throwE 60
       Right (anns, parsedSource, hasCPP) -> do
         let moduleConf = config
@@ -389,18 +385,18 @@ coreIO putErrorLnIO config suppressOutput checkMode inputPathM outputPathM =
                 $ List.sortOn customErrOrder
                 $ errsWarns
           groupedErrsWarns `forM_` \case
-            (ErrorOutputCheck{} : _) -> do
-              putErrorLn
+            ErrorOutputCheck{} : _ -> do
+              putStrErrLn
                 $ "ERROR: brittany pretty printer"
                 ++ " returned syntactically invalid result."
-            (ErrorInput str : _) -> do
-              putErrorLn $ "ERROR: parse error: " ++ str
+            ErrorInput str : _ -> do
+              putStrErrLn $ "ERROR: parse error: " ++ str
             uns@(ErrorUnknownNode{} : _) -> do
-              putErrorLn
+              putStrErrLn
                 $ "WARNING: encountered unknown syntactical constructs:"
               uns `forM_` \case
                 ErrorUnknownNode str ast@(L loc _) -> do
-                  putErrorLn $ "  " <> str <> " at " <> showSDocUnsafe (ppr loc)
+                  putStrErrLn $ "  " <> str <> " at " <> showSDocUnsafe (ppr loc)
                   when
                       (config
                       & _conf_debug
@@ -408,29 +404,29 @@ coreIO putErrorLnIO config suppressOutput checkMode inputPathM outputPathM =
                       & confUnpack
                       )
                     $ do
-                        putErrorLn $ "  " ++ show (astToDoc ast)
+                        putStrErrLn $ "  " ++ show (astToDoc ast)
                 _ -> error "cannot happen (TM)"
-              putErrorLn
+              putStrErrLn
                 "  -> falling back on exactprint for this element of the module"
             warns@(LayoutWarning{} : _) -> do
-              putErrorLn $ "WARNINGS:"
+              putStrErrLn $ "WARNINGS:"
               warns `forM_` \case
-                LayoutWarning str -> putErrorLn str
+                LayoutWarning str -> putStrErrLn str
                 _ -> error "cannot happen (TM)"
             unused@(ErrorUnusedComment{} : _) -> do
-              putErrorLn
+              putStrErrLn
                 $ "Error: detected unprocessed comments."
                 ++ " The transformation output will most likely"
                 ++ " not contain some of the comments"
                 ++ " present in the input haskell source file."
-              putErrorLn $ "Affected are the following comments:"
+              putStrErrLn $ "Affected are the following comments:"
               unused `forM_` \case
-                ErrorUnusedComment str -> putErrorLn str
+                ErrorUnusedComment str -> putStrErrLn str
                 _ -> error "cannot happen (TM)"
-            (ErrorMacroConfig err input : _) -> do
-              putErrorLn $ "Error: parse error in inline configuration:"
-              putErrorLn err
-              putErrorLn $ "  in the string \"" ++ input ++ "\"."
+            ErrorMacroConfig err input : _ -> do
+              putStrErrLn $ "Error: parse error in inline configuration:"
+              putStrErrLn err
+              putStrErrLn $ "  in the string \"" ++ input ++ "\"."
             [] -> error "cannot happen"
         -- TODO: don't output anything when there are errors unless user
         -- adds some override?

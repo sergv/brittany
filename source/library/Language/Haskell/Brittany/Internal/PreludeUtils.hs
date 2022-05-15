@@ -6,6 +6,7 @@ import Control.Applicative
 import Control.DeepSeq (NFData, force)
 import Control.Exception.Base (evaluate)
 import Control.Monad
+import Control.Monad.IO.Class
 import qualified Data.Strict.Maybe as Strict
 import Debug.Trace
 import Prelude
@@ -37,8 +38,8 @@ traceFunctionWith name s1 s2 f x = trace traceStr y
 (<&!>) :: Monad m => m a -> (a -> b) -> m b
 (<&!>) = flip (<$!>)
 
-putStrErrLn :: String -> IO ()
-putStrErrLn s = hPutStrLn stderr s
+putStrErrLn :: MonadIO m => String -> m ()
+putStrErrLn = liftIO . hPutStrLn stderr
 
 putStrErr :: String -> IO ()
 putStrErr s = hPutStr stderr s
