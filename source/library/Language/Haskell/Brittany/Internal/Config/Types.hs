@@ -151,6 +151,12 @@ data CErrorHandlingConfig f = ErrorHandlingConfig
 data CPreProcessorConfig f = PreProcessorConfig
   { _ppconf_CPPMode :: f (Semigroup.Last CPPMode)
   , _ppconf_hackAroundIncludes :: f (Semigroup.Last Bool)
+    -- ^ The flag will do the following: insert a marker string
+    -- ("-- BRITANY_INCLUDE_HACK ") right before any lines starting with
+    -- "#include" before processing (parsing) input; and remove that marker
+    -- string from the transformation output.
+    -- The flag is intentionally misspelled to prevent clashing with
+    -- inline-config stuff.
   }
   deriving Generic
 

@@ -1,8 +1,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 
 module Language.Haskell.Brittany
-  ( parsePrintModule
-  , staticDefaultConfig
+  ( staticDefaultConfig
   , forwardOptionsSyntaxExtsEnabled
   , userConfigPath
   , findLocalConfigPath
@@ -18,7 +17,6 @@ module Language.Haskell.Brittany
   , BrittanyError(..)
   ) where
 
-import Language.Haskell.Brittany.Internal
 import Language.Haskell.Brittany.Internal.Config
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.Types

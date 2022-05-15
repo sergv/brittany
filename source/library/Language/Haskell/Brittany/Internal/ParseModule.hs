@@ -1,7 +1,7 @@
 {-# OPTIONS_GHC -Wno-implicit-prelude #-}
 
 module Language.Haskell.Brittany.Internal.ParseModule
-  ( parseModule
+  ( parseModuleFromString
   ) where
 
 import qualified Control.Monad as Monad
@@ -23,14 +23,14 @@ import qualified Language.Haskell.GHC.ExactPrint.Types as ExactPrint
 
 -- | Parses a Haskell module. Although this nominally requires IO, it is
 -- morally pure. It should have no observable effects.
-parseModule
+parseModuleFromString
   :: IO.MonadIO io
   => [String]
   -> FilePath
   -> (GHC.Driver.Session.DynFlags -> io (Either String a))
   -> String
   -> io (Either String (ExactPrint.Anns, GHC.ParsedSource, a))
-parseModule arguments1 filePath checkDynFlags string = Except.runExceptT $ do
+parseModuleFromString arguments1 filePath checkDynFlags string = Except.runExceptT $ do
   let
     dynFlags1 = GHC.Driver.Session.gopt_set
       -- It feels like this should be either @Sf_Ignore@ or @Sf_None@, but both

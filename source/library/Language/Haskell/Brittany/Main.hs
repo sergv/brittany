@@ -1,6 +1,7 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE MultiWayIf        #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Language.Haskell.Brittany.Main (main, mainWith) where
 
@@ -10,9 +11,9 @@ import qualified Data.Either
 import qualified Data.List.Extra
 import qualified Data.Monoid
 import qualified Data.Semigroup as Semigroup
-import qualified Data.Text as Text
-import qualified Data.Text.IO as Text.IO
-import qualified Data.Text.Lazy as TextL
+import qualified Data.Text as T
+import qualified Data.Text.IO as TIO
+import qualified Data.Text.Lazy as TL
 import DataTreePrint
 import GHC (GenLocated(L))
 import qualified GHC.Driver.Session as GHC
@@ -33,7 +34,6 @@ import qualified System.Directory as Directory
 import qualified System.Environment as Environment
 import qualified System.Exit
 import qualified System.FilePath.Posix as FilePath
-import qualified System.IO
 import qualified Text.ParserCombinators.ReadP as ReadP
 import qualified Text.ParserCombinators.ReadPrec as ReadPrec
 import qualified Text.PrettyPrint as PP
@@ -248,6 +248,26 @@ mainCmdParser helpDesc = do
 data ChangeStatus = Changes | NoChanges
   deriving (Eq)
 
+cppCheckFunc :: MonadIO m => CPPMode -> GHC.DynFlags -> m (Either String Bool)
+cppCheckFunc cppMode dynFlags = if GHC.xopt GHC.Cpp dynFlags
+  then case cppMode of
+    CPPModeAbort -> do
+      return $ Left "Encountered -XCPP. Aborting."
+    CPPModeWarn -> do
+      putStrErrLn
+        $ "Warning: Encountered -XCPP."
+        ++ " Be warned that -XCPP is not supported and that"
+        ++ " brittany cannot check that its output is syntactically"
+        ++ " valid in its presence."
+      return $ Right True
+    CPPModeNowarn -> return $ Right True
+  else return $ Right False
+
+isPreprocessorLine :: Text -> Bool
+isPreprocessorLine s = case T.uncons s of
+  Just ('#', rest) -> "include" `T.isPrefixOf` T.stripStart rest
+  _                -> False
+
 -- | The main IO parts for the default mode of operation, and after commandline
 -- and config stuff is processed.
 coreIO
@@ -267,12 +287,6 @@ coreIO config suppressOutput checkMode inputPathM outputPathM =
     -- it tries to use the full-blown `parseModule` function which supports
     -- CPP (but requires the input to be a file..).
     let cppMode = config & _conf_preprocessor & _ppconf_CPPMode & confUnpack
-    -- the flag will do the following: insert a marker string
-    -- ("-- BRITANY_INCLUDE_HACK ") right before any lines starting with
-    -- "#include" before processing (parsing) input; and remove that marker
-    -- string from the transformation output.
-    -- The flag is intentionally misspelled to prevent clashing with
-    -- inline-config stuff.
     let
       hackAroundIncludes =
         config & _conf_preprocessor & _ppconf_hackAroundIncludes & confUnpack
@@ -283,49 +297,23 @@ coreIO config suppressOutput checkMode inputPathM outputPathM =
         viaDebug =
           config & _conf_debug & _dconf_roundtrip_exactprint_only & confUnpack
 
-    let
-      cppCheckFunc dynFlags = if GHC.xopt GHC.Cpp dynFlags
-        then case cppMode of
-          CPPModeAbort -> do
-            return $ Left "Encountered -XCPP. Aborting."
-          CPPModeWarn -> do
-            putStrErrLn
-              $ "Warning: Encountered -XCPP."
-              ++ " Be warned that -XCPP is not supported and that"
-              ++ " brittany cannot check that its output is syntactically"
-              ++ " valid in its presence."
-            return $ Right True
-          CPPModeNowarn -> return $ Right True
-        else return $ Right False
-    (parseResult, originalContents) <- case inputPathM of
+    (parseResult, originalContents) <- liftIO $ case inputPathM of
       Nothing -> do
-        -- TODO: refactor this hack to not be mixed into parsing logic
-        let
-          hackF s = if "#include" `isPrefixOf` s
-            then "-- BRITANY_INCLUDE_HACK " ++ s
-            else s
-        let
-          hackTransform = if hackAroundIncludes && not exactprintOnly
-            then List.intercalate "\n" . fmap hackF . lines'
-            else id
-        inputString <- liftIO System.IO.getContents
-        parseRes <- liftIO $ parseModuleFromString
-          ghcOptions
-          "stdin"
-          cppCheckFunc
-          (hackTransform inputString)
-        return (parseRes, Text.pack inputString)
-      Just p -> liftIO $ do
-        parseRes <- parseModule ghcOptions p cppCheckFunc
-        inputText <- Text.IO.readFile p
-        -- The above means we read the file twice, but the
-        -- GHC API does not really expose the source it
-        -- read. Should be in cache still anyways.
-        --
-        -- We do not use TextL.IO.readFile because lazy IO is evil.
-        -- (not identical -> read is not finished ->
-        -- handle still open -> write below crashes - evil.)
-        return (parseRes, inputText)
+        let hackF s = if isPreprocessorLine s
+              then "-- BRITANY_INCLUDE_HACK " <> s
+              else s
+        let hackTransform = if hackAroundIncludes && not exactprintOnly
+              then T.intercalate "\n" . fmap hackF . lines'
+              else id
+        input    <- TIO.getContents
+        let input' = T.unpack (hackTransform input)
+        parseRes <- parseModuleFromString ghcOptions "stdin" (cppCheckFunc cppMode) input'
+        return (parseRes, input)
+      Just fname -> do
+        input    <- TIO.readFile fname
+        parseRes <- parseModuleFromString ghcOptions fname (cppCheckFunc cppMode) (T.unpack input)
+        return (parseRes, input)
+
     case parseResult of
       Left left -> do
         putStrErrLn "parse error:"
@@ -344,7 +332,7 @@ coreIO config suppressOutput checkMode inputPathM outputPathM =
             | disableFormatting -> do
               pure ([], originalContents, False)
             | exactprintOnly -> do
-              let r = Text.pack $ ExactPrint.exactPrint parsedSource anns
+              let r = T.pack $ ExactPrint.exactPrint parsedSource anns
               pure ([], r, r /= originalContents)
             | otherwise -> do
               let
@@ -356,16 +344,10 @@ coreIO config suppressOutput checkMode inputPathM outputPathM =
               (ews, outRaw) <- if hasCPP || omitCheck
                 then pure $ pPrintModule moduleConf anns parsedSource
                 else liftIO $ pPrintModuleAndCheck moduleConf anns parsedSource
+              let hackF s = fromMaybe s $ TL.stripPrefix "-- BRITANY_INCLUDE_HACK " s
               let
-                hackF s = fromMaybe s $ TextL.stripPrefix
-                  (TextL.pack "-- BRITANY_INCLUDE_HACK ")
-                  s
-              let
-                out = TextL.toStrict $ if hackAroundIncludes
-                  then
-                    TextL.intercalate (TextL.pack "\n")
-                    $ hackF
-                    <$> TextL.splitOn (TextL.pack "\n") outRaw
+                out = TL.toStrict $ if hackAroundIncludes
+                  then TL.intercalate "\n" $ hackF <$> TL.splitOn "\n" outRaw
                   else outRaw
               out' <- if moduleConf & _conf_obfuscate & confUnpack
                 then lift $ obfuscate out
@@ -448,13 +430,13 @@ coreIO config suppressOutput checkMode inputPathM outputPathM =
         when shouldOutput
           $ addTraceSep (_conf_debug config)
           $ case outputPathM of
-              Nothing -> liftIO $ Text.IO.putStr $ outSText
+              Nothing -> liftIO $ TIO.putStr $ outSText
               Just p -> liftIO $ do
                 let
                   isIdentical = case inputPathM of
                     Nothing -> False
                     Just _ -> not hasChanges
-                unless isIdentical $ Text.IO.writeFile p $ outSText
+                unless isIdentical $ TIO.writeFile p $ outSText
 
         when (checkMode && hasChanges) $ case inputPathM of
           Nothing -> pure ()

@@ -14,6 +14,7 @@ import Data.Generics.Aliases
 import qualified Data.Generics.Uniplate.Direct as Uniplate
 import qualified Data.Semigroup as Semigroup
 import qualified Data.Sequence as Seq
+import qualified Data.Text as T
 import DataTreePrint
 import qualified GHC.Data.FastString as GHC
 import qualified GHC.Driver.Session as GHC
@@ -263,13 +264,16 @@ transformDownMay f = g where g x = maybe x (Uniplate.descend g) $ f x
 _transformDownRec :: Uniplate.Uniplate on => (on -> Maybe on) -> (on -> on)
 _transformDownRec f = g where g x = maybe (Uniplate.descend g x) g $ f x
 
--- | similar to List.lines, but treating the case of final newline character
--- in such a manner that this function is the inverse of @intercalate "\n"@.
-lines' :: String -> [String]
-lines' s = case break (== '\n') s of
-  (s1, []) -> [s1]
-  (s1, [_]) -> [s1, ""]
-  (s1, (_ : r)) -> s1 : lines' r
+-- | Similar to 'Data.Text.lines', but treating the case of final newline character
+-- in such a manner that this function is the inverse of @Data.Text.intercalate "\n"@.
+lines' :: Text -> [Text]
+lines' s = case T.uncons s2 of
+  Nothing -> [s1]
+  Just (_, rest)
+    | T.null rest -> [s1, T.empty]
+    | otherwise   -> s1 : lines' rest
+  where
+    (s1, s2) = T.break (== '\n') s
 
 absurdExt :: HsExtension.NoExtCon -> a
 absurdExt = HsExtension.noExtCon

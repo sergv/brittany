@@ -4,7 +4,7 @@ module Language.Haskell.Brittany.Internal.Layouters.Import where
 
 import qualified Data.Semigroup as Semigroup
 import qualified Data.Text as Text
-import GHC (GenLocated(L), Located, moduleNameString, unLoc)
+import GHC (GenLocated(L), moduleNameString, unLoc)
 import GHC.Hs
 import GHC.Types.Basic
 import GHC.Unit.Types (IsBootInterface(..))

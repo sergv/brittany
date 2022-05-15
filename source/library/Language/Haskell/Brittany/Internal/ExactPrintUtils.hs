@@ -6,9 +6,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Language.Haskell.Brittany.Internal.ExactPrintUtils
-  ( parseModule
-  , parseModuleFromString
-  , foldedAnnKeys
+  ( foldedAnnKeys
   , withTransformedAnns
   , ToplevelAnns(..)
   , extractToplevelAnns
@@ -30,32 +28,10 @@ import GHC.Hs
 import qualified GHC.Types.SrcLoc as GHC
 import GHC.Types.SrcLoc (Located, SrcSpan)
 import Language.Haskell.Brittany.Internal.Config.Types
-import qualified Language.Haskell.Brittany.Internal.ParseModule as ParseModule
 import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.PreludeUtils
 import qualified Language.Haskell.GHC.ExactPrint as ExactPrint
 import qualified Language.Haskell.GHC.ExactPrint.Types as ExactPrint
-import qualified System.IO
-
-
-
-parseModule
-  :: [String]
-  -> System.IO.FilePath
-  -> (GHC.DynFlags -> IO (Either String a))
-  -> IO (Either String (ExactPrint.Anns, GHC.ParsedSource, a))
-parseModule args fp dynCheck = do
-  str <- System.IO.readFile fp
-  parseModuleFromString args fp dynCheck str
-
-parseModuleFromString
-  :: [String]
-  -> System.IO.FilePath
-  -> (GHC.DynFlags -> IO (Either String a))
-  -> String
-  -> IO (Either String (ExactPrint.Anns, GHC.ParsedSource, a))
-parseModuleFromString = ParseModule.parseModule
-
 
 commentAnnFixTransformGlob :: SYB.Data ast => ast -> ExactPrint.Transform ()
 commentAnnFixTransformGlob ast = do
