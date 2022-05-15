@@ -353,13 +353,12 @@ coreIO config suppressOutput checkMode inputPathM outputPathM =
                 then lift $ obfuscate out
                 else pure out
               pure $ (ews, out', out' /= originalContents)
-        let
-          customErrOrder ErrorInput{} = 4
+        le3
+          customErrOrder ErrorInput{} = 3
           customErrOrder LayoutWarning{} = -1 :: Int
           customErrOrder ErrorOutputCheck{} = 1
-          customErrOrder ErrorUnusedComment{} = 2
           customErrOrder ErrorUnknownNode{} = -2 :: Int
-          customErrOrder ErrorMacroConfig{} = 5
+          customErrOrder ErrorMacroConfig{} = 4
         unless (null errsWarns) $ do
           let
             groupedErrsWarns =
@@ -394,16 +393,6 @@ coreIO config suppressOutput checkMode inputPathM outputPathM =
               putStrErrLn $ "WARNINGS:"
               warns `forM_` \case
                 LayoutWarning str -> putStrErrLn str
-                _ -> error "cannot happen (TM)"
-            unused@(ErrorUnusedComment{} : _) -> do
-              putStrErrLn
-                $ "Error: detected unprocessed comments."
-                ++ " The transformation output will most likely"
-                ++ " not contain some of the comments"
-                ++ " present in the input haskell source file."
-              putStrErrLn $ "Affected are the following comments:"
-              unused `forM_` \case
-                ErrorUnusedComment str -> putStrErrLn str
                 _ -> error "cannot happen (TM)"
             ErrorMacroConfig err input : _ -> do
               putStrErrLn $ "Error: parse error in inline configuration:"

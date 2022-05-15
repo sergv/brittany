@@ -131,8 +131,6 @@ instance Show LayoutState where
 data BrittanyError
   = ErrorInput String
     -- ^ parsing failed
-  | ErrorUnusedComment String
-    -- ^ internal error: some comment went missing
   | ErrorMacroConfig String String
     -- ^ in-source config string parsing error; first argument is the parser
     --   output and second the corresponding, ill-formed input.
