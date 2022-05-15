@@ -1,34 +1,26 @@
 {-# LANGUAGE LambdaCase        #-}
-{-# LANGUAGE MultiWayIf        #-}
 {-# LANGUAGE NoImplicitPrelude #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections     #-}
 
 module Language.Haskell.Brittany.Main (main, mainWith) where
 
 import Control.Monad (zipWithM)
 import qualified Control.Monad.Trans.Except as ExceptT
 import qualified Data.Either
-import qualified Data.List.Extra
+import Data.Foldable
 import qualified Data.Monoid
 import qualified Data.Semigroup as Semigroup
-import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
-import qualified Data.Text.Lazy as TL
-import DataTreePrint
-import GHC (GenLocated(L))
-import qualified GHC.Driver.Session as GHC
-import qualified GHC.LanguageExtensions.Type as GHC
+import GHC (GenLocated(L), SrcSpan)
 import qualified GHC.OldList as List
 import GHC.Utils.Outputable (Outputable(..), showSDocUnsafe)
-import Language.Haskell.Brittany.Internal
 import Language.Haskell.Brittany.Internal.Config
 import Language.Haskell.Brittany.Internal.Config.Types
-import Language.Haskell.Brittany.Internal.Obfuscation
+import Language.Haskell.Brittany.Internal.Formatting
 import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.PreludeUtils
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.Brittany.Internal.Utils
-import qualified Language.Haskell.GHC.ExactPrint as ExactPrint
 import Paths_brittany
 import qualified System.Directory as Directory
 import qualified System.Environment as Environment
@@ -40,8 +32,6 @@ import qualified Text.PrettyPrint as PP
 import Text.Read (Read(..))
 import UI.Butcher.Monadic
 
-
-
 data WriteMode = Display | Inplace
 
 instance Read WriteMode where
@@ -51,7 +41,6 @@ instance Read WriteMode where
 instance Show WriteMode where
   show Display = "display"
   show Inplace = "inplace"
-
 
 main :: IO ()
 main = do
@@ -197,6 +186,7 @@ mainCmdParser helpDesc = do
         putStrLn $ "brittany version " ++ showVersion version
         putStrLn $ "Copyright (C) 2016-2019 Lennart Spitzner"
         putStrLn $ "Copyright (C) 2019 PRODA LTD"
+        putStrLn $ "Copyright (C) 2022 Sergey Vinokurov"
         putStrLn $ "There is NO WARRANTY, to the extent permitted by law."
       System.Exit.exitSuccess
     when printHelp $ do
@@ -248,25 +238,14 @@ mainCmdParser helpDesc = do
 data ChangeStatus = Changes | NoChanges
   deriving (Eq)
 
-cppCheckFunc :: MonadIO m => CPPMode -> GHC.DynFlags -> m (Either String Bool)
-cppCheckFunc cppMode dynFlags = if GHC.xopt GHC.Cpp dynFlags
-  then case cppMode of
-    CPPModeAbort -> do
-      return $ Left "Encountered -XCPP. Aborting."
-    CPPModeWarn -> do
-      putStrErrLn
-        $ "Warning: Encountered -XCPP."
-        ++ " Be warned that -XCPP is not supported and that"
-        ++ " brittany cannot check that its output is syntactically"
-        ++ " valid in its presence."
-      return $ Right True
-    CPPModeNowarn -> return $ Right True
-  else return $ Right False
-
-isPreprocessorLine :: Text -> Bool
-isPreprocessorLine s = case T.uncons s of
-  Just ('#', rest) -> "include" `T.isPrefixOf` T.stripStart rest
-  _                -> False
+classifyError
+  :: BrittanyError
+  -> ([(String, String)], [String], [(String, SrcSpan, PP.Doc)], [String])
+classifyError = \case
+  ErrorMacroConfig x y             -> ([(x, y)], mempty, mempty, mempty)
+  LayoutWarning msg                -> (mempty, [msg], mempty, mempty)
+  ErrorUnknownNode msg (L loc ast) -> (mempty, mempty, [(msg, loc, astToDoc ast)] , mempty)
+  ErrorOutputCheck msg             -> (mempty, mempty, mempty, [msg])
 
 -- | The main IO parts for the default mode of operation, and after commandline
 -- and config stuff is processed.
@@ -280,157 +259,88 @@ coreIO
   -> IO (Either Int ChangeStatus) -- ^ Either an errorNo, or the change status.
 coreIO config suppressOutput checkMode inputPathM outputPathM =
   ExceptT.runExceptT $ do
-    let ghcOptions = config & _conf_forward & _options_ghc & runIdentity
-    -- there is a good of code duplication between the following code and the
-    -- `pureModuleTransform` function. Unfortunately, there are also a good
-    -- amount of slight differences: This module is a bit more verbose, and
-    -- it tries to use the full-blown `parseModule` function which supports
-    -- CPP (but requires the input to be a file..).
-    let cppMode = config & _conf_preprocessor & _ppconf_CPPMode & confUnpack
-    let
-      hackAroundIncludes =
-        config & _conf_preprocessor & _ppconf_hackAroundIncludes & confUnpack
-    let
-      exactprintOnly = viaGlobal || viaDebug
-       where
-        viaGlobal = config & _conf_roundtrip_exactprint_only & confUnpack
-        viaDebug =
-          config & _conf_debug & _dconf_roundtrip_exactprint_only & confUnpack
 
-    (parseResult, originalContents) <- liftIO $ case inputPathM of
-      Nothing -> do
-        let hackF s = if isPreprocessorLine s
-              then "-- BRITANY_INCLUDE_HACK " <> s
-              else s
-        let hackTransform = if hackAroundIncludes && not exactprintOnly
-              then T.intercalate "\n" . fmap hackF . lines'
-              else id
-        input    <- TIO.getContents
-        let input' = T.unpack (hackTransform input)
-        parseRes <- parseModuleFromString ghcOptions "stdin" (cppCheckFunc cppMode) input'
-        return (parseRes, input)
-      Just fname -> do
-        input    <- TIO.readFile fname
-        parseRes <- parseModuleFromString ghcOptions fname (cppCheckFunc cppMode) (T.unpack input)
-        return (parseRes, input)
+    (input, fname) <- liftIO $
+      case inputPathM of
+        Nothing    -> (, "stdin") <$> TIO.getContents
+        Just fname -> (, fname)   <$> TIO.readFile fname
+    res <- liftIO $ format config fname input
 
-    case parseResult of
-      Left left -> do
+    (formatted, warns, errs, logs, hasChanges) <- case res of
+      Left (ParseError err) -> do
         putStrErrLn "parse error:"
-        putStrErrLn left
+        putStrErrLn err
         ExceptT.throwE 60
-      Right (anns, parsedSource, hasCPP) -> do
-        let moduleConf = config
-        when (config & _conf_debug & _dconf_dump_ast_full & confUnpack) $ do
-          let val = printTreeWithCustom 100 (customLayouterF anns) parsedSource
-          trace ("---- ast ----\n" ++ show val) $ return ()
-        let
-          disableFormatting =
-            moduleConf & _conf_disable_formatting & confUnpack
-        (errsWarns, outSText, hasChanges) <- do
-          if
-            | disableFormatting -> do
-              pure ([], originalContents, False)
-            | exactprintOnly -> do
-              let r = T.pack $ ExactPrint.exactPrint parsedSource anns
-              pure ([], r, r /= originalContents)
-            | otherwise -> do
-              let
-                omitCheck =
-                  moduleConf
-                    & _conf_errorHandling
-                    .> _econf_omit_output_valid_check
-                    .> confUnpack
-              (ews, outRaw) <- if hasCPP || omitCheck
-                then pure $ pPrintModule moduleConf anns parsedSource
-                else liftIO $ pPrintModuleAndCheck moduleConf anns parsedSource
-              let hackF s = fromMaybe s $ TL.stripPrefix "-- BRITANY_INCLUDE_HACK " s
-              let
-                out = TL.toStrict $ if hackAroundIncludes
-                  then TL.intercalate "\n" $ hackF <$> TL.splitOn "\n" outRaw
-                  else outRaw
-              out' <- if moduleConf & _conf_obfuscate & confUnpack
-                then lift $ obfuscate out
-                else pure out
-              pure $ (ews, out', out' /= originalContents)
-        let
-          customErrOrder LayoutWarning{} = -1 :: Int
-          customErrOrder ErrorOutputCheck{} = 1
-          customErrOrder ErrorUnknownNode{} = -2 :: Int
-          customErrOrder ErrorMacroConfig{} = 4
-        unless (null errsWarns) $ do
-          let
-            groupedErrsWarns =
-              Data.List.Extra.groupOn customErrOrder
-                $ List.sortOn customErrOrder
-                $ errsWarns
-          groupedErrsWarns `forM_` \case
-            ErrorOutputCheck{} : _ -> do
-              putStrErrLn
-                $ "ERROR: brittany pretty printer"
-                ++ " returned syntactically invalid result."
-            uns@(ErrorUnknownNode{} : _) -> do
-              putStrErrLn
-                $ "WARNING: encountered unknown syntactical constructs:"
-              uns `forM_` \case
-                ErrorUnknownNode str ast@(L loc _) -> do
-                  putStrErrLn $ "  " <> str <> " at " <> showSDocUnsafe (ppr loc)
-                  when
-                      (config
-                      & _conf_debug
-                      & _dconf_dump_ast_unknown
-                      & confUnpack
-                      )
-                    $ do
-                        putStrErrLn $ "  " ++ show (astToDoc ast)
-                _ -> error "cannot happen (TM)"
-              putStrErrLn
-                "  -> falling back on exactprint for this element of the module"
-            warns@(LayoutWarning{} : _) -> do
-              putStrErrLn $ "WARNINGS:"
-              warns `forM_` \case
-                LayoutWarning str -> putStrErrLn str
-                _ -> error "cannot happen (TM)"
-            ErrorMacroConfig err input : _ -> do
-              putStrErrLn $ "Error: parse error in inline configuration:"
-              putStrErrLn err
-              putStrErrLn $ "  in the string \"" ++ input ++ "\"."
-            [] -> error "cannot happen"
-        -- TODO: don't output anything when there are errors unless user
-        -- adds some override?
-        let
-          hasErrors =
-            if config & _conf_errorHandling & _econf_Werror & confUnpack
-              then not $ null errsWarns
-              else any ((> 0) . customErrOrder) errsWarns
-          outputOnErrs =
-            config
-              & _conf_errorHandling
-              & _econf_produceOutputOnErrors
-              & confUnpack
-          shouldOutput =
-            not suppressOutput
-              && not checkMode
-              && (not hasErrors || outputOnErrs)
+      Right x -> pure x
 
-        when shouldOutput
-          $ addTraceSep (_conf_debug config)
-          $ case outputPathM of
-              Nothing -> liftIO $ TIO.putStr $ outSText
-              Just p -> liftIO $ do
-                let
-                  isIdentical = case inputPathM of
-                    Nothing -> False
-                    Just _ -> not hasChanges
-                unless isIdentical $ TIO.writeFile p $ outSText
+    unless (null logs) $
+      traverse_ putStrErrLn logs
 
-        when (checkMode && hasChanges) $ case inputPathM of
-          Nothing -> pure ()
-          Just p -> liftIO $ putStrLn $ "formatting would modify: " ++ p
+    unless (null warns) $ do
+      let Any isCppWarning = foldMap (Any . (== CPPWarning)) warns
 
-        when hasErrors $ ExceptT.throwE 70
-        return (if hasChanges then Changes else NoChanges)
- where
+      when isCppWarning
+        $ putStrErrLn
+        $ "Warning: Encountered -XCPP."
+        ++ " Be warned that -XCPP is not supported and that"
+        ++ " brittany cannot check that its output is syntactically"
+        ++ " valid in its presence."
+
+    unless (null errs) $ do
+      let (macroConfs, layoutWarns, unknownNodes, outputChecks) = foldMap classifyError errs
+
+      unless (null unknownNodes) $ do
+        putStrErrLn "WARNING: encountered unknown syntactical constructs:"
+        for_ unknownNodes $ \(str, loc, astDoc) -> do
+          putStrErrLn $ "  " <> str <> " at " <> showSDocUnsafe (ppr loc)
+          when (confUnpack (_dconf_dump_ast_unknown (_conf_debug config))) $
+            putStrErrLn $ "  " ++ show astDoc
+        putStrErrLn
+          "  -> falling back on exactprint for this element of the module"
+
+      unless (null layoutWarns) $ do
+        putStrErrLn $ "WARNINGS:"
+        traverse_ putStrErrLn layoutWarns
+
+      unless (null outputChecks) $ do
+        putStrErrLn "ERROR: brittany pretty printer returned syntactically invalid results:"
+        traverse_ putStrErrLn outputChecks
+
+      unless (null macroConfs) $ do
+        putStrErrLn $ "Error: parse error in inline configuration:"
+        for_ macroConfs $ \(err, str) -> do
+          putStrErrLn err
+          putStrErrLn $ "  in the string \"" ++ str ++ "\"."
+
+    let hasErrors    =
+          if confUnpack (_econf_Werror (_conf_errorHandling config))
+          then not $ null errs
+          else flip any errs $ \case
+            ErrorMacroConfig{} -> True
+            ErrorOutputCheck{} -> True
+            LayoutWarning{}    -> False
+            ErrorUnknownNode{} -> False
+        outputOnErrs = confUnpack (_econf_produceOutputOnErrors (_conf_errorHandling config))
+        shouldOutput = not suppressOutput && not checkMode && (not hasErrors || outputOnErrs)
+
+    when shouldOutput
+      $ addTraceSep (_conf_debug config)
+      $ case outputPathM of
+          Nothing -> liftIO $ TIO.putStr formatted
+          Just p -> liftIO $ do
+            let
+              isIdentical = case inputPathM of
+                Nothing -> False
+                Just _ -> not hasChanges
+            unless isIdentical $ TIO.writeFile p formatted
+
+    when (checkMode && hasChanges) $ case inputPathM of
+      Nothing -> pure ()
+      Just p  -> liftIO $ putStrLn $ "formatting would modify: " ++ p
+
+    when hasErrors $ ExceptT.throwE 70
+    pure (if hasChanges then Changes else NoChanges)
+  where
   addTraceSep conf =
     if or
         [ confUnpack $ _dconf_dump_annotations conf

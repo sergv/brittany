@@ -45,17 +45,14 @@ parseModuleFromString arguments1 filePath checkDynFlags string = Except.runExcep
     GHC.Driver.Session.parseDynamicFlagsCmdLine dynFlags1
       $ fmap GHC.Types.SrcLoc.noLoc arguments1
   handleLeftovers leftovers1
-  let
-    stringBuffer = GHC.Data.StringBuffer.stringToStringBuffer string
-    arguments2 = GHC.Parser.Header.getOptions dynFlags2 stringBuffer filePath
+  let stringBuffer = GHC.Data.StringBuffer.stringToStringBuffer string
+      arguments2   = GHC.Parser.Header.getOptions dynFlags2 stringBuffer filePath
   (dynFlags3, leftovers2, _) <- GHC.Driver.Session.parseDynamicFilePragma
     dynFlags2
     arguments2
   handleLeftovers leftovers2
   dynFlagsResult <- Except.ExceptT $ checkDynFlags dynFlags3
-  let
-    parseResult =
-      ExactPrint.parseModuleFromStringInternal dynFlags3 filePath string
+  let parseResult = ExactPrint.parseModuleFromStringInternal dynFlags3 filePath string
   case parseResult of
     Left errorMessages -> handleErrorMessages errorMessages
     Right (anns, parsedSource) -> pure (anns, parsedSource, dynFlagsResult)

@@ -7,6 +7,7 @@ module Language.Haskell.Brittany
   , findLocalConfigPath
   , readConfigs
   , readConfigsWithUserConfig
+  , format
   , Config
   , CConfig(..)
   , CDebugConfig(..)
@@ -19,4 +20,5 @@ module Language.Haskell.Brittany
 
 import Language.Haskell.Brittany.Internal.Config
 import Language.Haskell.Brittany.Internal.Config.Types
+import Language.Haskell.Brittany.Internal.Formatting
 import Language.Haskell.Brittany.Internal.Types

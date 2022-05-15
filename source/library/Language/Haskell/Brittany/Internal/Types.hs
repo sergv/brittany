@@ -1,14 +1,14 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE DataKinds                  #-}
+{-# LANGUAGE DeriveDataTypeable         #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE NoImplicitPrelude #-}
-{-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE KindSignatures             #-}
+{-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE NoImplicitPrelude          #-}
+{-# LANGUAGE PatternSynonyms            #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE StandaloneDeriving         #-}
 
 module Language.Haskell.Brittany.Internal.Types where
 
@@ -72,10 +72,6 @@ data LayoutState = LayoutState
   , _lstate_addSepSpace   :: Maybe Int -- number of spaces to insert if anyone
                                        -- writes (any non-spaces) in the
                                        -- current line.
-  -- , _lstate_isNewline     :: NewLineState
-  --     -- captures if the layouter currently is in a new line, i.e. if the
-  --     -- current line only contains (indentation) spaces.
-  -- this is mostly superseeded by curYOrAddNewline, iirc.
   , _lstate_commentNewlines :: Int -- number of newlines inserted due to
                                    -- move-to-DP at a start of a comment.
                                    -- Necessary because some keyword DPs
@@ -108,25 +104,9 @@ instance Show LayoutState where
     ++ ",commentNewlines=" ++ show (_lstate_commentNewlines state)
     ++ "}"
 
--- data NewLineState = NewLineStateInit -- initial state. we do not know if in a
---                                      -- newline, really. by special-casing
---                                      -- this we can appropriately handle it
---                                      -- differently at use-site.
---                   | NewLineStateYes
---                   | NewLineStateNo
---   deriving Eq
-
--- data LayoutSettings = LayoutSettings
---   { _lsettings_cols :: Int -- the thing that has default 80.
---   , _lsettings_indentPolicy :: IndentPolicy
---   , _lsettings_indentAmount :: Int
---   , _lsettings_indentWhereSpecial :: Bool -- indent where only 1 sometimes (TODO).
---   , _lsettings_indentListSpecial  :: Bool -- use some special indentation for ","
---                                           -- when creating zero-indentation
---                                           -- multi-line list literals.
---   , _lsettings_importColumn :: Int
---   , _lsettings_initialAnns :: ExactPrint.Anns
---   }
+data BrittanyWarning
+  = CPPWarning
+  deriving (Eq)
 
 data BrittanyError
   = ErrorMacroConfig String String
@@ -137,7 +117,7 @@ data BrittanyError
   | forall ast . Data.Data.Data ast => ErrorUnknownNode String (GenLocated SrcSpan ast)
     -- ^ internal error: pretty-printing is not implemented for type of node
     --   in the syntax-tree
-  | ErrorOutputCheck
+  | ErrorOutputCheck String
     -- ^ checking the output for syntactic validity failed
 
 data BriSpacing = BriSpacing
@@ -194,8 +174,6 @@ data ColSig
   | ColTuples
   | ColOpPrefix -- merge with ColList ? other stuff?
   | ColImport
-
-  -- TODO
   deriving (Eq, Ord, Data.Data.Data, Show)
 
 data BrIndent = BrIndentNone
@@ -411,15 +389,14 @@ briDocSeqSpine = \case
 briDocForceSpine :: BriDoc -> BriDoc
 briDocForceSpine bd = briDocSeqSpine bd `seq` bd
 
-
 data VerticalSpacingPar
   = VerticalSpacingParNone -- no indented lines
-  | VerticalSpacingParSome   Int -- indented lines, requiring this much
-                                 -- vertical space at most
-  | VerticalSpacingParAlways Int -- indented lines, requiring this much
-                                 -- vertical space at most, but should
-                                 -- be considered as having space for
-                                 -- any spacing validity check.
+  | VerticalSpacingParSome   !Int -- indented lines, requiring this much
+                                  -- vertical space at most
+  | VerticalSpacingParAlways !Int -- indented lines, requiring this much
+                                  -- vertical space at most, but should
+                                  -- be considered as having space for
+                                  -- any spacing validity check.
     -- TODO: it might be wrong not to extend "always" to the none case, i.e.
     -- we might get better properties of spacing operators by having a
     -- product like (Normal|Always, None|Some Int).

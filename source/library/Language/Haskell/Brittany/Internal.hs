@@ -3,13 +3,9 @@
 {-# LANGUAGE NoImplicitPrelude   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-{-# LANGUAGE OverloadedStrings #-}
-
 module Language.Haskell.Brittany.Internal
   ( pPrintModule
   , pPrintModuleAndCheck
-   -- re-export from utils:
-  , parseModuleFromString
   , getTopLevelDeclNameMap
   ) where
 
@@ -17,10 +13,11 @@ import qualified Control.Monad.Trans.MultiRWS.Strict as MultiRWSS
 import Data.HList.HList
 import qualified Data.Map as Map
 import qualified Data.Semigroup as Semigroup
-import qualified Data.Sequence as Seq
+import qualified Data.Text as T
 import qualified Data.Text as Text
-import qualified Data.Text.Lazy as TextL
-import qualified Data.Text.Lazy.Builder as Text.Builder
+import qualified Data.Text.Lazy as TL
+import qualified Data.Text.Lazy.Builder as TLB
+
 import GHC (GenLocated(L))
 import qualified GHC hiding (parseModule)
 import GHC.Hs
@@ -63,10 +60,10 @@ pPrintModule
   :: Config
   -> ExactPrint.Anns
   -> GHC.ParsedSource
-  -> ([BrittanyError], TextL.Text)
+  -> (Text, [BrittanyError], Seq String)
 pPrintModule conf anns parsedModule =
   let
-    ((out, errs), debugStrings) =
+    ((out, errs), logs) =
       runIdentity
         $ MultiRWSS.runMultiRWSTNil
         $ MultiRWSS.withMultiWriterAW
@@ -79,16 +76,7 @@ pPrintModule conf anns parsedModule =
             traceIfDumpConf "bridoc annotations raw" _dconf_dump_annotations
               $ annsDoc anns
             ppModule parsedModule
-    tracer = if Seq.null debugStrings
-      then id
-      else
-        trace ("---- DEBUGMESSAGES ---- ")
-          . foldr (seq . join trace) id debugStrings
-  in tracer $ (errs, Text.Builder.toLazyText out)
-  -- unless () $ do
-  --
-  --   debugStrings `forM_` \s ->
-  --     trace s $ return ()
+  in (TL.toStrict (TLB.toLazyText out), errs, logs)
 
 -- | Additionally checks that the output can be parssed again,
 -- appending an error if it does not.
@@ -96,20 +84,19 @@ pPrintModuleAndCheck
   :: Config
   -> ExactPrint.Anns
   -> GHC.ParsedSource
-  -> IO ([BrittanyError], TextL.Text)
+  -> IO (Text, [BrittanyError], Seq String)
 pPrintModuleAndCheck conf anns parsedModule = do
-  let ghcOptions = conf & _conf_forward & _options_ghc & runIdentity
-  let (errs, output) = pPrintModule conf anns parsedModule
+  let ghcOptions = runIdentity (_options_ghc (_conf_forward conf))
+  let (output, errs, logs) = pPrintModule conf anns parsedModule
   parseResult <- parseModuleFromString
     ghcOptions
     "output"
     (\_ -> return $ Right ())
-    (TextL.unpack output)
-  let
-    errs' = errs ++ case parseResult of
-      Left{} -> [ErrorOutputCheck]
-      Right{} -> []
-  return (errs', output)
+    (T.unpack output)
+  let errs' = errs ++ case parseResult of
+        Left msg -> [ErrorOutputCheck msg]
+        Right{}  -> []
+  pure (output, errs', logs)
 
 toLocal :: Config -> ExactPrint.Anns -> PPMLocal a -> PPM a
 toLocal conf anns m = do
@@ -170,7 +157,7 @@ ppModule lmod@(L _loc _m@HsModule{hsmodDecls}) = do
   post `forM_` \case
     (ExactPrint.AnnComment (ExactPrint.Comment cmStr _ _), l) -> do
       ppmMoveToExactLoc l
-      mTell $ Text.Builder.fromString cmStr
+      mTell $ TLB.fromString cmStr
     (ExactPrint.AnnEofPos, (ExactPrint.DP (eofZ, eofX))) ->
       let
         folder (acc, _) (kw, ExactPrint.DP (y, x)) = case kw of
@@ -243,20 +230,6 @@ ppPreamble lmod@(L loc m@HsModule{}) = do
       let emptyModule = L loc m { hsmodDecls = [] }
       in MultiRWSS.withMultiReader filteredAnns' $ processDefault emptyModule
   return post
-
-_sigHead :: Sig GhcPs -> String
-_sigHead = \case
-  TypeSig _ names _ ->
-    "TypeSig " ++ intercalate "," (Text.unpack . lrdrNameToText <$> names)
-  _ -> "unknown sig"
-
-_bindHead :: HsBind GhcPs -> String
-_bindHead = \case
-  FunBind _ fId _ [] -> "FunBind " ++ (Text.unpack $ lrdrNameToText $ fId)
-  PatBind _ _pat _ ([], []) -> "PatBind smth"
-  _ -> "unknown bind"
-
-
 
 layoutBriDoc :: BriDocNumbered -> PPMLocal ()
 layoutBriDoc briDoc = do
