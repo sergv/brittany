@@ -416,7 +416,7 @@ coreIO config suppressOutput checkMode inputPathM outputPathM =
           hasErrors =
             if config & _conf_errorHandling & _econf_Werror & confUnpack
               then not $ null errsWarns
-              else 0 < maximum (-1 : fmap customErrOrder errsWarns)
+              else any ((> 0) . customErrOrder) errsWarns
           outputOnErrs =
             config
               & _conf_errorHandling
