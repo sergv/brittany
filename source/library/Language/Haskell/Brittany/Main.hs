@@ -353,8 +353,7 @@ coreIO config suppressOutput checkMode inputPathM outputPathM =
                 then lift $ obfuscate out
                 else pure out
               pure $ (ews, out', out' /= originalContents)
-        le3
-          customErrOrder ErrorInput{} = 3
+        let
           customErrOrder LayoutWarning{} = -1 :: Int
           customErrOrder ErrorOutputCheck{} = 1
           customErrOrder ErrorUnknownNode{} = -2 :: Int
@@ -370,8 +369,6 @@ coreIO config suppressOutput checkMode inputPathM outputPathM =
               putStrErrLn
                 $ "ERROR: brittany pretty printer"
                 ++ " returned syntactically invalid result."
-            ErrorInput str : _ -> do
-              putStrErrLn $ "ERROR: parse error: " ++ str
             uns@(ErrorUnknownNode{} : _) -> do
               putStrErrLn
                 $ "WARNING: encountered unknown syntactical constructs:"

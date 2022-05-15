@@ -129,9 +129,7 @@ instance Show LayoutState where
 --   }
 
 data BrittanyError
-  = ErrorInput String
-    -- ^ parsing failed
-  | ErrorMacroConfig String String
+  = ErrorMacroConfig String String
     -- ^ in-source config string parsing error; first argument is the parser
     --   output and second the corresponding, ill-formed input.
   | LayoutWarning String
