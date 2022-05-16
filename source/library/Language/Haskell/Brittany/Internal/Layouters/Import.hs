@@ -32,108 +32,106 @@ layoutImport importD = case importD of
     importAsCol <-
       mAsk <&> _conf_layout .> _lconfig_importAsColumn .> confUnpack
     indentPolicy <- mAsk <&> _conf_layout .> _lconfig_indentPolicy .> confUnpack
-    let
-      compact = indentPolicy /= IndentPolicyFree
-      modNameT = Text.pack $ moduleNameString modName
-      pkgNameT = Text.pack . prepPkg . sl_st <$> pkg
-      masT = Text.pack . moduleNameString . unLoc <$> mas
-      hiding = maybe False fst mllies
-      minQLength = length "import qualified "
-      qLengthReal =
-        let
-          qualifiedPart = if q /= NotQualified then length "qualified " else 0
-          safePart = if safe then length "safe " else 0
-          pkgPart = maybe 0 ((+ 1) . Text.length) pkgNameT
-          srcPart = case src of
-            IsBoot -> length "{-# SOURCE #-} "
-            NotBoot -> 0
-        in length "import " + srcPart + safePart + qualifiedPart + pkgPart
-      qLength = max minQLength qLengthReal
-      -- Cost in columns of importColumn
-      asCost = length "as "
-      hidingParenCost = if hiding then length "hiding ( " else length "( "
-      nameCost = Text.length modNameT + qLength
-      importQualifiers = docSeq
-        [ appSep $ docLitS "import"
-        , case src of
-          IsBoot -> appSep $ docLitS "{-# SOURCE #-}"
-          NotBoot -> docEmpty
-        , if safe then appSep $ docLitS "safe" else docEmpty
-        , if q /= NotQualified
-          then appSep $ docLitS "qualified"
-          else docEmpty
-        , maybe docEmpty (appSep . docLit) pkgNameT
-        ]
-      indentName =
-        if compact then id else docEnsureIndent (BrIndentSpecial qLength)
-      modNameD = indentName $ appSep $ docLit modNameT
-      hidDocCol = if hiding then importCol - hidingParenCost else importCol - 2
-      hidDocColDiff = importCol - 2 - hidDocCol
-      hidDoc =
-        if hiding then appSep $ docLitS "hiding" else docEmpty
-      importHead = docSeq [importQualifiers, modNameD]
-      bindingsD = case mllies of
-        Nothing -> docEmpty
-        Just (_, llies) -> do
-          hasComments <- hasAnyCommentsBelow llies
-          if compact
-            then docAlt
-              [ docSeq
-                [ hidDoc
-                , docForceSingleline $ layoutLLIEs True ShouldSortItems llies
+    let compact     = indentPolicy /= IndentPolicyFree
+        modNameT    = Text.pack $ moduleNameString modName
+        pkgNameT    = Text.pack . prepPkg . sl_st <$> pkg
+        masT        = Text.pack . moduleNameString . unLoc <$> mas
+        hiding      = maybe False fst mllies
+        minQLength  = length "import qualified "
+        qLengthReal =
+          let qualifiedPart = if q /= NotQualified then length "qualified " else 0
+              safePart = if safe then length "safe " else 0
+              pkgPart  = maybe 0 ((+ 1) . Text.length) pkgNameT
+              srcPart  = case src of
+                IsBoot  -> length "{-# SOURCE #-} "
+                NotBoot -> 0
+          in length "import " + srcPart + safePart + qualifiedPart + pkgPart
+        qLength          = max minQLength qLengthReal
+        -- Cost in columns of importColumn
+        asCost           = length "as "
+        hidingParenCost  = if hiding then length "hiding ( " else length "( "
+        nameCost         = Text.length modNameT + qLength
+        importQualifiers = docSeq
+          [ appSep $ docLitS "import"
+          , case src of
+            IsBoot  -> appSep $ docLitS "{-# SOURCE #-}"
+            NotBoot -> docEmpty
+          , if safe then appSep $ docLitS "safe" else docEmpty
+          , if q /= NotQualified
+            then appSep $ docLitS "qualified"
+            else docEmpty
+          , maybe docEmpty (appSep . docLit) pkgNameT
+          ]
+        indentName    =
+          if compact then id else docEnsureIndent (BrIndentSpecial qLength)
+        modNameD      = indentName $ appSep $ docLit modNameT
+        hidDocCol     = if hiding then importCol - hidingParenCost else importCol - 2
+        hidDocColDiff = importCol - 2 - hidDocCol
+        hidDoc        =
+          if hiding then appSep $ docLitS "hiding" else docEmpty
+        importHead    = docSeq [importQualifiers, modNameD]
+        bindingsD     = case mllies of
+          Nothing -> docEmpty
+          Just (_, llies) -> do
+            let hasComments = hasAnyCommentsBelow llies
+            if compact
+              then docAlt
+                [ docSeq
+                  [ hidDoc
+                  , docForceSingleline $ layoutLLIEs True ShouldSortItems llies
+                  ]
+                , let
+                    makeParIfHiding = if hiding
+                      then docAddBaseY BrIndentRegular . docPar hidDoc
+                      else id
+                  in makeParIfHiding (layoutLLIEs True ShouldSortItems llies)
                 ]
-              , let
-                  makeParIfHiding = if hiding
-                    then docAddBaseY BrIndentRegular . docPar hidDoc
-                    else id
-                in makeParIfHiding (layoutLLIEs True ShouldSortItems llies)
-              ]
-            else do
-              ieDs <- layoutAnnAndSepLLIEs ShouldSortItems llies
-              docWrapNodeRest llies
-                $ docEnsureIndent (BrIndentSpecial hidDocCol)
-                $ case ieDs of
-                  -- ..[hiding].( )
-                    [] -> if hasComments
-                      then docPar
-                        (docSeq
-                          [hidDoc, docParenLSep, docWrapNode llies docEmpty]
+              else do
+                ieDs <- layoutAnnAndSepLLIEs ShouldSortItems llies
+                docWrapNodeRest llies
+                  $ docEnsureIndent (BrIndentSpecial hidDocCol)
+                  $ case ieDs of
+                    -- ..[hiding].( )
+                      [] -> if hasComments
+                        then docPar
+                          (docSeq
+                            [hidDoc, docParenLSep, docWrapNode llies docEmpty]
+                          )
+                          (docEnsureIndent
+                            (BrIndentSpecial hidDocColDiff)
+                            docParenR
+                          )
+                        else docSeq
+                          [hidDoc, docParenLSep, docSeparator, docParenR]
+                      -- ..[hiding].( b )
+                      [ieD] -> runFilteredAlternative $ do
+                        addAlternativeCond (not hasComments)
+                          $ docSeq
+                              [ hidDoc
+                              , docParenLSep
+                              , docForceSingleline ieD
+                              , docSeparator
+                              , docParenR
+                              ]
+                        addAlternative $ docPar
+                          (docSeq [hidDoc, docParenLSep, docNonBottomSpacing ieD])
+                          (docEnsureIndent
+                            (BrIndentSpecial hidDocColDiff)
+                            docParenR
+                          )
+                      -- ..[hiding].( b
+                      --            , b'
+                      --            )
+                      (ieD : ieDs') -> docPar
+                        (docSeq [hidDoc, docSetBaseY $ docSeq [docParenLSep, ieD]]
                         )
-                        (docEnsureIndent
-                          (BrIndentSpecial hidDocColDiff)
-                          docParenR
+                        (docEnsureIndent (BrIndentSpecial hidDocColDiff)
+                        $ docLines
+                        $ ieDs'
+                        ++ [docParenR]
                         )
-                      else docSeq
-                        [hidDoc, docParenLSep, docSeparator, docParenR]
-                    -- ..[hiding].( b )
-                    [ieD] -> runFilteredAlternative $ do
-                      addAlternativeCond (not hasComments)
-                        $ docSeq
-                            [ hidDoc
-                            , docParenLSep
-                            , docForceSingleline ieD
-                            , docSeparator
-                            , docParenR
-                            ]
-                      addAlternative $ docPar
-                        (docSeq [hidDoc, docParenLSep, docNonBottomSpacing ieD])
-                        (docEnsureIndent
-                          (BrIndentSpecial hidDocColDiff)
-                          docParenR
-                        )
-                    -- ..[hiding].( b
-                    --            , b'
-                    --            )
-                    (ieD : ieDs') -> docPar
-                      (docSeq [hidDoc, docSetBaseY $ docSeq [docParenLSep, ieD]]
-                      )
-                      (docEnsureIndent (BrIndentSpecial hidDocColDiff)
-                      $ docLines
-                      $ ieDs'
-                      ++ [docParenR]
-                      )
-      makeAsDoc asT =
-        docSeq [appSep $ docLitS "as", appSep $ docLit asT]
+        makeAsDoc asT =
+          docSeq [docLitS "as", docSeparator, docLit asT, docSeparator]
     if compact
       then
         let asDoc = maybe docEmpty makeAsDoc masT
@@ -147,12 +145,12 @@ layoutImport importD = case importD of
         Just n -> if enoughRoom
           then docLines [docSeq [importHead, asDoc], bindingsD]
           else docLines [importHead, asDoc, bindingsD]
-         where
-          enoughRoom = nameCost < importAsCol - asCost
-          asDoc = docEnsureIndent (BrIndentSpecial (importAsCol - asCost))
-            $ makeAsDoc n
+          where
+            enoughRoom = nameCost < importAsCol - asCost
+            asDoc      = docEnsureIndent (BrIndentSpecial (importAsCol - asCost)) $ makeAsDoc n
         Nothing -> if enoughRoom
           then docSeq [importHead, bindingsD]
           else docLines [importHead, bindingsD]
-          where enoughRoom = nameCost < importCol - hidingParenCost
+          where
+            enoughRoom = nameCost < importCol - hidingParenCost
   _ -> docEmpty

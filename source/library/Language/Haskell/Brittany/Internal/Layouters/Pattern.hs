@@ -180,7 +180,6 @@ layoutPat lpat@(L _ pat) = docWrapNode lpat $ case pat of
     wrapPatPrepend pat1 (docLitS "~")
   NPat ann llit@(L _ ol) mNegative _ -> do
     -- -13 -> expr
-    -- _ llit
     let llit' = first (SrcSpanAnn ann) llit
     litDoc <- docWrapNode llit' $ allocateNode $ overLitValBriDoc $ GHC.ol_val ol
     negDoc <- docLitS "-"

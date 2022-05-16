@@ -20,6 +20,8 @@ import Data.Traversable
 import GHC (AnnKeywordId(..), GenLocated(L), moduleNameString, unLoc)
 import GHC.Hs
 import qualified GHC.OldList as List
+-- import GHC.Parser.Annotation (DeltaPos(..), deltaRow)
+import GHC.Parser.Annotation (DeltaPos(..))
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.LayouterBasics
 import Language.Haskell.Brittany.Internal.Layouters.IE
@@ -28,17 +30,16 @@ import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.PreludeUtils
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.GHC.ExactPrint as ExactPrint
-import Language.Haskell.GHC.ExactPrint.Types
-  (DeltaPos(..), commentContents, deltaRow)
+import Language.Haskell.GHC.ExactPrint.Types (commentContents)
 
-layoutModule :: ToBriDoc' HsModule
+layoutModule :: LocatedAn ann HsModule -> ToBriDocM BriDocNumbered
 layoutModule lmod@(L _ mod') = case mod' of
     -- Implicit module Main
   HsModule{hsmodName = Nothing, hsmodImports} -> do
-    commentedImports <- transformToCommentedImportM hsmodImports
+    let commentedImports = transformToCommentedImport hsmodImports
     docLines (commentedImportsToDoc <$> sortCommentedImports commentedImports)
   HsModule{hsmodName = Just n, hsmodExports, hsmodImports} -> do
-    commentedImports <- transformToCommentedImportM hsmodImports
+    let commentedImports = transformToCommentedImport hsmodImports
     let tn = Text.pack $ moduleNameString $ unLoc n
     allowSingleLineExportList <-
       mAsk <&> _conf_layout .> _lconfig_allowSingleLineExportList .> confUnpack
@@ -99,79 +100,26 @@ data ImportStatementData a b = ImportStatementData
   , isdImport         :: b
   } deriving (Eq, Show)
 
-type CommentedImport' = CommentedImport (Comment, DeltaPos) (ImportDecl GhcPs)
+type CommentedImport' = CommentedImport Comment (ImportDecl GhcPs)
 
 instance Bifunctor ImportStatementData where
   bimap f g (ImportStatementData xs ys zs) =
     ImportStatementData (map f xs) (map f ys) (g zs)
 
-transformToCommentedImportM
-  :: [LImportDecl GhcPs] -> ToBriDocM [CommentedImport']
-transformToCommentedImportM is = do
-  (is' :: [(Maybe Annotation, ImportDecl GhcPs)]) <-
-    for is $ \i@(L _ rawImport) -> do
-      annotionMay <- astAnn i
-      pure (annotionMay, rawImport)
-  pure $ transformToCommentedImport is'
-
 transformToCommentedImport
-  :: [(Maybe Annotation, ImportDecl GhcPs)] -> [CommentedImport']
+  :: [ImportDecl GhcPs] -> [CommentedImport']
 transformToCommentedImport is = do
-  concat $ concatMap convertComment finalAcc : finalList
-  where
-    finalAcc  :: [(Comment, DeltaPos)]
-    finalList :: [[CommentedImport']]
-    (finalAcc, finalList) = mapAccumR accumF [] is
-
-    convertComment :: (Comment, DeltaPos) -> [CommentedImport']
-    convertComment (c, DP (y, x)) =
-      replicate (y - 1) EmptyLine ++ [IndependentComment (c, DP (1, x))]
-
-    accumF
-      :: [(Comment, DeltaPos)]
-      -> (Maybe Annotation, ImportDecl GhcPs)
-      -> ([(Comment, DeltaPos)], [CommentedImport'])
-    accumF accConnectedComm (annMay, decl) = case annMay of
-      Nothing ->
-        ( []
-        , [ ImportStatement ImportStatementData
-              { isdCommentsBefore  = []
-              , isdCommentsAfter   = []
-              , isdImport = decl
-              }
-          ]
-        )
-      Just ann ->
-        let (newAccumulator, priorComments') =
-              List.span ((== 0) . deltaRow . snd) (annPriorComments ann)
-            go
-              :: [(Comment, DeltaPos)]
-              -> [(Comment, DeltaPos)]
-              -> ([CommentedImport'], [(Comment, DeltaPos)], Int)
-            go acc []                        = ([], acc, 0)
-            go acc (c1@(_,  DP (y, _)) : []) = ([], c1 : acc, y - 1)
-            go acc (c1@(_,  DP (1, _)) : xs) = go (c1 : acc) xs
-            go acc (   (c1, DP (y, x)) : xs) =
-              ( concatMap convertComment xs ++ replicate (y - 1) EmptyLine
-              , (c1, DP (1, x)) : acc
-              , 0
-              )
-            blanksBeforeImportDecl = deltaRow (annEntryDelta ann) - 1
-            (convertedIndependentComments, beforeComments, initialBlanks) =
-              if blanksBeforeImportDecl == 0
-              then go [] (reverse priorComments')
-              else (concatMap convertComment priorComments', [], 0)
-        in
-          ( newAccumulator
-          , convertedIndependentComments
-          ++ replicate (blanksBeforeImportDecl + initialBlanks) EmptyLine
-          ++ [ ImportStatement ImportStatementData
-                 { isdCommentsBefore  = beforeComments
-                 , isdCommentsAfter   = accConnectedComm
-                 , isdImport = decl
-                 }
-             ]
-          )
+  _ <- case is of
+    [L (ann :: SrcSpanAnn' (EpAnn AnnListItem)) ImportDecl{ideclExt, ideclName}] -> do
+      let x :: EpAnn EpAnnImportDecl
+          x = ideclExt
+          y    :: _
+          ann' :: SrcAnn AnnListItem
+          y'   :: _
+          y@(L ann' y') = ideclName
+      undefined
+    _ -> undefined
+  undefined $ concat $ concatMap convertComment finalAcc : finalList
 
 sortCommentedImports
   :: forall a b.
@@ -223,7 +171,6 @@ commentedImportsToDoc :: CommentedImport' -> ToBriDocM BriDocNumbered
 commentedImportsToDoc = \case
   EmptyLine            -> docLitS "" -- docEmpty will not produce emply line here
   IndependentComment c -> commentToDoc c
-  ImportStatement r    -> docSeq
-    (layoutImport (isdImport r) : map commentToDoc (isdCommentsAfter r))
- where
-  commentToDoc (c, DP (_y, x)) = docLitS (replicate x ' ' ++ commentContents c)
+  ImportStatement r    -> docSeq (layoutImport (isdImport r) : map commentToDoc (isdCommentsAfter r))
+  where
+    commentToDoc = docLitS . commentContents
