@@ -1,37 +1,138 @@
-import qualified Control.Monad as Monad
-import qualified Data.List as List
-import qualified Language.Haskell.Brittany.Main as Brittany
-import qualified System.Directory as Directory
-import qualified System.FilePath as FilePath
-import qualified Test.Hspec as Hspec
+{-# LANGUAGE ApplicativeDo     #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE NamedFieldPuns    #-}
+{-# LANGUAGE TupleSections     #-}
+
+module Main (main) where
+
+import Control.Monad
+import Data.Bifunctor
+import Data.Coerce
+import Data.Foldable
+import Data.Functor.Identity
+import qualified Data.List as L
+import Data.Maybe
+import Data.Semigroup
+import qualified Data.Text as T
+import qualified Data.Text.IO as TIO
+import Data.Traversable
+import Options.Applicative
+import System.Directory
+import System.Environment (getArgs, withArgs)
+import System.Exit (die)
+import System.FilePath
+import Test.Tasty
+import Test.Tasty.HUnit
+
+import Language.Haskell.Brittany.Internal.Config.Types
+import qualified Language.Haskell.Brittany.Internal.Formatting as Brittany
+
+data TestsConfig = TestsConfig
+  { tcfgInputDirs :: ![FilePath]
+  }
+
+optsParser :: Parser TestsConfig
+optsParser = do
+  tcfgInputDirs <- many $ strArgument $
+    metavar "DIR" <>
+    help "Directory with Haskell files to format and use as test cases"
+  pure TestsConfig{tcfgInputDirs}
+
+progInfo :: ParserInfo TestsConfig
+progInfo = info
+  (helper <*> optsParser)
+  (fullDesc <> header "Test suite for the brittany formatter")
 
 main :: IO ()
-main = Hspec.hspec . Hspec.parallel $ do
-  let directory = "data"
-  entries <- Hspec.runIO $ Directory.listDirectory directory
-  Monad.forM_ (List.sort entries) $ \entry ->
-    case FilePath.stripExtension "hs" entry of
-      Nothing -> pure ()
-      Just slug -> Hspec.it slug $ do
-        let input = FilePath.combine directory entry
-        expected <- readFile input
-        let output = FilePath.combine "output" entry
-        Directory.copyFile input output
-        Brittany.mainWith
-          "brittany"
-          [ "--config-file"
-          , FilePath.combine directory "brittany.yaml"
-          , "--no-user-config"
-          , "--write-mode"
-          , "inplace"
-          , output
-          ]
-        actual <- readFile output
-        Literal actual `Hspec.shouldBe` Literal expected
+main = do
+  (ourArgs, tastyArgs) <- second (drop 1) . break (== "--") <$> getArgs
+  TestsConfig{tcfgInputDirs} <- handleParseResult $
+    execParserPure (prefs (showHelpOnEmpty <> noBacktrack <> multiSuffix "*")) progInfo ourArgs
 
-newtype Literal
-  = Literal String
-  deriving Eq
+  let dirs = case tcfgInputDirs of
+        [] -> ["data"]
+        xs -> xs
 
-instance Show Literal where
-  show (Literal x) = x
+  for_ dirs $ \dir -> do
+    exists <- doesDirectoryExist dir
+    unless exists $
+      die $ "Input directory does not exist: " ++ dir
+
+  withArgs tastyArgs . defaultMain =<< makeTests dirs
+
+testConfig :: Config
+testConfig = Config
+  { _conf_version = coerce (1 :: Int)
+  , _conf_debug = DebugConfig
+    { _dconf_dump_config                = coerce False
+    , _dconf_dump_annotations           = coerce False
+    , _dconf_dump_ast_unknown           = coerce False
+    , _dconf_dump_ast_full              = coerce False
+    , _dconf_dump_bridoc_raw            = coerce False
+    , _dconf_dump_bridoc_simpl_alt      = coerce False
+    , _dconf_dump_bridoc_simpl_floating = coerce False
+    , _dconf_dump_bridoc_simpl_par      = coerce False
+    , _dconf_dump_bridoc_simpl_columns  = coerce False
+    , _dconf_dump_bridoc_simpl_indent   = coerce False
+    , _dconf_dump_bridoc_final          = coerce False
+    , _dconf_roundtrip_exactprint_only  = coerce False
+    }
+  , _conf_layout = LayoutConfig
+    { _lconfig_cols                      = coerce (80 :: Int)
+    , _lconfig_indentPolicy              = coerce IndentPolicyFree
+    , _lconfig_indentAmount              = coerce (2  :: Int)
+    , _lconfig_indentWhereSpecial        = coerce True
+    , _lconfig_indentListSpecial         = coerce True
+    , _lconfig_importColumn              = coerce (60 :: Int)
+    , _lconfig_importAsColumn            = coerce (60 :: Int)
+    -- , _lconfig_importColumn              = coerce (50 :: Int)
+    -- , _lconfig_importAsColumn            = coerce (50 :: Int)
+    , _lconfig_altChooser                = coerce (AltChooserBoundedSearch 3)
+    , _lconfig_columnAlignMode           = coerce (ColumnAlignModeMajority 0.7)
+    , _lconfig_alignmentLimit            = coerce (30 :: Int)
+    , _lconfig_alignmentBreakOnMultiline = coerce True
+    , _lconfig_hangingTypeSignature      = coerce False
+    , _lconfig_reformatModulePreamble    = coerce True
+    , _lconfig_allowSingleLineExportList = coerce True
+    -- , _lconfig_allowSingleLineExportList = coerce False
+    , _lconfig_allowHangingQuasiQuotes   = coerce True
+    }
+  , _conf_errorHandling = ErrorHandlingConfig
+    { _econf_produceOutputOnErrors   = coerce False
+    , _econf_Werror                  = coerce False
+    , _econf_ExactPrintFallback      = coerce ExactPrintFallbackModeInline
+    , _econf_omit_output_valid_check = coerce False
+    }
+  , _conf_preprocessor = PreProcessorConfig
+    { _ppconf_CPPMode            = coerce CPPModeAbort
+    , _ppconf_hackAroundIncludes = coerce False
+    }
+  , _conf_forward                   = ForwardOptions { _options_ghc = Identity [] }
+  , _conf_roundtrip_exactprint_only = coerce False
+  , _conf_disable_formatting        = coerce False
+  , _conf_obfuscate                 = coerce False
+  }
+
+makeTests :: [FilePath] -> IO TestTree
+makeTests dirs = do
+  groups <- for dirs $ \dir -> do
+    files <- mapMaybe (\x -> (, x) <$> stripExtension "hs" x) <$> listDirectory dir
+    pure $ testGroup dir $ flip map (L.sort files) $ \(stem, file) ->
+      testCase stem $ do
+        input <- TIO.readFile $ dir </> file
+        res   <- Brittany.format testConfig file input
+        case res of
+          Left (Brittany.ParseError err) ->
+            assertFailure $ "Failed to parse test module:\n" ++ err
+          Right (formatted, _warns, _errs, _logs, _isChanged) ->
+            unless (input == formatted) $ assertFailure $
+              "expected: "  ++ show input         ++ "\n" ++
+              "got:      "  ++ show formatted     ++ "\n" ++
+              "================================================================\n" ++
+              "expected:\n" ++ T.unpack input     ++ "\n" ++
+              "----------------------------------------------------------------\n" ++
+              "got:\n"      ++ T.unpack formatted ++ "\n" ++
+              "----------------------------------------------------------------\n"
+
+  pure $ testGroup "Tests" groups
+

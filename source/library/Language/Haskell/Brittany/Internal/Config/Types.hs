@@ -181,11 +181,11 @@ data CConfig f = Config
   }
   deriving Generic
 
-type DebugConfig = CDebugConfig Identity
-type LayoutConfig = CLayoutConfig Identity
-type ForwardOptions = CForwardOptions Identity
+type DebugConfig         = CDebugConfig Identity
+type LayoutConfig        = CLayoutConfig Identity
+type ForwardOptions      = CForwardOptions Identity
 type ErrorHandlingConfig = CErrorHandlingConfig Identity
-type Config = CConfig Identity
+type Config              = CConfig Identity
 
 -- i wonder if any Show1 stuff could be leveraged.
 deriving instance Show (CDebugConfig Identity)
