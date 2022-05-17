@@ -4,6 +4,7 @@
 
 module Language.Haskell.Brittany.Internal.Layouters.Module where
 
+import Data.List (concatMap, concat)
 import qualified Data.Maybe
 import qualified Data.Semigroup as Semigroup
 import qualified Data.Text as Text
@@ -125,13 +126,13 @@ transformToCommentedImport is = do
           go acc [c1@(_, DP (y, _))] = ([], c1 : acc, y - 1)
           go acc (c1@(_, DP (1, _)) : xs) = go (c1 : acc) xs
           go acc ((c1, DP (y, x)) : xs) =
-            ( (convertComment =<< xs) ++ replicate (y - 1) EmptyLine
+            ( concatMap convertComment xs ++ replicate (y - 1) EmptyLine
             , (c1, DP (1, x)) : acc
             , 0
             )
           (convertedIndependentComments, beforeComments, initialBlanks) =
             if blanksBeforeImportDecl /= 0
-              then (convertComment =<< priorComments', [], 0)
+              then (concatMap convertComment priorComments', [], 0)
               else go [] (reverse priorComments')
         in
           ( newAccumulator
@@ -145,7 +146,7 @@ transformToCommentedImport is = do
              ]
           )
   let (finalAcc, finalList) = mapAccumR accumF [] nodeWithAnnotations
-  pure $ join $ (convertComment =<< finalAcc) : finalList
+  pure $ concat $ concatMap convertComment finalAcc : finalList
 
 sortCommentedImports :: [CommentedImport] -> [CommentedImport]
 sortCommentedImports =
