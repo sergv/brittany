@@ -212,7 +212,7 @@ layoutLocalBinds lbinds@(L _ binds) = case binds of
       BagSig s -> return <$> layoutSig s
     return $ Just $ docs
 --  x@(HsValBinds (ValBindsOut _binds _lsigs)) ->
-  HsValBinds _ (XValBindsLR{}) -> error "brittany internal error: XValBindsLR"
+  HsValBinds _ XValBindsLR{} -> error "brittany internal error: XValBindsLR"
   HsIPBinds _ (IPBinds _ bb) -> Just <$> mapM layoutIPBind bb
   EmptyLocalBinds{} -> return $ Nothing
 

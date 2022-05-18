@@ -153,7 +153,7 @@ layoutPat lpat@(L _ pat) = docWrapNode lpat $ case pat of
     patDocs <- layoutPat pat1
     tyDoc <- docSharedWrapper layoutType ty1
     case Seq.viewr patDocs of
-      Seq.EmptyR -> error "cannot happen ljoiuxoasdcoviuasd"
+      Seq.EmptyR -> error "cannot happen"
       xR Seq.:> xN -> do
         xN' <- -- at the moment, we don't support splitting patterns into
                -- multiple lines. but we cannot enforce pasting everything

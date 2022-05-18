@@ -299,7 +299,7 @@ coreIO config suppressOutput checkMode inputPathM outputPathM =
           "  -> falling back on exactprint for this element of the module"
 
       unless (null layoutWarns) $ do
-        putStrErrLn $ "WARNINGS:"
+        putStrErrLn "WARNINGS:"
         traverse_ putStrErrLn layoutWarns
 
       unless (null outputChecks) $ do
@@ -307,7 +307,7 @@ coreIO config suppressOutput checkMode inputPathM outputPathM =
         traverse_ putStrErrLn outputChecks
 
       unless (null macroConfs) $ do
-        putStrErrLn $ "Error: parse error in inline configuration:"
+        putStrErrLn "Error: parse error in inline configuration:"
         for_ macroConfs $ \(err, str) -> do
           putStrErrLn err
           putStrErrLn $ "  in the string \"" ++ str ++ "\"."

@@ -20,8 +20,8 @@ import Data.Traversable
 import GHC (AnnKeywordId(..), GenLocated(L), moduleNameString, unLoc)
 import GHC.Hs
 import qualified GHC.OldList as List
--- import GHC.Parser.Annotation (DeltaPos(..), deltaRow)
 import GHC.Parser.Annotation (DeltaPos(..))
+import GHC.Unit.Module.Name
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.LayouterBasics
 import Language.Haskell.Brittany.Internal.Layouters.IE
@@ -106,16 +106,44 @@ instance Bifunctor ImportStatementData where
   bimap f g (ImportStatementData xs ys zs) =
     ImportStatementData (map f xs) (map f ys) (g zs)
 
+lineDelta :: EpAnn ann -> Maybe DeltaPos
+lineDelta x = case anchor_op (entry x) of
+  UnchangedAnchor -> Nothing
+  MovedAnchor x   -> Just x
+
 transformToCommentedImport
   :: [ImportDecl GhcPs] -> [CommentedImport']
 transformToCommentedImport is = do
+  for is $ \(L (a :: SrcSpanAnn' (EpAnn AnnListItem)) ImportDecl{ideclExt, ideclName}) -> do
+    let comments :: Maybe EpAnnComments
+        comments = case ann a of
+          EpAnn{comments} -> Just comments
+          EpAnnNotUsed    -> Nothing
+
+        commentsBefore :: [LEpaComment]
+        commentsBefore = case comments of
+          Just EpaComments{priorComments} -> priorComments
+          Just EpaCommentsBalanced{}      -> error $
+            "Unexpected EpaCommentsBalanced that shold never be created by parser:\n" ++
+            show comments
+          Nothing                         -> []
+
+
+    let x :: EpAnn EpAnnImportDecl
+        x = ideclExt
+
+        y    :: GenLocated (SrcAnn AnnListItem) ModuleName
+        ann' :: SrcAnn AnnListItem
+        y'   :: ModuleName
+        y@(L ann' y') = ideclName
+    _
   _ <- case is of
     [L (ann :: SrcSpanAnn' (EpAnn AnnListItem)) ImportDecl{ideclExt, ideclName}] -> do
       let x :: EpAnn EpAnnImportDecl
           x = ideclExt
-          y    :: _
+          y    :: GenLocated (SrcAnn AnnListItem) ModuleName
           ann' :: SrcAnn AnnListItem
-          y'   :: _
+          y'   :: ModuleName
           y@(L ann' y') = ideclName
       undefined
     _ -> undefined
@@ -162,8 +190,7 @@ sortCommentedImports =
           []                            -> []
         go acc = \case
           l@EmptyLine : rest            -> Right (reverse acc) : Left l : go [] rest
-          l@IndependentComment{} : rest ->
-            Left l : Right (reverse acc) : go [] rest
+          l@IndependentComment{} : rest -> Left l : Right (reverse acc) : go [] rest
           ImportStatement r : rest      -> go (r : acc) rest
           []                            -> [Right (reverse acc)]
 
