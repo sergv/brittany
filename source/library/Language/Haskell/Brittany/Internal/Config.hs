@@ -178,28 +178,6 @@ cmdlineConfigParser = do
   optionConcat :: (Semigroup.Semigroup (f a), Applicative f) => [a] -> Maybe (f a)
   optionConcat = mconcat . fmap (pure . pure)
 
--- configParser :: Parser Config
--- configParser = Config
---   <$> option (eitherReader $ maybe (Left "required <int>!") Right . readMaybe)
---         (long "indent" <> value 2 <> metavar "AMOUNT" <> help "spaces per indentation level")
---   <*> (Bar
---     <$> switch (long "bara" <> help "bara help")
---     <*> switch (long "barb")
---     <*> flag 3 5 (long "barc")
---   )
---
--- configParserInfo :: ParserInfo Config
--- configParserInfo = ParserInfo
---   { infoParser      = configParser
---   , infoFullDesc    = True
---   , infoProgDesc    = return $ PP.text "a haskell code formatting utility based on ghc-exactprint"
---   , infoHeader      = return $ PP.text "brittany"
---   , infoFooter      = empty
---   , infoFailureCode = (-55)
---   , infoIntersperse = True
---   }
-
-
 -- | Reads a config from a file. If the file does not exist, returns
 -- Nothing. If the file exists and parsing fails, prints to stderr and
 -- aborts the MaybeT. Otherwise succeed via Just.
