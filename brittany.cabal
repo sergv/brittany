@@ -36,6 +36,34 @@ flag pedantic
   description: Enables @-Werror@, which turns warnings into errors.
   manual: True
 
+common ghc-options
+  default-language:
+    Haskell2010
+
+  ghc-options:
+    -Weverything
+    -Wno-type-defaults
+    -Wno-implicit-prelude
+    -Wno-missing-local-signatures
+    -Wno-missing-import-lists
+    -Wno-missed-specialisations
+    -Wno-all-missed-specialisations
+    -Wno-safe
+    -Wno-missing-safe-haskell-mode
+    -Wno-unsafe
+
+  if impl(ghc >= 8.8)
+    ghc-options:
+      -Wno-missing-deriving-strategies
+
+  if impl(ghc >= 8.10)
+    ghc-options:
+      -Wno-prepositive-qualified-module
+
+  if impl(ghc >= 9.2)
+    ghc-options:
+      -Wno-missing-kind-signatures
+
 common library
   build-depends:
     , aeson ^>= 2.0.1
@@ -142,15 +170,29 @@ executable brittany
   main-is: Main.hs
 
 test-suite brittany-test-suite
-  import: executable
+  import: ghc-options
+
+  type:
+    exitcode-stdio-1.0
+  main-is:
+    Main.hs
+  hs-source-dirs:
+    source/test-suite
+  other-modules:
+    Language.Haskell.Brittany.Internal.Layouters.Module.Tests
+
+  ghc-options:
+    -rtsopts
 
   build-depends:
+    , base
+    , brittany
+    , containers
     , directory ^>= 1.3
     , filepath
+    , ghc
+    , ghc-exactprint
     , optparse-applicative ^>= 0.17
     , tasty ^>= 1.4
     , tasty-hunit ^>= 0.10
     , text ^>= 1.2 || ^>= 2.0
-  hs-source-dirs: source/test-suite
-  main-is: Main.hs
-  type: exitcode-stdio-1.0

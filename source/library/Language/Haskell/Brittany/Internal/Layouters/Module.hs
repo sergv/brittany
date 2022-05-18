@@ -1,13 +1,22 @@
-{-# LANGUAGE LambdaCase        #-}
-{-# LANGUAGE NamedFieldPuns    #-}
-{-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE NamedFieldPuns      #-}
+{-# LANGUAGE NoImplicitPrelude   #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
-module Language.Haskell.Brittany.Internal.Layouters.Module where
+module Language.Haskell.Brittany.Internal.Layouters.Module
+  ( layoutModule
+  -- For testing
+  , CommentedImport(..)
+  , ImportStatementData(..)
+  , transformToCommentedImport
+  ) where
 
+import Data.Bifunctor
 import Data.List (concatMap, concat)
 import qualified Data.Maybe
 import qualified Data.Semigroup as Semigroup
 import qualified Data.Text as Text
+import Data.Traversable
 import GHC (AnnKeywordId(..), GenLocated(L), moduleNameString, unLoc)
 import GHC.Hs
 import qualified GHC.OldList as List
@@ -26,10 +35,10 @@ layoutModule :: ToBriDoc' HsModule
 layoutModule lmod@(L _ mod') = case mod' of
     -- Implicit module Main
   HsModule{hsmodName = Nothing, hsmodImports} -> do
-    commentedImports <- transformToCommentedImport hsmodImports
+    commentedImports <- transformToCommentedImportM hsmodImports
     docLines (commentedImportsToDoc <$> sortCommentedImports commentedImports)
   HsModule{hsmodName = Just n, hsmodExports, hsmodImports} -> do
-    commentedImports <- transformToCommentedImport hsmodImports
+    commentedImports <- transformToCommentedImportM hsmodImports
     let tn = Text.pack $ moduleNameString $ unLoc n
     allowSingleLineExportList <-
       mAsk <&> _conf_layout .> _lconfig_allowSingleLineExportList .> confUnpack
@@ -66,127 +75,155 @@ layoutModule lmod@(L _ mod') = case mod' of
           ]
       : (commentedImportsToDoc <$> sortCommentedImports commentedImports)
 
-data CommentedImport
+data CommentedImport a b
   = EmptyLine
-  | IndependentComment (Comment, DeltaPos)
-  | ImportStatement ImportStatementRecord
+  | IndependentComment a
+  | ImportStatement (ImportStatementData a b)
+  deriving (Eq)
 
-instance Show CommentedImport where
+instance Bifunctor CommentedImport where
+  bimap f g = \case
+    EmptyLine            -> EmptyLine
+    IndependentComment a -> IndependentComment (f a)
+    ImportStatement x    -> ImportStatement (bimap f g x)
+
+instance (Show a, Show b) => Show (CommentedImport a b) where
   show = \case
-    EmptyLine -> "EmptyLine"
+    EmptyLine            -> "EmptyLine"
     IndependentComment _ -> "IndependentComment"
-    ImportStatement r ->
-      "ImportStatement " ++ show (length $ commentsBefore r) ++ " " ++ show
-        (length $ commentsAfter r)
+    ImportStatement x    -> show x
 
-data ImportStatementRecord = ImportStatementRecord
-  { commentsBefore :: [(Comment, DeltaPos)]
-  , commentsAfter :: [(Comment, DeltaPos)]
-  , importStatement :: ImportDecl GhcPs
-  }
+data ImportStatementData a b = ImportStatementData
+  { isdCommentsBefore :: [a]
+  , isdCommentsAfter  :: [a]
+  , isdImport         :: b
+  } deriving (Eq, Show)
 
-instance Show ImportStatementRecord where
-  show r =
-    "ImportStatement " ++ show (length $ commentsBefore r) ++ " " ++ show
-      (length $ commentsAfter r)
+type CommentedImport' = CommentedImport (Comment, DeltaPos) (ImportDecl GhcPs)
+
+instance Bifunctor ImportStatementData where
+  bimap f g (ImportStatementData xs ys zs) =
+    ImportStatementData (map f xs) (map f ys) (g zs)
+
+transformToCommentedImportM
+  :: [LImportDecl GhcPs] -> ToBriDocM [CommentedImport']
+transformToCommentedImportM is = do
+  (is' :: [(Maybe Annotation, ImportDecl GhcPs)]) <-
+    for is $ \i@(L _ rawImport) -> do
+      annotionMay <- astAnn i
+      pure (annotionMay, rawImport)
+  pure $ transformToCommentedImport is'
 
 transformToCommentedImport
-  :: [LImportDecl GhcPs] -> ToBriDocM [CommentedImport]
+  :: [(Maybe Annotation, ImportDecl GhcPs)] -> [CommentedImport']
 transformToCommentedImport is = do
-  nodeWithAnnotations <- is `forM` \i@(L _ rawImport) -> do
-    annotionMay <- astAnn i
-    pure (annotionMay, rawImport)
-  let
+  concat $ concatMap convertComment finalAcc : finalList
+  where
+    finalAcc  :: [(Comment, DeltaPos)]
+    finalList :: [[CommentedImport']]
+    (finalAcc, finalList) = mapAccumR accumF [] is
+
+    convertComment :: (Comment, DeltaPos) -> [CommentedImport']
     convertComment (c, DP (y, x)) =
       replicate (y - 1) EmptyLine ++ [IndependentComment (c, DP (1, x))]
+
     accumF
       :: [(Comment, DeltaPos)]
       -> (Maybe Annotation, ImportDecl GhcPs)
-      -> ([(Comment, DeltaPos)], [CommentedImport])
+      -> ([(Comment, DeltaPos)], [CommentedImport'])
     accumF accConnectedComm (annMay, decl) = case annMay of
       Nothing ->
         ( []
-        , [ ImportStatement ImportStatementRecord
-              { commentsBefore = []
-              , commentsAfter = []
-              , importStatement = decl
+        , [ ImportStatement ImportStatementData
+              { isdCommentsBefore  = []
+              , isdCommentsAfter   = []
+              , isdImport = decl
               }
           ]
         )
       Just ann ->
-        let
-          blanksBeforeImportDecl = deltaRow (annEntryDelta ann) - 1
-          (newAccumulator, priorComments') =
-            List.span ((== 0) . deltaRow . snd) (annPriorComments ann)
-          go
-            :: [(Comment, DeltaPos)]
-            -> [(Comment, DeltaPos)]
-            -> ([CommentedImport], [(Comment, DeltaPos)], Int)
-          go acc [] = ([], acc, 0)
-          go acc [c1@(_, DP (y, _))] = ([], c1 : acc, y - 1)
-          go acc (c1@(_, DP (1, _)) : xs) = go (c1 : acc) xs
-          go acc ((c1, DP (y, x)) : xs) =
-            ( concatMap convertComment xs ++ replicate (y - 1) EmptyLine
-            , (c1, DP (1, x)) : acc
-            , 0
-            )
-          (convertedIndependentComments, beforeComments, initialBlanks) =
-            if blanksBeforeImportDecl /= 0
-              then (concatMap convertComment priorComments', [], 0)
-              else go [] (reverse priorComments')
+        let (newAccumulator, priorComments') =
+              List.span ((== 0) . deltaRow . snd) (annPriorComments ann)
+            go
+              :: [(Comment, DeltaPos)]
+              -> [(Comment, DeltaPos)]
+              -> ([CommentedImport'], [(Comment, DeltaPos)], Int)
+            go acc []                        = ([], acc, 0)
+            go acc (c1@(_,  DP (y, _)) : []) = ([], c1 : acc, y - 1)
+            go acc (c1@(_,  DP (1, _)) : xs) = go (c1 : acc) xs
+            go acc (   (c1, DP (y, x)) : xs) =
+              ( concatMap convertComment xs ++ replicate (y - 1) EmptyLine
+              , (c1, DP (1, x)) : acc
+              , 0
+              )
+            blanksBeforeImportDecl = deltaRow (annEntryDelta ann) - 1
+            (convertedIndependentComments, beforeComments, initialBlanks) =
+              if blanksBeforeImportDecl == 0
+              then go [] (reverse priorComments')
+              else (concatMap convertComment priorComments', [], 0)
         in
           ( newAccumulator
           , convertedIndependentComments
           ++ replicate (blanksBeforeImportDecl + initialBlanks) EmptyLine
-          ++ [ ImportStatement ImportStatementRecord
-                 { commentsBefore = beforeComments
-                 , commentsAfter = accConnectedComm
-                 , importStatement = decl
+          ++ [ ImportStatement ImportStatementData
+                 { isdCommentsBefore  = beforeComments
+                 , isdCommentsAfter   = accConnectedComm
+                 , isdImport = decl
                  }
              ]
           )
-  let (finalAcc, finalList) = mapAccumR accumF [] nodeWithAnnotations
-  pure $ concat $ concatMap convertComment finalAcc : finalList
 
-sortCommentedImports :: [CommentedImport] -> [CommentedImport]
+sortCommentedImports
+  :: forall a b.
+     [CommentedImport a (ImportDecl b)]
+  -> [CommentedImport a (ImportDecl b)]
 sortCommentedImports =
   unpackImports . mergeGroups . map (fmap (sortGroups)) . groupify
- where
-  unpackImports :: [CommentedImport] -> [CommentedImport]
-  unpackImports xs = xs >>= \case
-    l@EmptyLine -> [l]
-    l@IndependentComment{} -> [l]
-    ImportStatement r ->
-      map IndependentComment (commentsBefore r) ++ [ImportStatement r]
-  mergeGroups
-    :: [Either CommentedImport [ImportStatementRecord]] -> [CommentedImport]
-  mergeGroups xs = xs >>= \case
-    Left x -> [x]
-    Right y -> ImportStatement <$> y
-  sortGroups :: [ImportStatementRecord] -> [ImportStatementRecord]
-  sortGroups =
-    List.sortOn (moduleNameString . unLoc . ideclName . importStatement)
-  groupify
-    :: [CommentedImport] -> [Either CommentedImport [ImportStatementRecord]]
-  groupify cs = go [] cs
-   where
-    go [] = \case
-      (l@EmptyLine : rest) -> Left l : go [] rest
-      (l@IndependentComment{} : rest) -> Left l : go [] rest
-      (ImportStatement r : rest) -> go [r] rest
-      [] -> []
-    go acc = \case
-      (l@EmptyLine : rest) -> Right (reverse acc) : Left l : go [] rest
-      (l@IndependentComment{} : rest) ->
-        Left l : Right (reverse acc) : go [] rest
-      (ImportStatement r : rest) -> go (r : acc) rest
-      [] -> [Right (reverse acc)]
+  where
+    unpackImports
+      :: [CommentedImport a (ImportDecl b)]
+      -> [CommentedImport a (ImportDecl b)]
+    unpackImports xs = xs >>= \case
+      l@EmptyLine -> [l]
+      l@IndependentComment{} -> [l]
+      ImportStatement r ->
+        map IndependentComment (isdCommentsBefore r) ++ [ImportStatement r]
+    mergeGroups
+      :: [Either (CommentedImport a (ImportDecl b)) [ImportStatementData a (ImportDecl b)]]
+      -> [CommentedImport a (ImportDecl b)]
+    mergeGroups xs = xs >>= \case
+      Left x -> [x]
+      Right y -> ImportStatement <$> y
+    sortGroups
+      :: [ImportStatementData a (ImportDecl b)]
+      -> [ImportStatementData a (ImportDecl b)]
+    sortGroups =
+      List.sortOn (moduleNameString . unLoc . ideclName . isdImport)
+    groupify
+      :: [CommentedImport a (ImportDecl b)]
+      -> [Either (CommentedImport a (ImportDecl b)) [ImportStatementData a (ImportDecl b)]]
+    groupify cs = go [] cs
+      where
+        go :: [ImportStatementData a (ImportDecl b)]
+           -> [CommentedImport a (ImportDecl b)]
+           -> [Either (CommentedImport a (ImportDecl b)) [ImportStatementData a (ImportDecl b)]]
+        go [] = \case
+          l@EmptyLine : rest            -> Left l : go [] rest
+          l@IndependentComment{} : rest -> Left l : go [] rest
+          ImportStatement r : rest      -> go [r] rest
+          []                            -> []
+        go acc = \case
+          l@EmptyLine : rest            -> Right (reverse acc) : Left l : go [] rest
+          l@IndependentComment{} : rest ->
+            Left l : Right (reverse acc) : go [] rest
+          ImportStatement r : rest      -> go (r : acc) rest
+          []                            -> [Right (reverse acc)]
 
-commentedImportsToDoc :: CommentedImport -> ToBriDocM BriDocNumbered
+commentedImportsToDoc :: CommentedImport' -> ToBriDocM BriDocNumbered
 commentedImportsToDoc = \case
-  EmptyLine -> docLitS ""
+  EmptyLine            -> docLitS "" -- docEmpty will not produce emply line here
   IndependentComment c -> commentToDoc c
-  ImportStatement r -> docSeq
-    (layoutImport (importStatement r) : map commentToDoc (commentsAfter r))
+  ImportStatement r    -> docSeq
+    (layoutImport (isdImport r) : map commentToDoc (isdCommentsAfter r))
  where
   commentToDoc (c, DP (_y, x)) = docLitS (replicate x ' ' ++ commentContents c)

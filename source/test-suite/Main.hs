@@ -27,6 +27,8 @@ import Test.Tasty.HUnit
 import Language.Haskell.Brittany.Internal.Config.Types
 import qualified Language.Haskell.Brittany.Internal.Formatting as Brittany
 
+import qualified Language.Haskell.Brittany.Internal.Layouters.Module.Tests
+
 data TestsConfig = TestsConfig
   { tcfgInputDirs :: ![FilePath]
   }
@@ -58,7 +60,7 @@ main = do
     unless exists $
       die $ "Input directory does not exist: " ++ dir
 
-  withArgs tastyArgs . defaultMain =<< makeTests dirs
+  withArgs tastyArgs . defaultMain . testGroup "All tests" . (unitTests :) . (: []) =<< makeTests dirs
 
 testConfig :: Config
 testConfig = Config
@@ -134,5 +136,10 @@ makeTests dirs = do
               "got:\n"      ++ T.unpack formatted ++ "\n" ++
               "----------------------------------------------------------------\n"
 
-  pure $ testGroup "Tests" groups
+  pure $ testGroup "End to end tests" groups
+
+unitTests :: TestTree
+unitTests = testGroup "Unit tests"
+  [ Language.Haskell.Brittany.Internal.Layouters.Module.Tests.tests
+  ]
 
