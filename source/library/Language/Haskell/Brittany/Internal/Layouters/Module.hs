@@ -178,21 +178,21 @@ sortCommentedImports
      [CommentedImport a (ImportDecl b)]
   -> [CommentedImport a (ImportDecl b)]
 sortCommentedImports =
-  unpackImports . mergeGroups . map (fmap (sortGroups)) . groupify
+  concatMap unpackImports . concatMap mergeGroups . map (fmap (sortGroups)) . groupify
   where
     unpackImports
-      :: [CommentedImport a (ImportDecl b)]
+      :: CommentedImport a (ImportDecl b)
       -> [CommentedImport a (ImportDecl b)]
-    unpackImports xs = xs >>= \case
+    unpackImports = \case
       l@EmptyLine -> [l]
       l@IndependentComment{} -> [l]
       ImportStatement r ->
         map IndependentComment (isdCommentsBefore r) ++ [ImportStatement r]
     mergeGroups
-      :: [Either (CommentedImport a (ImportDecl b)) [ImportStatementData a (ImportDecl b)]]
+      :: Either (CommentedImport a (ImportDecl b)) [ImportStatementData a (ImportDecl b)]
       -> [CommentedImport a (ImportDecl b)]
-    mergeGroups xs = xs >>= \case
-      Left x -> [x]
+    mergeGroups = \case
+      Left  x -> [x]
       Right y -> ImportStatement <$> y
     sortGroups
       :: [ImportStatementData a (ImportDecl b)]
