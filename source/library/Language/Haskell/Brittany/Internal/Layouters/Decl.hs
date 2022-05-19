@@ -866,7 +866,7 @@ layoutClsInst lcid@(L _ cid) = docLines
     , cid_datafam_insts = []
     }
 
-  -- | Like 'docLines', but sorts the lines based on location
+  -- Like 'docLines', but sorts the lines based on location
   docSortedLines
     :: [ToBriDocM (Located BriDocNumbered)] -> ToBriDocM BriDocNumbered
   docSortedLines l =
@@ -899,56 +899,56 @@ layoutClsInst lcid@(L _ cid) = docLines
   layoutAndLocateDataFamInsts ldfid@(L loc _) =
     L loc <$> layoutDataFamInstDecl ldfid
 
-  -- | Send to ExactPrint then remove unecessary whitespace
+  -- Send to ExactPrint then remove unecessary whitespace
   layoutDataFamInstDecl :: ToBriDoc DataFamInstDecl
   layoutDataFamInstDecl ldfid =
     fmap stripWhitespace <$> briDocByExactNoComment ldfid
 
-  -- | ExactPrint adds indentation/newlines to @data@/@type@ declarations
+  -- ExactPrint adds indentation/newlines to @data@/@type@ declarations
   stripWhitespace :: BriDocF f -> BriDocF f
   stripWhitespace (BDFExternal b t) =
     BDFExternal b $ stripWhitespace' t
   stripWhitespace b = b
 
-  -- | This fixes two issues of output coming from Exactprinting
-  --   associated (data) type decls. Firstly we place the output into docLines,
-  --   so one newline coming from Exactprint is superfluous, so we drop the
-  --   first (empty) line. The second issue is Exactprint indents the first
-  --   member in a strange fashion:
+  -- This fixes two issues of output coming from Exactprinting
+  -- associated (data) type decls. Firstly we place the output into docLines,
+  -- so one newline coming from Exactprint is superfluous, so we drop the
+  -- first (empty) line. The second issue is Exactprint indents the first
+  -- member in a strange fashion:
   --
-  --   input:
+  -- input:
   --
-  --   > instance MyClass Int where
-  --   >   -- | This data is very important
-  --   >   data MyData = IntData
-  --   >     { intData  :: String
-  --   >     , intData2 :: Int
-  --   >     }
+  -- > instance MyClass Int where
+  -- >   -- | This data is very important
+  -- >   data MyData = IntData
+  -- >     { intData  :: String
+  -- >     , intData2 :: Int
+  -- >     }
   --
-  --   output of just exactprinting the associated data type syntax node
+  -- output of just exactprinting the associated data type syntax node
   --
-  --   >
-  --   >   -- | This data is very important
-  --   >   data MyData = IntData
-  --   >   { intData  :: String
-  --   >   , intData2 :: Int
-  --   >   }
+  -- >
+  -- >   -- | This data is very important
+  -- >   data MyData = IntData
+  -- >   { intData  :: String
+  -- >   , intData2 :: Int
+  -- >   }
   --
-  --   To fix this, we strip whitespace from the start of the comments and the
-  --   first line of the declaration, stopping when we see "data" or "type" at
-  --   the start of a line. I.e., this function yields
+  -- To fix this, we strip whitespace from the start of the comments and the
+  -- first line of the declaration, stopping when we see "data" or "type" at
+  -- the start of a line. I.e., this function yields
   --
-  --   > -- | This data is very important
-  --   > data MyData = IntData
-  --   >   { intData  :: String
-  --   >   , intData2 :: Int
-  --   >   }
+  -- > -- | This data is very important
+  -- > data MyData = IntData
+  -- >   { intData  :: String
+  -- >   , intData2 :: Int
+  -- >   }
   --
-  --   Downside apart from being a hacky and brittle fix is that this removes
-  --   possible additional indentation from comments before the first member.
+  -- Downside apart from being a hacky and brittle fix is that this removes
+  -- possible additional indentation from comments before the first member.
   --
-  --   But the whole thing is just a temporary measure until brittany learns
-  --   to layout data/type decls.
+  -- But the whole thing is just a temporary measure until brittany learns
+  -- to layout data/type decls.
   stripWhitespace' :: Text -> Text
   stripWhitespace' t =
     Text.intercalate (Text.pack "\n") $ go $ List.drop 1 $ Text.lines t
