@@ -106,8 +106,8 @@ instance Bifunctor ImportStatementData where
   bimap f g (ImportStatementData xs ys zs) =
     ImportStatementData (map f xs) (map f ys) (g zs)
 
-lineDelta :: EpAnn ann -> Maybe Int
-lineDelta x = case anchor_op (entry x) of
+_lineDelta :: EpAnn ann -> Maybe Int
+_lineDelta x = case anchor_op (entry x) of
   UnchangedAnchor                      -> Nothing
   MovedAnchor SameLine{}               -> Just 0
   MovedAnchor DifferentLine{deltaLine} -> Just deltaLine

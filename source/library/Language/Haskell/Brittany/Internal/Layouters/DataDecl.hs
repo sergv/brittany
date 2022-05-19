@@ -4,12 +4,14 @@
 
 module Language.Haskell.Brittany.Internal.Layouters.DataDecl where
 
-import qualified Data.Data
+import Data.Data (Data)
+import Data.Occurrences
 import qualified Data.Semigroup as Semigroup
 import qualified GHC
 import GHC (GenLocated(L), Located)
 import GHC.Hs
 import qualified GHC.OldList as List
+import GHC.Types.SrcLoc (unLoc)
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.LayouterBasics
 import Language.Haskell.Brittany.Internal.Layouters.Type
@@ -19,7 +21,11 @@ import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.GHC.ExactPrint (ExactPrint)
 
 layoutDataDecl
-  :: (ExactPrint (LocatedAn ann (TyClDecl GhcPs)), ExactPrint (LocatedAn ann RdrName))
+  :: ( ExactPrint (LocatedAn ann (TyClDecl GhcPs))
+     , ExactPrint (LocatedAn ann RdrName)
+     , Occurrences AnnKeywordId ann
+     , Occurrences AnnKeywordId ann'
+     )
   => LocatedAn ann (TyClDecl GhcPs)
   -> LocatedAn ann' RdrName
   -> LHsQTyVars GhcPs
@@ -251,42 +257,35 @@ createDerivingPar derivs mainDoc = do
       docPar mainDoc
         $ docEnsureIndent BrIndentRegular
         $ docLines
-        $ derivingClauseDoc types
+        $ derivingClauseDoc <$> types
 
 derivingClauseDoc :: LHsDerivingClause GhcPs -> ToBriDocM BriDocNumbered
-derivingClauseDoc (L _ (HsDerivingClause _ext mStrategy types)) = case types of
-  L _ [] -> docEmpty
-  L _ ts -> docSeq
+derivingClauseDoc (L _ (HsDerivingClause _ext mStrategy types@(L _ ts))) =
+  docSeq
     [ docDeriving
     , docWrapNodePrior types $ lhsStrategy
     , docSeparator
     , docWrapNodeRest types
     $ case ts of
-        DctSingle _ext typ -> layoutType typ
+        DctSingle _ext typ -> layoutType $ sig_body $ unLoc typ
         DctMulti  _ext typ -> docSeq $
-          [docLitS "("] ++ List.intersperse docCommaSep (map layoutType typ) ++ [docLitS ")"]
+          [docLitS "("] ++ List.intersperse docCommaSep (map (layoutType . sig_body . unLoc) typ) ++ [docLitS ")"]
     , rhsStrategy
     ]
     where
-      (lhsStrategy, rhsStrategy) =
-        maybe (docEmpty, docEmpty) strategyLeftRight mStrategy
-
-      strategyLeftRight = \case
-        L _ (StockStrategy x)             ->
-          _ x
-          -- (docLitS " stock", docEmpty)
-        L _ (AnyclassStrategy  x)         ->
-          _ x
-          -- (docLitS " anyclass", docEmpty)
-        L _ (NewtypeStrategy x)           ->
-          _ x
-          -- (docLitS " newtype", docEmpty)
-        lVia@(L _ (ViaStrategy viaTypes)) -> _ viaTypes
-          -- ( docEmpty
-          -- , case viaTypes of
-          --   HsIB _ext t ->
-          --     docSeq [docWrapNode lVia $ docLitS " via", docSeparator, layoutType t]
-          -- )
+      (lhsStrategy, rhsStrategy) = case mStrategy of
+        Nothing                                ->
+          (docEmpty, docEmpty)
+        Just (L _ (StockStrategy _ann))        ->
+          (docLitS " stock", docEmpty)
+        Just (L _ (AnyclassStrategy _ann))     ->
+          (docLitS " anyclass", docEmpty)
+        Just (L _ (NewtypeStrategy _ann))      ->
+          (docLitS " newtype", docEmpty)
+        Just (L _ (ViaStrategy (XViaStrategyPs _ann viaType))) ->
+          ( docEmpty
+          , docSeq [docLitS " via", docSeparator, layoutType $ sig_body $ unLoc viaType]
+          )
 
 docDeriving :: ToBriDocM BriDocNumbered
 docDeriving = docLitS "deriving"
@@ -401,12 +400,12 @@ createDetailsDoc consNameStr details = case details of
     , docSeparator
     , layoutType $ hsScaledThing arg2
     ]
- where
-  mkFieldDocs
-    :: [LConDeclField GhcPs]
-    -> [(ToBriDocM BriDocNumbered, ToBriDocM BriDocNumbered)]
-  mkFieldDocs = fmap $ \lField -> case lField of
-    L _ (ConDeclField _ext names t _) -> createNamesAndTypeDoc lField names t
+  where
+    mkFieldDocs
+      :: [LConDeclField GhcPs]
+      -> [(ToBriDocM BriDocNumbered, ToBriDocM BriDocNumbered)]
+    mkFieldDocs = fmap $ \lField -> case lField of
+      L _ (ConDeclField _ext names t _) -> createNamesAndTypeDoc lField names t
 
 createForallDoc
   :: [LHsTyVarBndr flag GhcPs] -> Maybe (ToBriDocM BriDocNumbered)
@@ -415,10 +414,10 @@ createForallDoc lhsTyVarBndrs =
   Just $ docSeq [docLitS "forall ", createBndrDoc lhsTyVarBndrs]
 
 createNamesAndTypeDoc
-  :: Data.Data.Data ast
-  => Located ast
+  :: Data ast
+  => LocatedAn ann ast
   -> [GenLocated t (FieldOcc GhcPs)]
-  -> Located (HsType GhcPs)
+  -> LHsType GhcPs
   -> (ToBriDocM BriDocNumbered, ToBriDocM BriDocNumbered)
 createNamesAndTypeDoc lField names t =
   ( docNodeAnnKW lField Nothing $ docWrapNodePrior lField $ docSeq

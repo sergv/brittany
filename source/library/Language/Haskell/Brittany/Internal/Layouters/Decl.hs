@@ -19,9 +19,9 @@ import GHC.Types.Basic
   ( Activation(..)
   , InlinePragma(..)
   , InlineSpec(..)
-  , LexicalFixity(..)
   , RuleMatchInfo(..)
   )
+import GHC.Types.Fixity (LexicalFixity(..))
 import GHC.Types.SrcLoc (Located, SrcSpan, getLoc, unLoc)
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.ExactPrintUtils
@@ -38,7 +38,7 @@ import qualified Language.Haskell.GHC.ExactPrint.Utils as ExactPrint
 
 
 
-layoutDecl :: ToBriDoc HsDecl
+layoutDecl :: LHsDecl GhcPs -> ToBriDocM BriDocNumbered
 layoutDecl d@(L loc decl) = case decl of
   SigD _ sig -> withTransformedAnns d $ layoutSig (L loc sig)
   ValD _ bind -> withTransformedAnns d $ layoutBind (L loc bind) >>= \case
@@ -55,7 +55,7 @@ layoutDecl d@(L loc decl) = case decl of
 -- Sig
 --------------------------------------------------------------------------------
 
-layoutSig :: ToBriDoc Sig
+layoutSig :: LSig GhcPs -> ToBriDocM BriDocNumbered
 layoutSig lsig@(L _loc sig) = case sig of
   TypeSig _ names (HsWC _ (HsIB _ typ)) -> layoutNamesAndType Nothing names typ
   InlineSig _ name (InlinePragma _ spec _arity phaseAct conlike) ->
@@ -124,7 +124,7 @@ specStringCompat ast = \case
   Inlinable -> pure "INLINABLE "
   NoInline -> pure "NOINLINE "
 
-layoutGuardLStmt :: ToBriDoc' (Stmt GhcPs (LHsExpr GhcPs))
+layoutGuardLStmt :: LStmt GhcPs (LHsExpr GhcPs) -> ToBriDocM BriDocNumbered
 layoutGuardLStmt lgstmt@(L _ stmtLR) = docWrapNode lgstmt $ case stmtLR of
   BodyStmt _ body _ _ -> layoutExpr body
   BindStmt _ lPat expr -> do
@@ -143,7 +143,7 @@ layoutGuardLStmt lgstmt@(L _ stmtLR) = docWrapNode lgstmt $ case stmtLR of
 --------------------------------------------------------------------------------
 
 layoutBind
-  :: ToBriDocC (HsBindLR GhcPs GhcPs) (Either [BriDocNumbered] BriDocNumbered)
+  :: LHsBindLR GhcPs GhcPs -> ToBriDocM (Either [BriDocNumbered] BriDocNumbered)
 layoutBind lbind@(L _ bind) = case bind of
   FunBind _ fId (MG _ lmatches@(L _ matches) _) [] -> do
     idStr       <- lrdrNameToTextAnn fId
@@ -167,16 +167,17 @@ layoutBind lbind@(L _ bind) = case bind of
       clauseDocs
       mWhereDocs
       hasComments
-  PatSynBind _ (PSB _ patID lpat rpat dir) -> do
+  PatSynBind _ (PSB _ patID lpat rpat dir) ->
     fmap Right $ docWrapNode lbind $ layoutPatSynBind patID lpat dir rpat
   _ -> Right <$> unknownNodeError "" lbind
-layoutIPBind :: ToBriDoc IPBind
+
+layoutIPBind :: LIPBind -> ToBriDocM BriDocNumbered
 layoutIPBind lipbind@(L _ bind) = case bind of
-  IPBind _ (Right _) _ -> error "brittany internal error: IPBind Right"
+  IPBind _ (Right _)                    _    -> error "brittany internal error: IPBind Right"
   IPBind _ (Left (L _ (HsIPName name))) expr -> do
-    ipName <- docLitS $ '?' : FastString.unpackFS name
-    binderDoc <- docLitS "="
-    exprDoc <- layoutExpr expr
+    ipName      <- docLitS $ '?' : FastString.unpackFS name
+    binderDoc   <- docLitS "="
+    exprDoc     <- layoutExpr expr
     hasComments <- hasAnyCommentsBelow lipbind
     layoutPatternBindFinal
       Nothing
@@ -186,30 +187,29 @@ layoutIPBind lipbind@(L _ bind) = case bind of
       Nothing
       hasComments
 
-
-data BagBindOrSig = BagBind (LHsBindLR GhcPs GhcPs)
-                  | BagSig (LSig GhcPs)
+data BagBindOrSig
+  = BagBind (LHsBindLR GhcPs GhcPs)
+  | BagSig (LSig GhcPs)
 
 bindOrSigtoSrcSpan :: BagBindOrSig -> SrcSpan
 bindOrSigtoSrcSpan (BagBind (L l _)) = l
 bindOrSigtoSrcSpan (BagSig (L l _)) = l
 
 layoutLocalBinds
-  :: ToBriDocC (HsLocalBindsLR GhcPs GhcPs) (Maybe [BriDocNumbered])
+  :: LHsLocalBindsLR GhcPs GhcPs -> ToBriDocM (Maybe [BriDocNumbered])
 layoutLocalBinds lbinds@(L _ binds) = case binds of
   -- HsValBinds (ValBindsIn lhsBindsLR []) ->
   --   Just . (>>= either id return) . Data.Foldable.toList <$> mapBagM layoutBind lhsBindsLR -- TODO: fix ordering
   -- x@(HsValBinds (ValBindsIn{})) ->
   --   Just . (:[]) <$> unknownNodeError "HsValBinds (ValBindsIn _ (_:_))" x
   HsValBinds _ (ValBinds _ bindlrs sigs) -> do
-    let
-      unordered =
-        [ BagBind b | b <- Data.Foldable.toList bindlrs ]
-        ++ [ BagSig s | s <- sigs ]
-      ordered = List.sortOn (ExactPrint.rs . bindOrSigtoSrcSpan) unordered
+    let unordered =
+          [ BagBind b | b <- Data.Foldable.toList bindlrs ]
+          ++ [ BagSig s | s <- sigs ]
+        ordered = List.sortOn (ExactPrint.rs . bindOrSigtoSrcSpan) unordered
     docs <- docWrapNode lbinds $ join <$> ordered `forM` \case
       BagBind b -> either id return <$> layoutBind b
-      BagSig s -> return <$> layoutSig s
+      BagSig  s -> return <$> layoutSig s
     return $ Just $ docs
 --  x@(HsValBinds (ValBindsOut _binds _lsigs)) ->
   HsValBinds _ XValBindsLR{} -> error "brittany internal error: XValBindsLR"
@@ -695,7 +695,7 @@ layoutPatSynWhere hs = case hs of
 -- TyClDecl
 --------------------------------------------------------------------------------
 
-layoutTyCl :: ToBriDoc TyClDecl
+layoutTyCl :: LTyClDecl -> ToBriDocM BriDocNumbered
 layoutTyCl ltycl@(L _loc tycl) = case tycl of
   SynDecl _ name vars fixity typ -> do
     -- hasTrailingParen <- hasAnnKeywordComment ltycl AnnCloseP
@@ -748,7 +748,7 @@ layoutSynDecl fixity wrapNodeRest name vars typ = do
   hasComments <- hasAnyCommentsConnected typ
   layoutLhsAndType hasComments sharedLhs "=" typeDoc
 
-layoutTyVarBndr :: Bool -> ToBriDoc (HsTyVarBndr ())
+layoutTyVarBndr :: Bool -> LHsTyVarBndr () -> ToBriDocM BriDocNumbered
 layoutTyVarBndr needsSep lbndr@(L _ bndr) = do
   docWrapNodePrior lbndr $ case bndr of
     UserTyVar _ _ name -> do
@@ -765,12 +765,9 @@ layoutTyVarBndr needsSep lbndr@(L _ bndr) = do
            , docParenR
            ]
 
-
 --------------------------------------------------------------------------------
 -- TyFamInstDecl
 --------------------------------------------------------------------------------
-
-
 
 layoutTyFamInstDecl
   :: (Data.Data.Data ann, Data.Data.Data a)
@@ -814,7 +811,6 @@ layoutTyFamInstDecl inClass outerNode tfid = do
     typeDoc <- docSharedWrapper layoutType typ
     layoutLhsAndType hasComments lhs "=" typeDoc
 
-
 layoutHsTyPats
   :: [HsArg (LHsType GhcPs) (LHsKind GhcPs)] -> [ToBriDocM BriDocNumbered]
 layoutHsTyPats pats = pats <&> \case
@@ -834,7 +830,7 @@ layoutHsTyPats pats = pats <&> \case
 --   Layout signatures and bindings using the corresponding layouters from the
 --   top-level. Layout the instance head, type family instances, and data family
 --   instances using ExactPrint.
-layoutClsInst :: ToBriDoc ClsInstDecl
+layoutClsInst :: LClsInstDecl -> ToBriDocM BriDocNumbered
 layoutClsInst lcid@(L _ cid) = docLines
   [ layoutInstanceHead
   , docEnsureIndent BrIndentRegular
@@ -872,10 +868,10 @@ layoutClsInst lcid@(L _ cid) = docLines
       . List.sortOn (ExactPrint.rs . getLoc)
       =<< sequence l
 
-  layoutAndLocateSig :: ToBriDocC (Sig GhcPs) (Located BriDocNumbered)
+  layoutAndLocateSig :: LSig GhcPs -> ToBriDocM (Located BriDocNumbered)
   layoutAndLocateSig lsig@(L loc _) = L loc <$> layoutSig lsig
 
-  layoutAndLocateBind :: ToBriDocC (HsBind GhcPs) (Located BriDocNumbered)
+  layoutAndLocateBind :: LHsBind GhcPs -> ToBriDocM (Located BriDocNumbered)
   layoutAndLocateBind lbind@(L loc _) =
     L loc <$> (joinBinds =<< layoutBind lbind)
 
@@ -886,17 +882,17 @@ layoutClsInst lcid@(L _ cid) = docLines
     Right n -> return n
 
   layoutAndLocateTyFamInsts
-    :: ToBriDocC (TyFamInstDecl GhcPs) (Located BriDocNumbered)
+    :: LTyFamInstDecl GhcPs -> ToBriDocM (Located BriDocNumbered)
   layoutAndLocateTyFamInsts ltfid@(L loc tfid) =
     L loc <$> layoutTyFamInstDecl True ltfid tfid
 
   layoutAndLocateDataFamInsts
-    :: ToBriDocC (DataFamInstDecl GhcPs) (Located BriDocNumbered)
+    :: LDataFamInstDecl GhcPs -> ToBriDocM (Located BriDocNumbered)
   layoutAndLocateDataFamInsts ldfid@(L loc _) =
     L loc <$> layoutDataFamInstDecl ldfid
 
   -- Send to ExactPrint then remove unecessary whitespace
-  layoutDataFamInstDecl :: ToBriDoc DataFamInstDecl
+  layoutDataFamInstDecl :: LDataFamInstDecl -> ToBriDocM BriDocNumbered
   layoutDataFamInstDecl ldfid =
     fmap stripWhitespace <$> briDocByExactNoComment ldfid
 

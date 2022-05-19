@@ -142,6 +142,7 @@ layoutBriDocM = \case
         layoutWriteNewlineBlock
   BDPlain t -> layoutWriteAppend t
   BDAnnotationPrior bd -> do
+    -- data GenLocated l e = L l e
     -- getLoc         :: LocatedAn ann a -> SrcAnn ann
     -- ann            :: SrcAnn ann -> EpAnn ann
     -- ann            :: SrcSpanAnn' (EpAnn ann) -> EpAnn ann
