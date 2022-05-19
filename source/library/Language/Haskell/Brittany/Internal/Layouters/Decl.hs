@@ -8,6 +8,7 @@ module Language.Haskell.Brittany.Internal.Layouters.Decl where
 import qualified Data.Data
 import qualified Data.Foldable
 import qualified Data.Maybe
+import Data.Occurrences
 import qualified Data.Semigroup as Semigroup
 import qualified Data.Text as Text
 import GHC (AnnKeywordId(..), GenLocated(L))
@@ -57,19 +58,18 @@ layoutDecl d@(L loc decl) = case decl of
 
 layoutSig :: LSig GhcPs -> ToBriDocM BriDocNumbered
 layoutSig lsig@(L _loc sig) = case sig of
-  TypeSig _ names (HsWC _ (HsIB _ typ)) -> layoutNamesAndType Nothing names typ
+  TypeSig _ names (HsWC _ typ) -> layoutNamesAndType Nothing names typ
   InlineSig _ name (InlinePragma _ spec _arity phaseAct conlike) ->
     docWrapNode lsig $ do
       nameStr <- lrdrNameToTextAnn name
       specStr <- specStringCompat lsig spec
-      let
-        phaseStr = case phaseAct of
-          NeverActive -> "" -- not [] - for NOINLINE NeverActive is
-                                 -- in fact the default
-          AlwaysActive -> ""
-          ActiveBefore _ i -> "[~" ++ show i ++ "] "
-          ActiveAfter _ i -> "[" ++ show i ++ "] "
-          FinalActive -> error "brittany internal error: FinalActive"
+      let phaseStr = case phaseAct of
+            NeverActive      -> "" -- not [] - for NOINLINE NeverActive is
+                                   -- in fact the default
+            AlwaysActive     -> ""
+            ActiveBefore _ i -> "[~" ++ show i ++ "] "
+            ActiveAfter _ i  -> "[" ++ show i ++ "] "
+            FinalActive      -> error "brittany internal error: FinalActive"
       let
         conlikeStr = case conlike of
           FunLike -> ""
@@ -78,26 +78,30 @@ layoutSig lsig@(L _loc sig) = case sig of
         $ Text.pack ("{-# " ++ specStr ++ conlikeStr ++ phaseStr)
         <> nameStr
         <> Text.pack " #-}"
-  ClassOpSig _ False names (HsIB _ typ) -> layoutNamesAndType Nothing names typ
-  PatSynSig _ names (HsIB _ typ) ->
+  ClassOpSig _ False names typ -> layoutNamesAndType Nothing names typ
+  PatSynSig _ names typ ->
     layoutNamesAndType (Just "pattern") names typ
   _ -> briDocByExactNoComment lsig -- TODO
- where
-  layoutNamesAndType mKeyword names typ = docWrapNode lsig $ do
-    let
-      keyDoc = case mKeyword of
-        Just key -> [appSep $ docLitS key]
-        Nothing -> []
-    nameStrs <- names `forM` lrdrNameToTextAnn
-    let nameStr = Text.intercalate (Text.pack ", ") $ nameStrs
-    typeDoc <- docSharedWrapper layoutType typ
-    hasComments <- hasAnyCommentsBelow lsig
-    shouldBeHanging <-
-      mAsk <&> _conf_layout .> _lconfig_hangingTypeSignature .> confUnpack
-    if shouldBeHanging
-      then
-        docSeq
-          $ [ appSep
+  where
+    layoutNamesAndType
+      :: Maybe String
+      -> [LocatedAn NameAnn RdrName]
+      -> LHsSigType GhcPs
+      -> ToBriDocM BriDocNumbered
+    layoutNamesAndType mKeyword names typ = docWrapNode lsig $ do
+      let keyDoc = case mKeyword of
+            Just key -> [appSep $ docLitS key]
+            Nothing -> []
+      let nameStrs    = map lrdrNameToTextAnn names
+          nameStr     = Text.intercalate (Text.pack ", ") $ nameStrs
+          hasComments = hasAnyCommentsBelow lsig
+      typeDoc <- docSharedWrapper (layoutType . sig_body . unLoc) typ
+      shouldBeHanging <-
+        mAsk <&> _conf_layout .> _lconfig_hangingTypeSignature .> confUnpack
+      if shouldBeHanging
+        then
+          docSeq
+            [ appSep
             $ docWrapNodeRest lsig
             $ docSeq
             $ keyDoc
@@ -110,19 +114,19 @@ layoutSig lsig@(L _loc sig) = case sig of
                   ]
               ]
             ]
-      else layoutLhsAndType
-        hasComments
-        (appSep . docWrapNodeRest lsig . docSeq $ keyDoc <> [docLit nameStr])
-        "::"
-        typeDoc
+        else layoutLhsAndType
+          hasComments
+          (appSep . docWrapNodeRest lsig . docSeq $ keyDoc <> [docLit nameStr])
+          "::"
+          typeDoc
 
 specStringCompat
   :: MonadMultiWriter [BrittanyError] m => LSig GhcPs -> InlineSpec -> m String
 specStringCompat ast = \case
-  NoUserInline -> mTell [ErrorUnknownNode "NoUserInline" ast] $> ""
-  Inline -> pure "INLINE "
-  Inlinable -> pure "INLINABLE "
-  NoInline -> pure "NOINLINE "
+  NoUserInlinePrag -> mTell [ErrorUnknownNode "NoUserInline" ast] $> ""
+  Inline           -> pure "INLINE "
+  Inlinable        -> pure "INLINABLE "
+  NoInline         -> pure "NOINLINE "
 
 layoutGuardLStmt :: LStmt GhcPs (LHsExpr GhcPs) -> ToBriDocM BriDocNumbered
 layoutGuardLStmt lgstmt@(L _ stmtLR) = docWrapNode lgstmt $ case stmtLR of
@@ -171,7 +175,7 @@ layoutBind lbind@(L _ bind) = case bind of
     fmap Right $ docWrapNode lbind $ layoutPatSynBind patID lpat dir rpat
   _ -> Right <$> unknownNodeError "" lbind
 
-layoutIPBind :: LIPBind -> ToBriDocM BriDocNumbered
+layoutIPBind :: LIPBind GhcPs -> ToBriDocM BriDocNumbered
 layoutIPBind lipbind@(L _ bind) = case bind of
   IPBind _ (Right _)                    _    -> error "brittany internal error: IPBind Right"
   IPBind _ (Left (L _ (HsIPName name))) expr -> do
@@ -659,12 +663,13 @@ layoutPatSynBind name patSynDetails patDir rpat = do
 
 -- | Helper method for the left hand side of a pattern synonym
 layoutLPatSyn
-  :: Located (IdP GhcPs)
+  :: Occurrences AnnKeywordId ann
+  => LocatedAn ann (IdP GhcPs)
   -> HsPatSynDetails (Located (IdP GhcPs))
   -> ToBriDocM BriDocNumbered
-layoutLPatSyn name (PrefixCon vars) = do
-  docName <- lrdrNameToTextAnn name
-  names <- mapM lrdrNameToTextAnn vars
+layoutLPatSyn name (PrefixCon targs vars) = do
+  let docName = lrdrNameToTextAnn name
+      names   = map lrdrNameToTextAnn vars
   docSeq . fmap appSep $ docLit docName : (docLit <$> names)
 layoutLPatSyn name (InfixCon left right) = do
   leftDoc <- lrdrNameToTextAnn left
@@ -695,7 +700,7 @@ layoutPatSynWhere hs = case hs of
 -- TyClDecl
 --------------------------------------------------------------------------------
 
-layoutTyCl :: LTyClDecl -> ToBriDocM BriDocNumbered
+layoutTyCl :: LTyClDecl GhcPs -> ToBriDocM BriDocNumbered
 layoutTyCl ltycl@(L _loc tycl) = case tycl of
   SynDecl _ name vars fixity typ -> do
     -- hasTrailingParen <- hasAnnKeywordComment ltycl AnnCloseP
@@ -748,7 +753,7 @@ layoutSynDecl fixity wrapNodeRest name vars typ = do
   hasComments <- hasAnyCommentsConnected typ
   layoutLhsAndType hasComments sharedLhs "=" typeDoc
 
-layoutTyVarBndr :: Bool -> LHsTyVarBndr () -> ToBriDocM BriDocNumbered
+layoutTyVarBndr :: Bool -> LHsTyVarBndr () GhcPs -> ToBriDocM BriDocNumbered
 layoutTyVarBndr needsSep lbndr@(L _ bndr) = do
   docWrapNodePrior lbndr $ case bndr of
     UserTyVar _ _ name -> do
@@ -830,7 +835,7 @@ layoutHsTyPats pats = pats <&> \case
 --   Layout signatures and bindings using the corresponding layouters from the
 --   top-level. Layout the instance head, type family instances, and data family
 --   instances using ExactPrint.
-layoutClsInst :: LClsInstDecl -> ToBriDocM BriDocNumbered
+layoutClsInst :: LClsInstDecl GhcPs -> ToBriDocM BriDocNumbered
 layoutClsInst lcid@(L _ cid) = docLines
   [ layoutInstanceHead
   , docEnsureIndent BrIndentRegular
@@ -892,7 +897,7 @@ layoutClsInst lcid@(L _ cid) = docLines
     L loc <$> layoutDataFamInstDecl ldfid
 
   -- Send to ExactPrint then remove unecessary whitespace
-  layoutDataFamInstDecl :: LDataFamInstDecl -> ToBriDocM BriDocNumbered
+  layoutDataFamInstDecl :: LDataFamInstDecl GhcPs -> ToBriDocM BriDocNumbered
   layoutDataFamInstDecl ldfid =
     fmap stripWhitespace <$> briDocByExactNoComment ldfid
 

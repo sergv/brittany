@@ -621,4 +621,4 @@ briDocMToPPMInner m = do
   pure (x, errs, debugs)
 
 docSharedWrapper :: Monad m => (x -> m y) -> x -> m (m y)
-docSharedWrapper f x = return <$> f x
+docSharedWrapper f x = pure <$> f x
