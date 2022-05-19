@@ -257,7 +257,7 @@ createDerivingPar derivs mainDoc = do
 
 derivingClauseDoc :: LHsDerivingClause GhcPs -> ToBriDocM BriDocNumbered
 derivingClauseDoc (L _ (HsDerivingClause _ext mStrategy types)) = case types of
-  (L _ []) -> docSeq []
+  (L _ []) -> docEmpty
   (L _ ts) ->
     let
       tsLength = length ts
