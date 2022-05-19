@@ -305,24 +305,22 @@ createDetailsDoc consNameStr details = case details of
         , docForceSingleline
         $ docSeq
         $ List.intersperse docSeparator
-        $ fmap hsScaledThing args
-        <&> layoutType
+        $ layoutType . hsScaledThing <$> args
         ]
       leftIndented =
         docSetParSpacing
           . docAddBaseY BrIndentRegular
           . docPar (docLit consNameStr)
           . docLines
-          $ layoutType
-          <$> fmap hsScaledThing args
+          $ layoutType . hsScaledThing <$> args
       multiAppended = docSeq
         [ docLit consNameStr
         , docSeparator
-        , docSetBaseY $ docLines $ layoutType <$> fmap hsScaledThing args
+        , docSetBaseY $ docLines $ layoutType . hsScaledThing <$> args
         ]
       multiIndented = docSetBaseY $ docAddBaseY BrIndentRegular $ docPar
         (docLit consNameStr)
-        (docLines $ layoutType <$> fmap hsScaledThing args)
+        (docLines $ layoutType . hsScaledThing <$> args)
     case indentPolicy of
       IndentPolicyLeft -> docAlt [singleLine, leftIndented]
       IndentPolicyMultiple -> docAlt [singleLine, multiAppended, leftIndented]
