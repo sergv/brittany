@@ -68,8 +68,8 @@ processDefault x = do
 -- not handled by brittany yet). Useful when starting implementing new
 -- syntactic constructs when children are not handled yet.
 briDocByExact
-  :: ExactPrint ast
-  => Located ast
+  :: ExactPrint (LocatedAn ann ast)
+  => LocatedAn ann ast
   -> ToBriDocM BriDocNumbered
 briDocByExact = (`docExt` True)
 
@@ -79,8 +79,8 @@ briDocByExact = (`docExt` True)
 -- of its surroundings as layouted by brittany. But there are safe uses of
 -- this, e.g. for any top-level declarations.
 briDocByExactNoComment
-  :: ExactPrint ast
-  => Located ast
+  :: ExactPrint (LocatedAn ann ast)
+  => LocatedAn ann ast
   -> ToBriDocM BriDocNumbered
 briDocByExactNoComment = (`docExt` False)
 
@@ -298,8 +298,8 @@ docLitS :: String -> ToBriDocM BriDocNumbered
 docLitS = docLit . Text.pack
 
 docExt
-  :: ExactPrint ast
-  => Located ast
+  :: ExactPrint (LocatedAn ann ast)
+  => LocatedAn ann ast
   -> Bool
   -> ToBriDocM BriDocNumbered
 docExt x shouldAddComment = allocateNode $ BDFExternal

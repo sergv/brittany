@@ -106,83 +106,89 @@ instance Bifunctor ImportStatementData where
   bimap f g (ImportStatementData xs ys zs) =
     ImportStatementData (map f xs) (map f ys) (g zs)
 
-lineDelta :: EpAnn ann -> Maybe DeltaPos
+lineDelta :: EpAnn ann -> Maybe Int
 lineDelta x = case anchor_op (entry x) of
-  UnchangedAnchor -> Nothing
-  MovedAnchor x   -> Just x
+  UnchangedAnchor                      -> Nothing
+  MovedAnchor SameLine{}               -> Just 0
+  MovedAnchor DifferentLine{deltaLine} -> Just deltaLine
 
 transformToCommentedImport
-  :: [ImportDecl GhcPs] -> [CommentedImport']
-transformToCommentedImport is = do
-  for is $ \(L (a :: SrcSpanAnn' (EpAnn AnnListItem)) ImportDecl{ideclExt, ideclName}) -> do
+  :: [LImportDecl GhcPs] -> [CommentedImport']
+transformToCommentedImport is =
+  flip concatMap is $ \(L (a :: SrcSpanAnn' (EpAnn AnnListItem)) ImportDecl{ideclExt, ideclName}) ->
     let comments :: Maybe EpAnnComments
         comments = case ann a of
           EpAnn{comments} -> Just comments
           EpAnnNotUsed    -> Nothing
 
-        commentsBefore :: [LEpaComment]
-        commentsBefore = case comments of
+        _commentsBefore :: [LEpaComment]
+        _commentsBefore = case comments of
           Just EpaComments{priorComments} -> priorComments
           Just EpaCommentsBalanced{}      -> error $
-            "Unexpected EpaCommentsBalanced that shold never be created by parser:\n" ++
-            show comments
+            "Unexpected EpaCommentsBalanced that shold never be created by parser:\n" ++ show (locA a)
           Nothing                         -> []
 
+        res :: [CommentedImport']
+        res = []
+    in
+    res
 
-    let x :: EpAnn EpAnnImportDecl
-        x = ideclExt
-
-        y    :: GenLocated (SrcAnn AnnListItem) ModuleName
-        ann' :: SrcAnn AnnListItem
-        y'   :: ModuleName
-        y@(L ann' y') = ideclName
-    _
-  _ <- case is of
-    [L (ann :: SrcSpanAnn' (EpAnn AnnListItem)) ImportDecl{ideclExt, ideclName}] -> do
-      let x :: EpAnn EpAnnImportDecl
-          x = ideclExt
-          y    :: GenLocated (SrcAnn AnnListItem) ModuleName
-          ann' :: SrcAnn AnnListItem
-          y'   :: ModuleName
-          y@(L ann' y') = ideclName
-      undefined
-    _ -> undefined
-  undefined $ concat $ concatMap convertComment finalAcc : finalList
+    -- -- let x :: EpAnn EpAnnImportDecl
+    -- --     x = ideclExt
+    -- --
+    -- --     y    :: GenLocated (SrcAnn AnnListItem) ModuleName
+    -- --     ann' :: SrcAnn AnnListItem
+    -- --     y'   :: ModuleName
+    -- --     y@(L ann' y') = ideclName
+  -- -- -- _
+  --
+  -- _ <- case is of
+  --   [L (ann :: SrcSpanAnn' (EpAnn AnnListItem)) ImportDecl{ideclExt, ideclName}] -> do
+  --     let x :: EpAnn EpAnnImportDecl
+  --         x = ideclExt
+  --         y    :: GenLocated (SrcAnn AnnListItem) ModuleName
+  --         ann' :: SrcAnn AnnListItem
+  --         y'   :: ModuleName
+  --         y@(L ann' y') = ideclName
+  --     undefined
+  --   _ -> undefined
+  --
+  -- undefined $ concat $ concatMap convertComment finalAcc : finalList
 
 sortCommentedImports
-  :: forall a b.
-     [CommentedImport a (ImportDecl b)]
-  -> [CommentedImport a (ImportDecl b)]
+  :: forall a.
+     [CommentedImport a (ImportDecl GhcPs)]
+  -> [CommentedImport a (ImportDecl GhcPs)]
 sortCommentedImports =
   concatMap unpackImports . concatMap mergeGroups . map (fmap (sortGroups)) . groupify
   where
     unpackImports
-      :: CommentedImport a (ImportDecl b)
-      -> [CommentedImport a (ImportDecl b)]
+      :: CommentedImport a (ImportDecl GhcPs)
+      -> [CommentedImport a (ImportDecl GhcPs)]
     unpackImports = \case
       l@EmptyLine -> [l]
       l@IndependentComment{} -> [l]
       ImportStatement r ->
         map IndependentComment (isdCommentsBefore r) ++ [ImportStatement r]
     mergeGroups
-      :: Either (CommentedImport a (ImportDecl b)) [ImportStatementData a (ImportDecl b)]
-      -> [CommentedImport a (ImportDecl b)]
+      :: Either (CommentedImport a (ImportDecl GhcPs)) [ImportStatementData a (ImportDecl GhcPs)]
+      -> [CommentedImport a (ImportDecl GhcPs)]
     mergeGroups = \case
       Left  x -> [x]
       Right y -> ImportStatement <$> y
     sortGroups
-      :: [ImportStatementData a (ImportDecl b)]
-      -> [ImportStatementData a (ImportDecl b)]
+      :: [ImportStatementData a (ImportDecl GhcPs)]
+      -> [ImportStatementData a (ImportDecl GhcPs)]
     sortGroups =
       List.sortOn (moduleNameString . unLoc . ideclName . isdImport)
     groupify
-      :: [CommentedImport a (ImportDecl b)]
-      -> [Either (CommentedImport a (ImportDecl b)) [ImportStatementData a (ImportDecl b)]]
+      :: [CommentedImport a (ImportDecl GhcPs)]
+      -> [Either (CommentedImport a (ImportDecl GhcPs)) [ImportStatementData a (ImportDecl GhcPs)]]
     groupify cs = go [] cs
       where
-        go :: [ImportStatementData a (ImportDecl b)]
-           -> [CommentedImport a (ImportDecl b)]
-           -> [Either (CommentedImport a (ImportDecl b)) [ImportStatementData a (ImportDecl b)]]
+        go :: [ImportStatementData a (ImportDecl GhcPs)]
+           -> [CommentedImport a (ImportDecl GhcPs)]
+           -> [Either (CommentedImport a (ImportDecl GhcPs)) [ImportStatementData a (ImportDecl GhcPs)]]
         go [] = \case
           l@EmptyLine : rest            -> Left l : go [] rest
           l@IndependentComment{} : rest -> Left l : go [] rest
