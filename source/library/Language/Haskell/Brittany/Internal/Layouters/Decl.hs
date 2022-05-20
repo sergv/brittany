@@ -698,33 +698,29 @@ layoutPatSynWhere hs = case hs of
 layoutTyCl :: ToBriDoc TyClDecl
 layoutTyCl ltycl@(L _loc tycl) = case tycl of
   SynDecl _ name vars fixity typ -> do
-    let
-      isInfix = case fixity of
-        Prefix -> False
-        Infix -> True
     -- hasTrailingParen <- hasAnnKeywordComment ltycl AnnCloseP
     -- let parenWrapper = if hasTrailingParen
     --       then appSep . docWrapNodeRest ltycl
     --       else id
     let wrapNodeRest = docWrapNodeRest ltycl
     docWrapNodePrior ltycl
-      $ layoutSynDecl isInfix wrapNodeRest name (hsq_explicit vars) typ
+      $ layoutSynDecl fixity wrapNodeRest name (hsq_explicit vars) typ
   DataDecl _ext name tyVars _ dataDefn ->
     layoutDataDecl ltycl name tyVars dataDefn
   _ -> briDocByExactNoComment ltycl
 
 layoutSynDecl
-  :: Bool
+  :: LexicalFixity
   -> (ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered)
   -> Located (IdP GhcPs)
   -> [LHsTyVarBndr () GhcPs]
   -> LHsType GhcPs
   -> ToBriDocM BriDocNumbered
-layoutSynDecl isInfix wrapNodeRest name vars typ = do
+layoutSynDecl fixity wrapNodeRest name vars typ = do
   nameStr <- lrdrNameToTextAnn name
   let
-    lhs = appSep . wrapNodeRest $ if isInfix
-      then do
+    lhs = appSep . wrapNodeRest $ case fixity of
+      Infix -> do
         let (a : b : rest) = vars
         hasOwnParens <- hasAnnKeywordComment a AnnOpenP
         -- This isn't quite right, but does give syntactically valid results
@@ -740,7 +736,7 @@ layoutSynDecl isInfix wrapNodeRest name vars typ = do
              ]
           ++ [ docParenR | needsParens ]
           ++ fmap (layoutTyVarBndr True) rest
-      else
+      Prefix ->
         docSeq
         $ [ docLitS "type"
           , docSeparator
