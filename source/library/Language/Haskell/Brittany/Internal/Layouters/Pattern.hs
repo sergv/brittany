@@ -2,7 +2,10 @@
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
-module Language.Haskell.Brittany.Internal.Layouters.Pattern (layoutPat) where
+module Language.Haskell.Brittany.Internal.Layouters.Pattern
+  ( layoutPat
+  , colsWrapPat
+  ) where
 
 import Data.Bifunctor
 import qualified Data.Foldable as Foldable

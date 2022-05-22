@@ -22,7 +22,6 @@ import Language.Haskell.GHC.ExactPrint (ExactPrint)
 
 layoutDataDecl
   :: ( ExactPrint (LocatedAn ann (TyClDecl GhcPs))
-     , ExactPrint (LocatedAn ann RdrName)
      , Occurrences AnnKeywordId ann
      , Occurrences AnnKeywordId ann'
      )
@@ -267,9 +266,9 @@ derivingClauseDoc (L _ (HsDerivingClause _ext mStrategy types@(L _ ts))) =
     , docSeparator
     , docWrapNodeRest types
     $ case ts of
-        DctSingle _ext typ -> layoutType $ sig_body $ unLoc typ
+        DctSingle _ext typ -> layoutSigType typ
         DctMulti  _ext typ -> docSeq $
-          [docLitS "("] ++ List.intersperse docCommaSep (map (layoutType . sig_body . unLoc) typ) ++ [docLitS ")"]
+          [docLitS "("] ++ List.intersperse docCommaSep (map layoutSigType  typ) ++ [docLitS ")"]
     , rhsStrategy
     ]
     where
@@ -284,7 +283,7 @@ derivingClauseDoc (L _ (HsDerivingClause _ext mStrategy types@(L _ ts))) =
           (docLitS " newtype", docEmpty)
         Just (L _ (ViaStrategy (XViaStrategyPs _ann viaType))) ->
           ( docEmpty
-          , docSeq [docLitS " via", docSeparator, layoutType $ sig_body $ unLoc viaType]
+          , docSeq [docLitS " via", docSeparator, layoutSigType viaType]
           )
 
 docDeriving :: ToBriDocM BriDocNumbered

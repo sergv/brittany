@@ -93,7 +93,7 @@ layoutStmt lstmt@(L _ stmt) = do
             $ docPar
                 (docLitS "let")
                 (docSetBaseAndIndent $ docLines $ return <$> bindDocs)
-    RecStmt _ stmts _ _ _ _ _ -> runFilteredAlternative $ do
+    RecStmt _ (L _ stmts) _ _ _ _ _ -> runFilteredAlternative $ do
       -- rec stmt1
       --     stmt2
       --     stmt3

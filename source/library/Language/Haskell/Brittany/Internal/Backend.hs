@@ -1,6 +1,7 @@
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE NamedFieldPuns      #-}
 {-# LANGUAGE NoImplicitPrelude   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -14,6 +15,7 @@ import qualified Data.Semigroup as Semigroup
 import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy.Builder as Text.Builder
+import Data.Traversable
 import qualified GHC.OldList as List
 import Language.Haskell.Brittany.Internal.BackendUtils
 import Language.Haskell.Brittany.Internal.Config.Types
@@ -22,8 +24,7 @@ import Language.Haskell.Brittany.Internal.PreludeUtils
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.Brittany.Internal.Utils
 import qualified Language.Haskell.GHC.ExactPrint.Types as ExactPrint.Types
-
-
+import GHC.Parser.Annotation
 
 type ColIndex = Int
 
@@ -60,7 +61,6 @@ data ColBuildState = ColBuildState
 
 type LayoutConstraints m
   = ( MonadMultiReader Config m
-    , MonadMultiReader ExactPrint.Types.Anns m
     , MonadMultiWriter Text.Builder.Builder m
     , MonadMultiWriter (Seq String) m
     , MonadMultiState LayoutState m
@@ -75,13 +75,13 @@ layoutBriDocM = \case
     layoutRemoveIndentLevelLinger
     layoutWriteAppend t
   BDSeq list -> do
-    list `forM_` layoutBriDocM
+    traverse_ layoutBriDocM list
   -- in this situation, there is nothing to do about cols.
   -- i think this one does not happen anymore with the current simplifications.
   -- BDCols cSig list | BDPar sameLine lines <- List.last list ->
   --   alignColsPar $ BDCols cSig (List.init list ++ [sameLine]) : lines
   BDCols _ list -> do
-    list `forM_` layoutBriDocM
+    traverse_ layoutBriDocM list
   BDSeparator -> do
     layoutAddSepSpace
   BDAddBaseY indent bd -> do
@@ -174,9 +174,10 @@ layoutBriDocM = \case
       [] -> moveToExactLocationAction
       ps -> do
         -- layoutResetSepSpace
-        for_ ps $ \(ExactPrint.Types.Comment comment _ _, ExactPrint.Types.DP (y, x)) ->
+        for_ ps $ \(ExactPrint.Types.Comment comment _ _ _, delta) ->
           when (comment /= "(" && comment /= ")") $ do
-            let commentLines = Text.lines $ Text.pack $ comment
+            let commentLines = Text.lines $ Text.pack comment
+                (x, y)       = unpackDeltaPos delta
             case comment of
               -- Evil hack for CPP.
               '#': _ -> layoutMoveToCommentPos y (-999) (length commentLines)
@@ -191,14 +192,14 @@ layoutBriDocM = \case
   BDAnnotationKW _keyword bd -> do
     layoutBriDocM bd
     let comments = []
-    for_ comments $ \(ExactPrint.Types.Comment comment _ _, ExactPrint.Types.DP (y, x)) ->
+    for_ comments $ \(ExactPrint.Types.Comment comment _ _ _, delta) ->
       when (comment /= "(" && comment /= ")") $ do
         let commentLines = Text.lines $ Text.pack comment
+            (x, y)       = unpackDeltaPos delta
         -- evil hack for CPP:
         case comment of
-          ('#' : _) ->
-            layoutMoveToCommentPos y (-999) (length commentLines)
-          _ -> layoutMoveToCommentPos y x (length commentLines)
+          '#' : _ -> layoutMoveToCommentPos y (-999) (length commentLines)
+          _       -> layoutMoveToCommentPos y x (length commentLines)
         -- fixedX <- fixMoveToLineByIsNewline x
         -- replicateM_ fixedX layoutWriteNewline
         -- layoutMoveToIndentCol y
@@ -208,11 +209,12 @@ layoutBriDocM = \case
     layoutBriDocM bd
     let followingComments = []
     case followingComments of
-      [] -> pure ()
+      []       -> pure ()
       comments -> do
-        for_ comments $ \(ExactPrint.Types.Comment comment _ _, ExactPrint.Types.DP (y, x)) ->
+        for_ comments $ \(ExactPrint.Types.Comment comment _ _ _, delta) ->
           when (comment /= "(" && comment /= ")") $ do
             let commentLines = Text.lines $ Text.pack comment
+                (x, y)       = unpackDeltaPos delta
             case comment of
               -- Evil hack for CPP
               '#': _ -> layoutMoveToCommentPos y (-999) 1

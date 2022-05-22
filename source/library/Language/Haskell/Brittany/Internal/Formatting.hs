@@ -75,16 +75,14 @@ format config fname input = do
     parseModuleFromString ghcOptions fname (cppCheckFunc cppMode) (T.unpack input')
   case parseResult of
     Left err -> pure $ Left $ ParseError err
-    Right (anns, parsedSource, (hasCPP, cppWarns)) -> do
+    Right (parsedSource, (hasCPP, cppWarns)) -> do
       -- TODO: collect module config here and merge with values from global config
       let moduleConf = config
       let disableFormatting = confUnpack (_conf_disable_formatting moduleConf)
 
       let astLog =
             if confUnpack (_dconf_dump_ast_full (_conf_debug config))
-            then
-              let val = printTreeWithCustom 100 (customLayouterF anns) parsedSource
-              in Seq.singleton $ "---- ast ----\n" ++ show val
+            then Seq.singleton $ "---- ast ----\n" ++ show (astToDoc parsedSource)
             else Seq.empty
 
       (formatted, errs, logs, hasChanges) <-
@@ -92,14 +90,14 @@ format config fname input = do
           | disableFormatting -> do
             pure (input, [], Seq.empty, False)
           | exactprintOnly -> do
-            let r = T.pack $ ExactPrint.exactPrint parsedSource anns
+            let r = T.pack $ ExactPrint.exactPrint parsedSource
             pure (r, [], Seq.empty, r /= input)
           | otherwise -> do
             let omitCheck = confUnpack (_econf_omit_output_valid_check (_conf_errorHandling moduleConf))
             (outRaw, ews, logs) <-
               if hasCPP || omitCheck
-              then pure $ pPrintModule moduleConf anns parsedSource
-              else pPrintModuleAndCheck moduleConf anns parsedSource
+              then pure $ pPrintModule moduleConf parsedSource
+              else pPrintModuleAndCheck moduleConf parsedSource
             let out | workAroundCPP = uncommmentPreprocessor outRaw
                     | otherwise     = outRaw
             out' <-

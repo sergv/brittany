@@ -1,4 +1,6 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts  #-}
+{-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
 module Language.Haskell.Brittany.Internal.BackendUtils where
@@ -9,15 +11,13 @@ import qualified Data.Semigroup as Semigroup
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy.Builder as Text.Builder
 import qualified GHC.OldList as List
+import GHC.Parser.Annotation
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.PreludeUtils
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.Brittany.Internal.Utils
-import Language.Haskell.GHC.ExactPrint.Types (AnnKey, Annotation)
 import qualified Language.Haskell.GHC.ExactPrint.Types as ExactPrint
-
-
 
 traceLocal :: MonadMultiState LayoutState m => a -> m ()
 traceLocal _ = return ()
@@ -334,25 +334,25 @@ layoutAddSepSpace = do
     { _lstate_addSepSpace = Just $ fromMaybe 1 $ _lstate_addSepSpace state
     }
 
--- TODO: when refactoring is complete, the other version of this method
--- can probably be removed.
-moveToExactAnn
-  :: ( MonadMultiWriter Text.Builder.Builder m
-     , MonadMultiState LayoutState m
-     , MonadMultiReader (Map AnnKey Annotation) m
-     )
-  => AnnKey
-  -> m ()
-moveToExactAnn annKey = do
-  traceLocal ("moveToExactAnn", annKey)
-  anns <- mAsk
-  case Map.lookup annKey anns of
-    Nothing -> return ()
-    Just ann -> do
-      -- curY <- mGet <&> _lstate_curY
-      let ExactPrint.DP (y, _x) = ExactPrint.annEntryDelta ann
-      -- mModify $ \state -> state { _lstate_addNewline = Just x }
-      moveToColumn y
+-- -- TODO: when refactoring is complete, the other version of this method
+-- -- can probably be removed.
+-- moveToExactAnn
+--   :: ( MonadMultiWriter Text.Builder.Builder m
+--      , MonadMultiState LayoutState m
+--      , MonadMultiReader (Map AnnKey Annotation) m
+--      )
+--   => AnnKey
+--   -> m ()
+-- moveToExactAnn annKey = do
+--   traceLocal ("moveToExactAnn", annKey)
+--   anns <- mAsk
+--   case Map.lookup annKey anns of
+--     Nothing -> return ()
+--     Just ann -> do
+--       -- curY <- mGet <&> _lstate_curY
+--       let ExactPrint.DP (y, _x) = ExactPrint.annEntryDelta ann
+--       -- mModify $ \state -> state { _lstate_addNewline = Just x }
+--       moveToColumn y
 
 moveToColumn :: MonadMultiState LayoutState m => Int -> m ()
 moveToColumn y = mModify $ \state ->
@@ -371,11 +371,19 @@ moveToColumn y = mModify $ \state ->
       , _lstate_commentCol = Nothing
       }
 
+unpackDeltaPos :: DeltaPos -> (Int, Int)
+unpackDeltaPos = \case
+  SameLine{deltaColumn}                 -> (0, deltaColumn)
+  DifferentLine{deltaLine, deltaColumn} -> (deltaLine, deltaColumn)
+
 ppmMoveToExactLoc
-  :: MonadMultiWriter Text.Builder.Builder m => ExactPrint.DeltaPos -> m ()
-ppmMoveToExactLoc (ExactPrint.DP (x, y)) = do
-  mTell $ stimes' x $ Text.Builder.singleton '\n'
-  mTell $ stimes' y $ Text.Builder.singleton ' '
+  :: MonadMultiWriter Text.Builder.Builder m => DeltaPos -> m ()
+ppmMoveToExactLoc = \case
+  SameLine{deltaColumn} ->
+    mTell $ stimes' deltaColumn $ Text.Builder.singleton ' '
+  DifferentLine{deltaLine, deltaColumn} -> do
+    mTell $ stimes' deltaLine $ Text.Builder.singleton '\n'
+    mTell $ stimes' deltaColumn $ Text.Builder.singleton ' '
 
 layoutIndentRestorePostComment
   :: (MonadMultiState LayoutState m, MonadMultiWriter Text.Builder.Builder m)

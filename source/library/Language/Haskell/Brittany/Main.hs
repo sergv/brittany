@@ -13,6 +13,7 @@ import qualified Data.Semigroup as Semigroup
 import qualified Data.Text.IO as TIO
 import GHC (GenLocated(L), SrcSpan)
 import qualified GHC.OldList as List
+import GHC.Parser.Annotation (SrcSpanAnn'(locA))
 import GHC.Utils.Outputable (Outputable(..), showSDocUnsafe)
 import Language.Haskell.Brittany.Internal.Config
 import Language.Haskell.Brittany.Internal.Config.Types
@@ -244,7 +245,7 @@ classifyError
 classifyError = \case
   ErrorMacroConfig x y             -> ([(x, y)], mempty, mempty, mempty)
   LayoutWarning msg                -> (mempty, [msg], mempty, mempty)
-  ErrorUnknownNode msg (L loc ast) -> (mempty, mempty, [(msg, loc, astToDoc ast)] , mempty)
+  ErrorUnknownNode msg (L loc ast) -> (mempty, mempty, [(msg, locA loc, astToDoc ast)] , mempty)
   ErrorOutputCheck msg             -> (mempty, mempty, mempty, [msg])
 
 -- | The main IO parts for the default mode of operation, and after commandline

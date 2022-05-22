@@ -6,10 +6,10 @@
 module Language.Haskell.Brittany.Internal
   ( pPrintModule
   , pPrintModuleAndCheck
-  , getTopLevelDeclNameMap
   ) where
 
 import qualified Control.Monad.Trans.MultiRWS.Strict as MultiRWSS
+import Data.Foldable
 import Data.HList.HList
 import qualified Data.Map as Map
 import qualified Data.Semigroup as Semigroup
@@ -44,47 +44,35 @@ import Language.Haskell.Brittany.Internal.Utils
 import qualified Language.Haskell.GHC.ExactPrint as ExactPrint
 import qualified Language.Haskell.GHC.ExactPrint.Types as ExactPrint
 
-getTopLevelDeclNameMap :: GHC.ParsedSource -> TopLevelDeclNameMap
-getTopLevelDeclNameMap (L _ HsModule{hsmodDecls}) =
-  TopLevelDeclNameMap $ Map.fromList
-    [ (ExactPrint.mkAnnKey decl, name)
-    | decl <- hsmodDecls
-    , (name : _) <- [getDeclBindingNames decl]
-    ]
-
 -- BrittanyErrors can be non-fatal warnings, thus both are returned instead
 -- of an Either.
 -- This should be cleaned up once it is clear what kinds of errors really
 -- can occur.
 pPrintModule
   :: Config
-  -> ExactPrint.Anns
   -> GHC.ParsedSource
   -> (Text, [BrittanyError], Seq String)
-pPrintModule conf anns parsedModule =
-  let
+pPrintModule conf parsedModule =
+  (TL.toStrict (TLB.toLazyText out), errs, logs)
+  where
     ((out, errs), logs) =
       runIdentity
         $ MultiRWSS.runMultiRWSTNil
         $ MultiRWSS.withMultiWriterAW
         $ MultiRWSS.withMultiWriterAW
         $ MultiRWSS.withMultiWriterW
-        $ MultiRWSS.withMultiReader anns
         $ MultiRWSS.withMultiReader conf
-        $ MultiRWSS.withMultiReader (extractToplevelAnns parsedModule anns)
         $ ppModule parsedModule
-  in (TL.toStrict (TLB.toLazyText out), errs, logs)
 
 -- | Additionally checks that the output can be parssed again,
 -- appending an error if it does not.
 pPrintModuleAndCheck
   :: Config
-  -> ExactPrint.Anns
   -> GHC.ParsedSource
   -> IO (Text, [BrittanyError], Seq String)
-pPrintModuleAndCheck conf anns parsedModule = do
+pPrintModuleAndCheck conf parsedModule = do
   let ghcOptions = runIdentity (_options_ghc (_conf_forward conf))
-  let (output, errs, logs) = pPrintModule conf anns parsedModule
+  let (output, errs, logs) = pPrintModule conf parsedModule
   parseResult <- parseModuleFromString
     ghcOptions
     "output"
@@ -95,89 +83,47 @@ pPrintModuleAndCheck conf anns parsedModule = do
         Right{}  -> []
   pure (output, errs', logs)
 
-toLocal :: Config -> ExactPrint.Anns -> PPMLocal a -> PPM a
-toLocal conf anns m = do
-  (x, write) <-
-    lift $ MultiRWSS.runMultiRWSTAW (conf :+: anns :+: HNil) HNil $ m
-  MultiRWSS.mGetRawW >>= \w -> MultiRWSS.mPutRawW (w `mappend` write)
-  pure x
+-- toLocal :: Config -> PPMLocal a -> PPM a
+-- toLocal conf m = do
+--   (x, write) <-
+--     lift $ MultiRWSS.runMultiRWSTAW (conf :+: HNil) HNil $ m
+--   MultiRWSS.mGetRawW >>= \w -> MultiRWSS.mPutRawW (w `mappend` write)
+--   pure x
 
 ppModule :: GenLocated SrcSpan HsModule -> PPM ()
 ppModule lmod@(L _ HsModule{hsmodAnn, hsmodDecls}) = do
-  let defaultAnns = hsModAnn
-  -- (defaultAnns :: Map ExactPrint.AnnKey ExactPrint.Annotation) <- do
-  --   ToplevelAnns anns <- mAsk
-  --   let annKey = ExactPrint.mkAnnKey lmod
-  --   let annMap = Map.findWithDefault Map.empty annKey anns
-  --
-  --   let annMap = hsModAnn
-  --
-  --   let isEof = (== ExactPrint.AnnEofPos)
-  --   let overAnnsDP f a = a { ExactPrint.annsDP = f $ ExactPrint.annsDP a }
-  --   pure $ fmap (overAnnsDP . filter $ isEof . fst) annMap
-
-  (post :: [(ExactPrint.KeywordId, ExactPrint.DeltaPos)]) <- ppPreamble lmod
-  hsmodDecls `forM_` \decl -> do
-    let declAnnKey = ExactPrint.mkAnnKey decl
-
-    filteredAnns <- mAsk <&> \(ToplevelAnns annMap) ->
-      Map.union defaultAnns $ Map.findWithDefault Map.empty declAnnKey annMap
-
+  ppPreamble lmod
+  for_ hsmodDecls $ \decl -> do
     (config :: CConfig Identity) <- mAsk
 
     let config' :: CConfig Identity
         config' = config
+        exactprintOnly :: Bool
+        exactprintOnly = confUnpack (_conf_roundtrip_exactprint_only config')
 
+    bd <- if exactprintOnly
+      then briDocMToPPM $ briDocByExactNoComment decl
+      else do
+        (r, errs, debugs) <- briDocMToPPMInner $ layoutDecl decl
+        mTell debugs
+        mTell errs
+        if null errs
+          then pure r
+          else briDocMToPPM $ briDocByExactNoComment decl
+    layoutBriDoc bd
 
-    let exactprintOnly :: Bool
-        exactprintOnly = config' & _conf_roundtrip_exactprint_only & confUnpack
-    toLocal config' filteredAnns $ do
-      bd <- if exactprintOnly
-        then briDocMToPPM $ briDocByExactNoComment decl
-        else do
-          (r, errs, debugs) <- briDocMToPPMInner $ layoutDecl decl
-          mTell debugs
-          mTell errs
-          if null errs
-            then pure r
-            else briDocMToPPM $ briDocByExactNoComment decl
-      layoutBriDoc bd
-
-  let
-    finalComments = filter
-      (fst .> \case
-        ExactPrint.AnnComment{} -> True
-        _ -> False
-      )
-      post
-  post `forM_` \case
-    (ExactPrint.AnnComment (ExactPrint.Comment cmStr _ _), l) -> do
-      ppmMoveToExactLoc l
-      mTell $ TLB.fromString cmStr
-    (ExactPrint.AnnEofPos, (ExactPrint.DP (eofZ, eofX))) ->
-      let
-        folder (acc, _) (kw, ExactPrint.DP (y, x)) = case kw of
-          ExactPrint.AnnComment cm | span <- ExactPrint.commentIdentifier cm ->
-            ( acc + y + GHC.srcSpanEndLine span - GHC.srcSpanStartLine span
-            , x + GHC.srcSpanEndCol span - GHC.srcSpanStartCol span
-            )
-          _ -> (acc + y, x)
-        (cmY, cmX) = foldl' folder (0, 0) finalComments
-      in ppmMoveToExactLoc $ ExactPrint.DP (eofZ - cmY, eofX - cmX)
-    _ -> return ()
-
-getDeclBindingNames :: LHsDecl GhcPs -> [String]
-getDeclBindingNames (L _ decl) = case decl of
-  SigD _ (TypeSig _ ns _) -> ns <&> \(L _ n) -> Text.unpack (rdrNameToText n)
-  ValD _ (FunBind _ (L _ n) _ _) -> [Text.unpack $ rdrNameToText n]
-  _ -> []
+-- getDeclBindingNames :: LHsDecl GhcPs -> [String]
+-- getDeclBindingNames (L _ decl) = case decl of
+--   SigD _ (TypeSig _ ns _) -> ns <&> \(L _ n) -> Text.unpack (rdrNameToText n)
+--   ValD _ (FunBind _ (L _ n) _ _) -> [Text.unpack $ rdrNameToText n]
+--   _ -> []
 
 
 -- Prints the information associated with the module annotation
 -- This includes the imports
 ppPreamble
   :: GenLocated SrcSpan HsModule
-  -> PPM [(ExactPrint.KeywordId, ExactPrint.DeltaPos)]
+  -> PPM ()
 ppPreamble lmod@(L loc m@HsModule{hsmodAnn, hsmodDecls}) = do
   --  let filteredAnns = hsmodAnn
   -- filteredAnns <- mAsk <&> \(ToplevelAnns annMap) ->
@@ -213,13 +159,13 @@ ppPreamble lmod@(L loc m@HsModule{hsmodAnn, hsmodDecls}) = do
   --       in (filteredAnns'', post')
 
   if shouldReformatPreamble
-    then toLocal config filteredAnns' $ withTransformedAnns lmod $ do
+    then do
       briDoc <- briDocMToPPM $ layoutModule lmod
       layoutBriDoc briDoc
     else
       let emptyModule = L loc m { hsmodDecls = [] }
-      in MultiRWSS.withMultiReader filteredAnns' $ processDefault emptyModule
-  pure post
+      in processDefault emptyModule
+  pure ()
 
 layoutBriDoc :: BriDocNumbered -> PPMLocal ()
 layoutBriDoc briDoc = do

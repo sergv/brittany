@@ -11,7 +11,6 @@ module Language.Haskell.Brittany.Internal.Layouters.Module.Tests (tests) where
 import Prelude hiding (mod)
 
 import Data.Bifunctor
-import qualified Data.Map.Strict as M
 import Test.Tasty
 import Test.Tasty.HUnit
 
@@ -24,24 +23,19 @@ import Language.Haskell.Brittany.Internal.ParseModule
 import qualified Language.Haskell.GHC.ExactPrint.Types as ExactPrint
 
 transformToCommentedImportSimplified
-  :: ExactPrint.Anns
-  -> [LImportDecl GhcPs]
+  :: [LImportDecl GhcPs]
   -> [CommentedImport String ModuleName]
-transformToCommentedImportSimplified anns is
-  = map (bimap (ExactPrint.commentContents . fst) (unLoc . ideclName))
-  $ transformToCommentedImport
-  $ map (\x -> (M.lookup (ExactPrint.mkAnnKey x) anns, unLoc x)) is
+transformToCommentedImportSimplified
+  = map (bimap ExactPrint.commentContents (unLoc . ideclName))
+  . transformToCommentedImport
 
 -- Morally pure... (who believes this anyway?)
-parseImports :: String -> IO (ExactPrint.Anns, [LImportDecl GhcPs])
+parseImports :: String -> IO [LImportDecl GhcPs]
 parseImports source = do
   res <- parseModuleFromString [] "<brittany test suite input>" (\_ -> pure (Right ())) source
   case res of
-    Left err -> error err
-    Right (anns, mod, ()) -> pure (anns, hsmodImports (unLoc mod))
-
-instance Show ModuleName where
-  show = moduleNameString
+    Left err        -> error err
+    Right (mod, ()) -> pure $ hsmodImports $ unLoc mod
 
 tests :: TestTree
 tests = testGroup "transformToCommentedImport"
@@ -218,7 +212,7 @@ tests = testGroup "transformToCommentedImport"
   where
     (==>) :: String -> [CommentedImport String ModuleName] -> Assertion
     (==>) src expected = do
-      (anns, imports) <- parseImports src
-      let actual = transformToCommentedImportSimplified anns imports
+      imports <- parseImports src
+      let actual = transformToCommentedImportSimplified imports
       assertEqual "Trasformed imports differ" expected actual
 

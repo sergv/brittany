@@ -194,7 +194,6 @@ test-suite brittany-test-suite
   build-depends:
     , base
     , brittany
-    , containers
     , directory ^>= 1.3
     , filepath
     , ghc

@@ -11,7 +11,7 @@ import qualified Control.Monad.Trans.MultiRWS.Strict as MultiRWSS
 import qualified Control.Monad.Writer.Strict as Writer
 import qualified Data.Char as Char
 import Data.Coerce (coerce)
-import Data.Data
+import Data.Data (Data)
 import qualified Data.Generics as SYB
 import qualified Data.Map as Map
 import Data.Maybe
@@ -20,6 +20,7 @@ import Data.Occurrences
 import qualified Data.Semigroup as Semigroup
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
+import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy.Builder as Text.Builder
 import DataTreePrint
@@ -49,9 +50,9 @@ import qualified Language.Haskell.GHC.ExactPrint.Utils as ExactPrint.Utils
 
 processDefault
   :: ( MonadMultiWriter Text.Builder.Builder m
-     , ExactPrint ast
+     , ExactPrint a
      )
-  => Located ast
+  => a
   -> m ()
 processDefault x = do
   -- this hack is here so our print-empty-module trick does not add
@@ -71,7 +72,7 @@ briDocByExact
   :: ExactPrint (LocatedAn ann ast)
   => LocatedAn ann ast
   -> ToBriDocM BriDocNumbered
-briDocByExact = (`docExt` True)
+briDocByExact x = docExt id x True
 
 -- | Use ExactPrint's output for this node.
 -- Consider that for multi-line input, the indentation of the code produced
@@ -82,13 +83,21 @@ briDocByExactNoComment
   :: ExactPrint (LocatedAn ann ast)
   => LocatedAn ann ast
   -> ToBriDocM BriDocNumbered
-briDocByExactNoComment = (`docExt` False)
+briDocByExactNoComment = briDocByExactNoComment' id
+
+briDocByExactNoComment'
+  :: ExactPrint (LocatedAn ann ast)
+  => (Text -> Text)
+  -> LocatedAn ann ast
+  -> ToBriDocM BriDocNumbered
+briDocByExactNoComment' f x = docExt f x False
 
 -- | Use ExactPrint's output for this node, presuming that this output does
 -- not contain any newlines. If this property is not met, the semantics
 -- depend on the @econf_AllowRiskyExactPrintUse@ config flag.
 briDocByExactInlineOnly
-  :: ExactPrint (LocatedAn ann ast)
+  :: Data ast
+  => ExactPrint (LocatedAn ann ast)
   => String
   -> LocatedAn ann ast
   -> ToBriDocM BriDocNumbered
@@ -299,12 +308,13 @@ docLitS = docLit . Text.pack
 
 docExt
   :: ExactPrint (LocatedAn ann ast)
-  => LocatedAn ann ast
+  => (Text -> Text)
+  -> LocatedAn ann ast
   -> Bool
   -> ToBriDocM BriDocNumbered
-docExt x shouldAddComment = allocateNode $ BDFExternal
+docExt f x shouldAddComment = allocateNode $ BDFExternal
   shouldAddComment
-  (Text.pack $ ExactPrint.exactPrint x)
+  (f $ Text.pack $ ExactPrint.exactPrint x)
 
 docAlt :: [ToBriDocM BriDocNumbered] -> ToBriDocM BriDocNumbered
 docAlt l = allocateNode . BDFAlt =<< sequence l
@@ -588,7 +598,8 @@ docEnsureIndent
 docEnsureIndent ind mbd = mbd >>= \bd -> allocateNode $ BDFEnsureIndent ind bd
 
 unknownNodeError
-  :: String
+  :: Data ast
+  => String
   -> LocatedAn ann ast
   -> ToBriDocM BriDocNumbered
 unknownNodeError infoStr ast = do

@@ -12,7 +12,7 @@
 module Language.Haskell.Brittany.Internal.Types where
 
 import qualified Control.Monad.Trans.MultiRWS.Strict as MultiRWSS
-import qualified Data.Data
+import Data.Data (Data)
 import Data.Generics.Uniplate.Direct as Uniplate
 import Data.Kind (Type)
 import qualified Data.Strict.Maybe as Strict
@@ -114,7 +114,7 @@ data BrittanyError
     --   output and second the corresponding, ill-formed input.
   | LayoutWarning String
     -- ^ some warning
-  | forall ast ann. ErrorUnknownNode String (LocatedAn ann ast)
+  | forall ast ann. Data ast => ErrorUnknownNode String (LocatedAn ann ast)
     -- ^ internal error: pretty-printing is not implemented for type of node
     --   in the syntax-tree
   | ErrorOutputCheck String
@@ -175,13 +175,13 @@ data ColSig
   | ColTuples
   | ColOpPrefix -- merge with ColList ? other stuff?
   | ColImport
-  deriving (Eq, Ord, Data.Data.Data, Show)
+  deriving (Eq, Ord, Data, Show)
 
 data BrIndent
   = BrIndentNone
   | BrIndentRegular
   | BrIndentSpecial !Int
-  deriving (Eq, Ord, Data.Data.Data, Show)
+  deriving (Eq, Ord, Data, Show)
 
 type ToBriDocM = MultiRWSS.MultiRWS
                    '[Config] -- reader
@@ -247,7 +247,7 @@ data BriDoc
   | BDForceParSpacing BriDoc
   -- pseudo-deprecated
   | BDDebug String BriDoc
-  deriving (Data.Data.Data, Eq, Ord)
+  deriving (Data, Eq, Ord)
 
 data BriDocF f
   = BDFEmpty
@@ -293,8 +293,8 @@ data BriDocF f
   | BDFForceParSpacing (f (BriDocF f))
   | BDFDebug String (f (BriDocF f))
 
--- deriving instance Data.Data.Data (BriDocF Identity)
-deriving instance Data.Data.Data (BriDocF ((,) Int))
+-- deriving instance Data (BriDocF Identity)
+deriving instance Data (BriDocF ((,) Int))
 
 type BriDocFInt = BriDocF ((,) Int)
 type BriDocNumbered = (Int, BriDocFInt)

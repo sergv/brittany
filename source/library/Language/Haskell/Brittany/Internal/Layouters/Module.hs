@@ -32,7 +32,7 @@ import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.GHC.ExactPrint as ExactPrint
 import Language.Haskell.GHC.ExactPrint.Types (commentContents)
 
-layoutModule :: LocatedAn ann HsModule -> ToBriDocM BriDocNumbered
+layoutModule :: GenLocated ann HsModule -> ToBriDocM BriDocNumbered
 layoutModule lmod@(L _ mod') = case mod' of
     -- Implicit module Main
   HsModule{hsmodName = Nothing, hsmodImports} -> do
@@ -48,14 +48,11 @@ layoutModule lmod@(L _ mod') = case mod' of
     let allowSingleLine = allowSingleLineExportList || Data.Maybe.isNothing hsmodExports
     docLines
       $ docSeq
-          [ docNodeAnnKW lmod Nothing docEmpty
-             -- A pseudo node that serves merely to force documentation
-             -- before the node
-          , docNodeMoveToKWDP lmod AnnModule True $ runFilteredAlternative $ do
+          [ runFilteredAlternative $ do
             addAlternativeCond allowSingleLine $ docForceSingleline $ docSeq
               [ appSep $ docLit $ Text.pack "module"
               , appSep $ docLit tn
-              , docWrapNode lmod $ appSep $ case hsmodExports of
+              , appSep $ case hsmodExports of
                 Nothing -> docEmpty
                 Just x -> layoutLLIEs True KeepItemsUnsorted x
               , docSeparator
@@ -65,7 +62,7 @@ layoutModule lmod@(L _ mod') = case mod' of
               [ docAddBaseY BrIndentRegular $ docPar
                   (docSeq [appSep $ docLit $ Text.pack "module", docLit tn])
                   (docSeq
-                    [ docWrapNode lmod $ case hsmodExports of
+                    [ case hsmodExports of
                       Nothing -> docEmpty
                       Just x -> layoutLLIEs False KeepItemsUnsorted x
                     , docSeparator

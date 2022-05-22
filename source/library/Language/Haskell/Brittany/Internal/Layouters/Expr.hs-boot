@@ -1,6 +1,10 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 
-module Language.Haskell.Brittany.Internal.Layouters.Expr where
+module Language.Haskell.Brittany.Internal.Layouters.Expr
+  ( layoutExpr
+  , litBriDoc
+  , overLitValBriDoc
+  ) where
 
 import GHC.Hs
 import Language.Haskell.Brittany.Internal.Types

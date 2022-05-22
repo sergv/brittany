@@ -2,7 +2,13 @@
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
-module Language.Haskell.Brittany.Internal.Layouters.Type (layoutType) where
+module Language.Haskell.Brittany.Internal.Layouters.Type
+  ( layoutSigType
+  , layoutType
+  , layoutTyVarBndrs
+  , processTyVarBndrsSingleline
+  ) where
+
 
 import qualified Data.Text as Text
 import GHC (AnnKeywordId(..), GenLocated(L))
@@ -10,12 +16,17 @@ import GHC.Hs
 import qualified GHC.OldList as List
 import GHC.Types.Basic
 import GHC.Types.SourceText
+import GHC.Types.SrcLoc
 import GHC.Utils.Outputable (ftext, showSDocUnsafe)
 import Language.Haskell.Brittany.Internal.LayouterBasics
 import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.PreludeUtils
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.Brittany.Internal.Utils (FirstLastView(..), splitFirstLast)
+
+-- TODO: maybe take the 'sig_bndrs' field of 'LHsSigType' into account here?
+layoutSigType :: LHsSigType GhcPs -> ToBriDocM BriDocNumbered
+layoutSigType = layoutType . sig_body . unLoc
 
 layoutType :: LHsType GhcPs -> ToBriDocM BriDocNumbered
 layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
