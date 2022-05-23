@@ -15,11 +15,12 @@ import qualified GHC.Driver.Session
 import qualified GHC.Parser.Header
 import qualified GHC.Platform
 import qualified GHC.Settings
+import qualified GHC.Types.SafeHaskell as GHC.Driver.Session
 import qualified GHC.Types.SrcLoc
 import qualified GHC.Utils.Error
 import qualified GHC.Utils.Fingerprint
+import Language.Haskell.GHC.ExactPrint (makeDeltaAst)
 import qualified Language.Haskell.GHC.ExactPrint.Parsers as ExactPrint
-import qualified GHC.Types.SafeHaskell as GHC.Driver.Session
 
 -- | Parses a Haskell module. Although this nominally requires IO, it is
 -- morally pure. It should have no observable effects.
@@ -55,7 +56,7 @@ parseModuleFromString arguments1 filePath checkDynFlags string = Except.runExcep
   let parseResult = ExactPrint.parseModuleFromStringInternal dynFlags3 filePath string
   case parseResult of
     Left errorMessages -> handleErrorMessages errorMessages
-    Right parsedSource -> pure (parsedSource, dynFlagsResult)
+    Right parsedSource -> pure (makeDeltaAst parsedSource, dynFlagsResult)
 
 handleLeftovers
   :: Monad m => [GHC.Types.SrcLoc.Located String] -> Except.ExceptT String m ()

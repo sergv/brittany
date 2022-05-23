@@ -4,6 +4,9 @@
 -- Copyright   :  (c) Sergey Vinokurov 2022
 ----------------------------------------------------------------------------
 
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
+
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 module Language.Haskell.Brittany.Internal.Layouters.Module.Tests (tests) where
@@ -24,7 +27,7 @@ import qualified Language.Haskell.GHC.ExactPrint.Types as ExactPrint
 
 transformToCommentedImportSimplified
   :: [LImportDecl GhcPs]
-  -> [CommentedImport String ModuleName]
+  -> [CommentedImport [] String ModuleName]
 transformToCommentedImportSimplified
   = map (bimap ExactPrint.commentContents (unLoc . ideclName))
   . transformToCommentedImport
@@ -210,7 +213,7 @@ tests = testGroup "transformToCommentedImport"
       ]
   ]
   where
-    (==>) :: String -> [CommentedImport String ModuleName] -> Assertion
+    (==>) :: String -> [CommentedImport [] String ModuleName] -> Assertion
     (==>) src expected = do
       imports <- parseImports src
       let actual = transformToCommentedImportSimplified imports

@@ -151,8 +151,10 @@ layoutBriDocM = \case
     -- getEntryDP     :: LocatedAn ann a -> DeltaPos
     --
     -- ExactPrint.Utils.tokComment :: LEpaComment -> Comment
-    -- ghcCommentText :: LEpaComment -> String
+    -- commentContents . tokComment :: LEpaComment -> String
+    -- -- This one doesn't normalise comment text: ghcCommentText :: LEpaComment -> String
     -- epaLocationRealSrcSpan :: EpaLocation -> RealSrcSpan
+    -- tokComment :: LEpaComment -> Comment
     let priorCmnts = []
     let moveToExactLocationAction = pure ()
 
