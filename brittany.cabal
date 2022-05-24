@@ -127,7 +127,6 @@ common executable
   ghc-options:
     -rtsopts
     -threaded
-    -Wno-implicit-prelude
     -Wno-unused-packages
 
 library
