@@ -218,10 +218,10 @@ briDocToDoc :: BriDoc -> PP.Doc
 briDocToDoc = astToDoc . removeAnnotations
  where
   removeAnnotations = Uniplate.transform $ \case
-    BDAnnotationPrior x -> x
-    BDAnnotationKW _ x  -> x
-    BDAnnotationRest x  -> x
-    x                   -> x
+    BDAnnotationPrior _ x -> x
+    BDAnnotationKW    _ x -> x
+    BDAnnotationRest    x -> x
+    x                     -> x
 
 briDocToDocWithAnns :: BriDoc -> PP.Doc
 briDocToDocWithAnns = astToDoc
@@ -229,13 +229,15 @@ briDocToDocWithAnns = astToDoc
 breakEither :: (a -> Either b c) -> [a] -> ([b], [c])
 breakEither _ [] = ([], [])
 breakEither fn (a1 : aR) = case fn a1 of
-  Left b -> (b : bs, cs)
+  Left  b -> (b : bs, cs)
   Right c -> (bs, c : cs)
-  where (bs, cs) = breakEither fn aR
+  where
+    (bs, cs) = breakEither fn aR
 
 spanMaybe :: (a -> Maybe b) -> [a] -> ([b], [a])
 spanMaybe f (x1 : xR) | Just y <- f x1 = (y : ys, xs)
-  where (ys, xs) = spanMaybe f xR
+  where
+    (ys, xs) = spanMaybe f xR
 spanMaybe _ xs = ([], xs)
 
 data FirstLastView a
@@ -244,20 +246,31 @@ data FirstLastView a
   | FirstLast a [a] a
 
 splitFirstLast :: [a] -> FirstLastView a
-splitFirstLast [] = FirstLastEmpty
-splitFirstLast [x] = FirstLastSingleton x
+splitFirstLast []        = FirstLastEmpty
+splitFirstLast [x]       = FirstLastSingleton x
 splitFirstLast (x1 : xr) = FirstLast x1 (List.init xr) (List.last xr)
 
 -- TODO: move to uniplate upstream?
 -- aka `transform`
 transformUp :: Uniplate.Uniplate on => (on -> on) -> (on -> on)
-transformUp f = g where g = f . Uniplate.descend g
+transformUp f = g
+  where
+    g = f . Uniplate.descend g
+
 _transformDown :: Uniplate.Uniplate on => (on -> on) -> (on -> on)
-_transformDown f = g where g = Uniplate.descend g . f
+_transformDown f = g
+  where
+    g = Uniplate.descend g . f
+
 transformDownMay :: Uniplate.Uniplate on => (on -> Maybe on) -> (on -> on)
-transformDownMay f = g where g x = maybe x (Uniplate.descend g) $ f x
+transformDownMay f = g
+  where
+    g x = maybe x (Uniplate.descend g) $ f x
+
 _transformDownRec :: Uniplate.Uniplate on => (on -> Maybe on) -> (on -> on)
-_transformDownRec f = g where g x = maybe (Uniplate.descend g x) g $ f x
+_transformDownRec f = g
+  where
+    g x = maybe (Uniplate.descend g x) g $ f x
 
 absurdExt :: HsExtension.NoExtCon -> a
 absurdExt = HsExtension.noExtCon

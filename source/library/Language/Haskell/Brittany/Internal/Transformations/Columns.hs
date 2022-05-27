@@ -48,12 +48,12 @@ transformSimplifyColumns = Uniplate.rewrite $ \case
       BDLines l -> l
       x -> [x]
   -- prior floating in
-  BDAnnotationPrior (BDSeq (l : lr)) ->
-    Just $ BDSeq (BDAnnotationPrior l : lr)
-  BDAnnotationPrior (BDLines (l : lr)) ->
-    Just $ BDLines (BDAnnotationPrior l : lr)
-  BDAnnotationPrior (BDCols sig (l : lr)) ->
-    Just $ BDCols sig (BDAnnotationPrior l : lr)
+  BDAnnotationPrior ann (BDSeq (l : lr)) ->
+    Just $ BDSeq (BDAnnotationPrior ann l : lr)
+  BDAnnotationPrior ann (BDLines (l : lr)) ->
+    Just $ BDLines (BDAnnotationPrior ann l : lr)
+  BDAnnotationPrior ann (BDCols sig (l : lr)) ->
+    Just $ BDCols sig (BDAnnotationPrior ann l : lr)
   -- post floating in
   BDAnnotationRest (BDSeq list) ->
     Just $ BDSeq $ List.init list ++ [BDAnnotationRest $ List.last list]
@@ -133,30 +133,30 @@ transformSimplifyColumns = Uniplate.rewrite $ \case
       ++ [BDPar ind line (BDLines $ List.init lines)]
       , BDCols sig2 cols2
       ]
-  BDLines [x] -> Just $ x
-  BDLines [] -> Just $ BDEmpty
-  BDSeq{} -> Nothing
-  BDCols{} -> Nothing
-  BDSeparator -> Nothing
-  BDAddBaseY{} -> Nothing
-  BDBaseYPushCur{} -> Nothing
-  BDBaseYPop{} -> Nothing
+  BDLines [x]            -> Just x
+  BDLines []             -> Just BDEmpty
+  BDSeq{}                -> Nothing
+  BDCols{}               -> Nothing
+  BDSeparator            -> Nothing
+  BDAddBaseY{}           -> Nothing
+  BDBaseYPushCur{}       -> Nothing
+  BDBaseYPop{}           -> Nothing
   BDIndentLevelPushCur{} -> Nothing
-  BDIndentLevelPop{} -> Nothing
-  BDPar{} -> Nothing
-  BDAlt{} -> Nothing
-  BDForceMultiline{} -> Nothing
-  BDForceSingleline{} -> Nothing
-  BDForwardLineMode{} -> Nothing
-  BDExternal{} -> Nothing
-  BDPlain{} -> Nothing
-  BDLines{} -> Nothing
-  BDAnnotationPrior{} -> Nothing
-  BDAnnotationKW{} -> Nothing
-  BDAnnotationRest{} -> Nothing
-  BDMoveToKWDP{} -> Nothing
-  BDEnsureIndent{} -> Nothing
-  BDSetParSpacing{} -> Nothing
-  BDForceParSpacing{} -> Nothing
-  BDDebug{} -> Nothing
+  BDIndentLevelPop{}     -> Nothing
+  BDPar{}                -> Nothing
+  BDAlt{}                -> Nothing
+  BDForceMultiline{}     -> Nothing
+  BDForceSingleline{}    -> Nothing
+  BDForwardLineMode{}    -> Nothing
+  BDExternal{}           -> Nothing
+  BDPlain{}              -> Nothing
+  BDLines{}              -> Nothing
+  BDAnnotationPrior{}    -> Nothing
+  BDAnnotationKW{}       -> Nothing
+  BDAnnotationRest{}     -> Nothing
+  BDMoveToKWDP{}         -> Nothing
+  BDEnsureIndent{}       -> Nothing
+  BDSetParSpacing{}      -> Nothing
+  BDForceParSpacing{}    -> Nothing
+  BDDebug{}              -> Nothing
   BDNonBottomSpacing _ x -> Just x

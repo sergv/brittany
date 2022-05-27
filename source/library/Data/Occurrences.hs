@@ -29,6 +29,8 @@ import GHC.Generics
 import GHC.Parser.Annotation
 import GHC.Types.SrcLoc
 
+-- | This class is responsible for locating all occurrences of type 'a' within type 'b',
+-- passing them to the provided function and collecting all its results via 'mappend'.
 class Occurrences (a :: Type) (b :: Type) where
   foldAllOccurrences :: Monoid m => (a -> m) -> b -> m
   {-# INLINE foldAllOccurrences #-}

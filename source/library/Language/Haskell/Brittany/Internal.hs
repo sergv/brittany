@@ -1,4 +1,3 @@
-{-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE NamedFieldPuns      #-}
 {-# LANGUAGE NoImplicitPrelude   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -11,6 +10,7 @@ module Language.Haskell.Brittany.Internal
 import qualified Control.Monad.Trans.MultiRWS.Strict as MultiRWSS
 import Data.Foldable
 import Data.HList.HList
+import qualified Data.List as L
 import qualified Data.Map as Map
 import qualified Data.Semigroup as Semigroup
 import qualified Data.Text as T
@@ -23,7 +23,7 @@ import qualified GHC hiding (parseModule)
 import GHC.Hs
 import qualified GHC.OldList as List
 import GHC.Parser.Annotation (AnnKeywordId(..))
-import GHC.Types.SrcLoc (SrcSpan)
+import GHC.Types.SrcLoc
 import Language.Haskell.Brittany.Internal.Backend
 import Language.Haskell.Brittany.Internal.BackendUtils
 import Language.Haskell.Brittany.Internal.Config.Types
@@ -43,6 +43,7 @@ import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.Brittany.Internal.Utils
 import qualified Language.Haskell.GHC.ExactPrint as ExactPrint
 import qualified Language.Haskell.GHC.ExactPrint.Types as ExactPrint
+import Language.Haskell.GHC.ExactPrint.Utils (tokComment)
 
 -- BrittanyErrors can be non-fatal warnings, thus both are returned instead
 -- of an Either.
@@ -52,7 +53,7 @@ pPrintModule
   :: Config
   -> GHC.ParsedSource
   -> (Text, [BrittanyError], Seq String)
-pPrintModule conf parsedModule =
+pPrintModule conf (L _ m) =
   (TL.toStrict (TLB.toLazyText out), errs, logs)
   where
     ((out, errs), logs) =
@@ -62,7 +63,7 @@ pPrintModule conf parsedModule =
         $ MultiRWSS.withMultiWriterAW
         $ MultiRWSS.withMultiWriterW
         $ MultiRWSS.withMultiReader conf
-        $ ppModule parsedModule
+        $ ppModule m
 
 -- | Additionally checks that the output can be parssed again,
 -- appending an error if it does not.
@@ -83,25 +84,21 @@ pPrintModuleAndCheck conf parsedModule = do
         Right{}  -> []
   pure (output, errs', logs)
 
--- toLocal :: Config -> PPMLocal a -> PPM a
--- toLocal conf m = do
---   (x, write) <-
---     lift $ MultiRWSS.runMultiRWSTAW (conf :+: HNil) HNil $ m
---   MultiRWSS.mGetRawW >>= \w -> MultiRWSS.mPutRawW (w `mappend` write)
---   pure x
+ppModule :: HsModule -> PPM ()
+ppModule m@HsModule{hsmodAnn, hsmodDecls} = do
+  (config :: CConfig Identity) <- mAsk
 
-ppModule :: GenLocated SrcSpan HsModule -> PPM ()
-ppModule lmod@(L _ HsModule{hsmodAnn, hsmodDecls}) = do
-  ppPreamble lmod
+  let config' :: CConfig Identity
+      config' = config
+      exactprintOnly :: Bool
+      exactprintOnly = confUnpack (_conf_roundtrip_exactprint_only config')
+
+      (annsBefore, annsAfter) = splitAnnots m
+
+  ppPreamble $ setModComments annsBefore m
+
   for_ hsmodDecls $ \decl -> do
-    (config :: CConfig Identity) <- mAsk
-
-    let config' :: CConfig Identity
-        config' = config
-        exactprintOnly :: Bool
-        exactprintOnly = confUnpack (_conf_roundtrip_exactprint_only config')
-
-    bd <- if exactprintOnly
+    layoutBriDoc =<< if exactprintOnly
       then briDocMToPPM $ briDocByExactNoComment decl
       else do
         (r, errs, debugs) <- briDocMToPPMInner $ layoutDecl decl
@@ -110,61 +107,63 @@ ppModule lmod@(L _ HsModule{hsmodAnn, hsmodDecls}) = do
         if null errs
           then pure r
           else briDocMToPPM $ briDocByExactNoComment decl
-    layoutBriDoc bd
 
--- getDeclBindingNames :: LHsDecl GhcPs -> [String]
--- getDeclBindingNames (L _ decl) = case decl of
---   SigD _ (TypeSig _ ns _) -> ns <&> \(L _ n) -> Text.unpack (rdrNameToText n)
---   ValD _ (FunBind _ (L _ n) _ _) -> [Text.unpack $ rdrNameToText n]
---   _ -> []
+  for_ annsAfter $ \comment@(L pos EpaComment{ac_tok}) -> do
+    case anchor_op pos of
+      UnchangedAnchor -> pure ()
+      MovedAnchor dp  -> ppmMoveToExactLoc dp
+    case ac_tok of
+      EpaEofComment -> pure ()
+      _             ->
+        mTell $ TLB.fromString $ ExactPrint.commentContents $ tokComment comment
 
+  pure ()
 
--- Prints the information associated with the module annotation
--- This includes the imports
+commentLoc :: LEpaComment -> RealSrcSpan
+commentLoc = anchor . getLoc
+
+declLoc :: LHsDecl GhcPs -> RealSrcSpan
+declLoc = anchor . entry . ann . getLoc
+
+setModComments :: [LEpaComment] -> HsModule -> HsModule
+setModComments comments m@HsModule{hsmodAnn} = m
+  { hsmodAnn = case hsmodAnn of
+    EpAnn entry anns cs -> EpAnn entry anns (cs { priorComments = comments })
+    EpAnnNotUsed        -> EpAnnNotUsed
+  }
+
+-- | Split module annotations into the ones that come before the first declaration
+-- and after the last one.
+splitAnnots :: HsModule -> ([LEpaComment], [LEpaComment])
+-- splitAnnots m@HsModule{hsmodAnn, hsmodDecls = []} = (priorComments $ epAnnComments hsmodAnn, [])
+splitAnnots m@HsModule{hsmodAnn, hsmodDecls} = case hsmodDecls of
+  []    -> (allComments,    [])
+  decls -> (commentsBefore, commentsAfter)
+    where
+      (commentsBefore, rest) = L.span (\x -> commentLoc x <= declLoc firstDecl) allComments
+      commentsAfter          = L.dropWhile (\x -> commentLoc x < declLoc lastDecl) rest
+
+      firstDecl, lastDecl :: LHsDecl GhcPs
+      firstDecl = L.head hsmodDecls
+      lastDecl  = L.last hsmodDecls
+  where
+    allComments = priorComments $ epAnnComments hsmodAnn
+
+-- | Prints the information associated with the module annotation,
+-- including the imports.
 ppPreamble
-  :: GenLocated SrcSpan HsModule
+  :: HsModule
   -> PPM ()
-ppPreamble lmod@(L loc m@HsModule{hsmodAnn, hsmodDecls}) = do
-  --  let filteredAnns = hsmodAnn
-  -- filteredAnns <- mAsk <&> \(ToplevelAnns annMap) ->
-  --   Map.findWithDefault Map.empty (ExactPrint.mkAnnKey lmod) annMap
-  --   -- Since ghc-exactprint adds annotations following (implicit)
-  --   -- modules to both HsModule and the elements in the module
-  --   -- this can cause duplication of comments. So strip
-  --   -- attached annotations that come after the module's where
-  --   -- from the module node
-
+ppPreamble m@HsModule{hsmodAnn, hsmodDecls} = do
   config <- mAsk
-  let
-    shouldReformatPreamble =
-      config & _conf_layout & _lconfig_reformatModulePreamble & confUnpack
-
-  -- let mAnn = hsmodAn
-  --     (filteredAnns', post) =
-  --       let modAnnsDp = ExactPrint.annsDP mAnn
-  --           isWhere (ExactPrint.G AnnWhere) = True
-  --           isWhere _ = False
-  --           isEof (ExactPrint.AnnEofPos) = True
-  --           isEof _ = False
-  --           whereInd = List.findIndex (isWhere . fst) modAnnsDp
-  --           eofInd = List.findIndex (isEof . fst) modAnnsDp
-  --           (pre, post') = case (whereInd, eofInd) of
-  --             (Nothing, Nothing) -> ([], modAnnsDp)
-  --             (Just i, Nothing) -> List.splitAt (i + 1) modAnnsDp
-  --             (Nothing, Just _i) -> ([], modAnnsDp)
-  --             (Just i, Just j) -> List.splitAt (min (i + 1) j) modAnnsDp
-  --           mAnn' = mAnn { ExactPrint.annsDP = pre }
-  --           filteredAnns'' =
-  --             Map.insert (ExactPrint.mkAnnKey lmod) mAnn' filteredAnns
-  --       in (filteredAnns'', post')
-
+  let shouldReformatPreamble =
+        confUnpack (_lconfig_reformatModulePreamble (_conf_layout config))
   if shouldReformatPreamble
-    then do
-      briDoc <- briDocMToPPM $ layoutModule lmod
-      layoutBriDoc briDoc
-    else
-      let emptyModule = L loc m { hsmodDecls = [] }
-      in processDefault emptyModule
+    then
+      layoutBriDoc =<< briDocMToPPM (layoutModule m)
+    else do
+      let emptyModule = m { hsmodDecls = [] }
+      processDefault emptyModule
   pure ()
 
 layoutBriDoc :: BriDocNumbered -> PPMLocal ()
@@ -226,3 +225,4 @@ layoutBriDoc briDoc = do
   _ <- MultiRWSS.withMultiStateS state $ layoutBriDocM briDoc'
 
   return $ ()
+

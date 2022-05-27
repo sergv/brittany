@@ -1,9 +1,10 @@
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE NamedFieldPuns             #-}
 {-# LANGUAGE NoImplicitPrelude          #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE TupleSections              #-}
 
 module Language.Haskell.Brittany.Internal.LayouterBasics where
 
@@ -367,11 +368,6 @@ docSetBaseAndIndent = docSetBaseY . docSetIndentLevel
 docSeparator :: ToBriDocM BriDocNumbered
 docSeparator = allocateNode BDFSeparator
 
-docAnnotationPrior
-  :: ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
-docAnnotationPrior bdm =
-  allocateNode . BDFAnnotationPrior =<< bdm
-
 docAnnotationKW
   :: Maybe AnnKeywordId
   -> ToBriDocM BriDocNumbered
@@ -465,21 +461,24 @@ class DocWrapable a where
   docWrapNodePrior :: LocatedAn ann ast -> a -> a
   docWrapNodeRest  :: LocatedAn ann ast -> a -> a
 
+forgetAnn :: SrcSpanAnn' (EpAnn a) -> SrcSpanAnn' (EpAnn ())
+forgetAnn x = x { ann = void $ ann x }
+
 instance DocWrapable (ToBriDocM BriDocNumbered) where
-  docWrapNode _ast bdm = do
+  docWrapNode (L ann _ast) bdm = do
     bd <- bdm
     i1 <- allocNodeIndex
     i2 <- allocNodeIndex
     return
-      $ (,) i1
-      $ BDFAnnotationPrior
-      $ (,) i2
+      $ (i1,)
+      $ BDFAnnotationPrior (forgetAnn ann)
+      $ (i2,)
       $ BDFAnnotationRest
       $ bd
-  docWrapNodePrior _ast bdm = do
+  docWrapNodePrior (L ann _ast) bdm = do
     bd <- bdm
     i1 <- allocNodeIndex
-    return $ (,) i1 $ BDFAnnotationPrior bd
+    return $ (,) i1 $ BDFAnnotationPrior (forgetAnn ann) bd
   docWrapNodeRest _ast bdm = do
     bd <- bdm
     i2 <- allocNodeIndex

@@ -85,20 +85,6 @@ layoutWriteNewlineBlock = do
     , _lstate_addSepSpace      = Just $ lstate_baseY state
     }
 
--- layoutMoveToIndentCol :: ( MonadMultiState LayoutState m
---                     , MonadMultiWriter (Seq String) m) => Int -> m ()
--- layoutMoveToIndentCol i = do
--- #if INSERTTRACES
---   tellDebugMessShow ("layoutMoveToIndentCol", i)
--- #endif
---   state <- mGet
---   mSet $ state
---     { _lstate_addSepSpace = Just
---                           $ if isJust $ _lstate_addNewline state
---         then i
---         else _lstate_indLevelLinger state + i - _lstate_curY state
---     }
-
 layoutSetCommentCol :: MonadMultiState LayoutState m => m ()
 layoutSetCommentCol = do
   state <- mGet
@@ -334,41 +320,35 @@ layoutAddSepSpace = do
     { _lstate_addSepSpace = Just $ fromMaybe 1 $ _lstate_addSepSpace state
     }
 
--- -- TODO: when refactoring is complete, the other version of this method
--- -- can probably be removed.
--- moveToExactAnn
---   :: ( MonadMultiWriter Text.Builder.Builder m
---      , MonadMultiState LayoutState m
---      , MonadMultiReader (Map AnnKey Annotation) m
---      )
---   => AnnKey
---   -> m ()
--- moveToExactAnn annKey = do
---   traceLocal ("moveToExactAnn", annKey)
---   anns <- mAsk
---   case Map.lookup annKey anns of
---     Nothing -> return ()
---     Just ann -> do
---       -- curY <- mGet <&> _lstate_curY
---       let ExactPrint.DP (y, _x) = ExactPrint.annEntryDelta ann
---       -- mModify $ \state -> state { _lstate_addNewline = Just x }
---       moveToColumn y
+-- TODO: when refactoring is complete, the other version of this method
+-- can probably be removed.
+moveToExactAnn
+  :: ( MonadMultiWriter Text.Builder.Builder m
+     , MonadMultiState LayoutState m
+     )
+  => SrcSpanAnn' (EpAnn ann)
+  -> m ()
+moveToExactAnn a = moveToColumn $
+  case ann a of
+    EpAnn{entry} -> case anchor_op entry of
+      UnchangedAnchor -> 1
+      MovedAnchor dp  -> deltaColumn dp
+    EpAnnNotUsed -> 1
 
 moveToColumn :: MonadMultiState LayoutState m => Int -> m ()
 moveToColumn y = mModify $ \state ->
-  let
-    upd = case _lstate_curYOrAddNewline state of
-      Cols i -> if y == 0 then Cols i else InsertNewlines y
-      InsertNewlines i -> InsertNewlines $ max y i
+  let upd = case _lstate_curYOrAddNewline state of
+        Cols i           -> if y == 0 then Cols i else InsertNewlines y
+        InsertNewlines i -> InsertNewlines $ max y i
   in
     state
       { _lstate_curYOrAddNewline = upd
-      , _lstate_addSepSpace =
+      , _lstate_addSepSpace      =
         case upd of
           Cols{}           -> Nothing
           InsertNewlines{} ->
             _lstate_commentCol state <|> _lstate_addSepSpace state <|> Just (lstate_baseY state)
-      , _lstate_commentCol = Nothing
+      , _lstate_commentCol       = Nothing
       }
 
 unpackDeltaPos :: DeltaPos -> (Int, Int)

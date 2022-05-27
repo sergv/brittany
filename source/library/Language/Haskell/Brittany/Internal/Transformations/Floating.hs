@@ -31,18 +31,18 @@ transformSimplifyFloating = stepBO .> stepFull
  where
   descendPrior = transformDownMay $ \case
     -- prior floating in
-    BDAnnotationPrior (BDPar ind line indented) ->
-      Just $ BDPar ind (BDAnnotationPrior line) indented
-    BDAnnotationPrior (BDSeq (l : lr)) ->
-      Just $ BDSeq (BDAnnotationPrior l : lr)
-    BDAnnotationPrior (BDLines (l : lr)) ->
-      Just $ BDLines (BDAnnotationPrior l : lr)
-    BDAnnotationPrior (BDCols sig (l : lr)) ->
-      Just $ BDCols sig (BDAnnotationPrior l : lr)
-    BDAnnotationPrior (BDAddBaseY indent x) ->
-      Just $ BDAddBaseY indent $ BDAnnotationPrior x
-    BDAnnotationPrior (BDDebug s x) ->
-      Just $ BDDebug s $ BDAnnotationPrior x
+    BDAnnotationPrior ann (BDPar ind line indented) ->
+      Just $ BDPar ind (BDAnnotationPrior ann line) indented
+    BDAnnotationPrior ann (BDSeq (l : lr)) ->
+      Just $ BDSeq (BDAnnotationPrior ann l : lr)
+    BDAnnotationPrior ann (BDLines (l : lr)) ->
+      Just $ BDLines (BDAnnotationPrior ann l : lr)
+    BDAnnotationPrior ann (BDCols sig (l : lr)) ->
+      Just $ BDCols sig (BDAnnotationPrior ann l : lr)
+    BDAnnotationPrior ann (BDAddBaseY indent x) ->
+      Just $ BDAddBaseY indent $ BDAnnotationPrior ann x
+    BDAnnotationPrior ann (BDDebug s x) ->
+      Just $ BDDebug s $ BDAnnotationPrior ann x
     _ -> Nothing
   descendRest = transformDownMay $ \case
     -- post floating in
@@ -124,8 +124,8 @@ transformSimplifyFloating = stepBO .> stepFull
     -- merge AddIndent and Par
     BDAddBaseY ind1 (BDPar ind2 line indented) ->
       Just $ BDPar (mergeIndents ind1 ind2) line indented
-    BDAddBaseY ind (BDAnnotationPrior x) ->
-      Just $ BDAnnotationPrior (BDAddBaseY ind x)
+    BDAddBaseY ind (BDAnnotationPrior ann x) ->
+      Just $ BDAnnotationPrior ann (BDAddBaseY ind x)
     BDAddBaseY ind (BDAnnotationRest x) ->
       Just $ BDAnnotationRest (BDAddBaseY ind x)
     BDAddBaseY ind (BDAnnotationKW kw x) ->
@@ -149,15 +149,15 @@ transformSimplifyFloating = stepBO .> stepFull
            transformUp f
    where
     f = \case
-      x@BDAnnotationPrior{} -> descendPrior x
-      x@BDAnnotationKW{} -> descendKW x
-      x@BDAnnotationRest{} -> descendRest x
-      x@BDAddBaseY{} -> descendAddB x
-      x@BDBaseYPushCur{} -> descendBYPush x
-      x@BDBaseYPop{} -> descendBYPop x
+      x@BDAnnotationPrior{}    -> descendPrior x
+      x@BDAnnotationKW{}       -> descendKW x
+      x@BDAnnotationRest{}     -> descendRest x
+      x@BDAddBaseY{}           -> descendAddB x
+      x@BDBaseYPushCur{}       -> descendBYPush x
+      x@BDBaseYPop{}           -> descendBYPop x
       x@BDIndentLevelPushCur{} -> descendILPush x
-      x@BDIndentLevelPop{} -> descendILPop x
-      x -> x
+      x@BDIndentLevelPop{}     -> descendILPop x
+      x                        -> x
   stepFull = -- traceFunctionWith "stepFull" (show . briDocToDocWithAnns) (show . briDocToDocWithAnns) $
              Uniplate.rewrite $ \case
     BDAddBaseY BrIndentNone x -> Just $ x
@@ -177,14 +177,14 @@ transformSimplifyFloating = stepBO .> stepFull
       Just $ BDBaseYPushCur (BDAddBaseY ind x)
     BDAddBaseY ind (BDBaseYPop x) -> Just $ BDBaseYPop (BDAddBaseY ind x)
     -- prior floating in
-    BDAnnotationPrior (BDPar ind line indented) ->
-      Just $ BDPar ind (BDAnnotationPrior line) indented
-    BDAnnotationPrior (BDSeq (l : lr)) ->
-      Just $ BDSeq ((BDAnnotationPrior l) : lr)
-    BDAnnotationPrior (BDLines (l : lr)) ->
-      Just $ BDLines ((BDAnnotationPrior l) : lr)
-    BDAnnotationPrior (BDCols sig (l : lr)) ->
-      Just $ BDCols sig ((BDAnnotationPrior l) : lr)
+    BDAnnotationPrior ann (BDPar ind line indented) ->
+      Just $ BDPar ind (BDAnnotationPrior ann line) indented
+    BDAnnotationPrior ann (BDSeq (l : lr)) ->
+      Just $ BDSeq ((BDAnnotationPrior ann l) : lr)
+    BDAnnotationPrior ann (BDLines (l : lr)) ->
+      Just $ BDLines ((BDAnnotationPrior ann l) : lr)
+    BDAnnotationPrior ann (BDCols sig (l : lr)) ->
+      Just $ BDCols sig ((BDAnnotationPrior ann l) : lr)
     -- EnsureIndent float-in
     -- BDEnsureIndent indent (BDCols sig (col:colr)) ->
     --   Just $ BDCols sig (BDEnsureIndent indent col : (BDAddBaseY indent <$> colr))

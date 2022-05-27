@@ -42,8 +42,8 @@ import Language.Haskell.GHC.ExactPrint.Utils
 import Prettyprinter.Combinators
 import Prettyprinter.Generics
 
-layoutModule :: GenLocated ann HsModule -> ToBriDocM BriDocNumbered
-layoutModule lmod@(L _ mod') = case mod' of
+layoutModule :: HsModule -> ToBriDocM BriDocNumbered
+layoutModule mod' = case mod' of
     -- Implicit module Main
   HsModule{hsmodName = Nothing, hsmodImports} -> do
     let commentedImports = transformToCommentedImport hsmodImports
