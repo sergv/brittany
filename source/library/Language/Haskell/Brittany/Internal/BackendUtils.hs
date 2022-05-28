@@ -328,18 +328,18 @@ moveToExactAnn
      )
   => SrcSpanAnn' (EpAnn ann)
   -> m ()
-moveToExactAnn a = moveToColumn $
+moveToExactAnn a = moveNextLine $
   case ann a of
     EpAnn{entry} -> case anchor_op entry of
-      UnchangedAnchor -> 1
-      MovedAnchor dp  -> deltaColumn dp
-    EpAnnNotUsed -> 1
+      UnchangedAnchor -> 0
+      MovedAnchor dp  -> getDeltaLine dp
+    EpAnnNotUsed -> 0
 
-moveToColumn :: MonadMultiState LayoutState m => Int -> m ()
-moveToColumn y = mModify $ \state ->
+moveNextLine :: MonadMultiState LayoutState m => Int -> m ()
+moveNextLine lineDelta = mModify $ \state ->
   let upd = case _lstate_curYOrAddNewline state of
-        Cols i           -> if y == 0 then Cols i else InsertNewlines y
-        InsertNewlines i -> InsertNewlines $ max y i
+        old@Cols{}       -> if lineDelta == 0 then old else InsertNewlines lineDelta
+        InsertNewlines i -> InsertNewlines $ max lineDelta i
   in
     state
       { _lstate_curYOrAddNewline = upd
