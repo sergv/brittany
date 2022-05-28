@@ -3,10 +3,11 @@
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE TupleSections     #-}
 
-module Main (main) where
+module BrittanyTestSuite (main) where
 
 import Control.Monad
 import Data.Bifunctor
+import Data.Char
 import Data.Coerce
 import Data.Foldable
 import Data.Functor.Identity
@@ -23,6 +24,7 @@ import System.Exit (die)
 import System.FilePath
 import Test.Tasty
 import Test.Tasty.HUnit
+import Text.Read
 
 import Language.Haskell.Brittany.Internal.Config.Types
 import qualified Language.Haskell.Brittany.Internal.Formatting as Brittany
@@ -119,7 +121,7 @@ makeTests :: [FilePath] -> IO TestTree
 makeTests dirs = do
   groups <- for dirs $ \dir -> do
     files <- mapMaybe (\x -> (, x) <$> stripExtension "hs" x) <$> listDirectory dir
-    pure $ testGroup dir $ flip map (L.sort files) $ \(stem, file) ->
+    pure $ testGroup dir $ flip map (sortTestInputs files) $ \(stem, file) ->
       testCase stem $ do
         input <- TIO.readFile $ dir </> file
         res   <- Brittany.format testConfig file input
@@ -137,6 +139,14 @@ makeTests dirs = do
               "----------------------------------------------------------------\n"
 
   pure $ testGroup "End to end tests" groups
+
+sortTestInputs :: [(FilePath, a)] -> [(FilePath, a)]
+sortTestInputs = L.sortOn (extractTestNum . fst)
+  where
+    extractTestNum :: String -> (Maybe Int, String)
+    extractTestNum x = case L.stripPrefix "Test" x of
+      Nothing   -> (Nothing, x)
+      Just rest -> (readMaybe $ takeWhile isDigit rest, x)
 
 unitTests :: TestTree
 unitTests = testGroup "Unit tests"

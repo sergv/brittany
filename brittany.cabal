@@ -183,7 +183,7 @@ test-suite brittany-test-suite
   type:
     exitcode-stdio-1.0
   main-is:
-    Main.hs
+    BrittanyTestSuite.hs
   hs-source-dirs:
     source/test-suite
   other-modules:
@@ -191,6 +191,7 @@ test-suite brittany-test-suite
 
   ghc-options:
     -rtsopts
+    -main-is BrittanyTestSuite
 
   build-depends:
     , base
