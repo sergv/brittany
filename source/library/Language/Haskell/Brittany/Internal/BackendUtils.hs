@@ -41,9 +41,9 @@ layoutWriteAppend t = do
   mTell $ stimes' spaces $ Text.Builder.singleton ' '
   mTell $ Text.Builder.fromText t
   mModify $ \s -> s
-    { _lstate_curYOrAddNewline = Cols $ case _lstate_curYOrAddNewline s of
-      Cols c           -> c + Text.length t + spaces
-      InsertNewlines{} -> Text.length t + spaces
+    { _lstate_curYOrAddNewline = Cols $ Text.length t + spaces + case _lstate_curYOrAddNewline s of
+      Cols c           -> c
+      InsertNewlines{} -> 0
     , _lstate_addSepSpace = Nothing
     }
 
@@ -166,7 +166,7 @@ layoutWriteEnsureAbsoluteN n = do
   state <- mGet
   let
     diff = case (_lstate_commentCol state, _lstate_curYOrAddNewline state) of
-      (Just c, _)                 -> n - c
+      (Just c , _)                -> n - c
       (Nothing, Cols i)           -> n - i
       (Nothing, InsertNewlines{}) -> n
   traceLocal ("layoutWriteEnsureAbsoluteN", n, diff)
