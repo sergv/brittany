@@ -613,8 +613,7 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
 
 -- | Layout a pattern synonym binding
 layoutPatSynBind
-  :: Occurrences AnnKeywordId ann
-  => LocatedAn ann (IdP GhcPs)
+  :: LocatedN (IdP GhcPs)
   -> HsPatSynDetails GhcPs
   -> HsPatSynDir GhcPs
   -> LPat GhcPs
@@ -666,8 +665,7 @@ layoutPatSynBind name patSynDetails patDir rpat = do
 
 -- | Helper method for the left hand side of a pattern synonym
 layoutLPatSyn
-  :: Occurrences AnnKeywordId ann
-  => LocatedAn ann (IdP GhcPs)
+  :: LocatedN (IdP GhcPs)
   -> HsPatSynDetails GhcPs
   -> ToBriDocM BriDocNumbered
 layoutLPatSyn name = \case

@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE NamedFieldPuns             #-}
 {-# LANGUAGE NoImplicitPrelude          #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
@@ -131,45 +132,34 @@ rdrNameToText (Exact name) = Text.pack $ getOccString name
 lrdrNameToText :: GenLocated l RdrName -> Text
 lrdrNameToText (L _ n) = rdrNameToText n
 
+nameAdornment :: NameAnn -> Maybe NameAdornment
+nameAdornment = \case
+  NameAnn{nann_adornment}       -> Just nann_adornment
+  NameAnnCommas{nann_adornment} -> Just nann_adornment
+  NameAnnOnly{nann_adornment}   -> Just nann_adornment
+  NameAnnRArrow{}               -> Nothing
+  NameAnnQuote{}                -> Nothing
+  NameAnnTrailing{}             -> Nothing
+
 lrdrNameToTextAnnGen
-  :: Occurrences AnnKeywordId ann
-  => (Text -> Text)
-  -> LocatedAn ann RdrName
+  :: (Text -> Text)
+  -> LocatedN RdrName
   -> Text
-lrdrNameToTextAnnGen f (L ann n) =
-  case (n, foldAllOccurrences check ann) of
+lrdrNameToTextAnnGen f (L a n) =
+  case (n, nameAdornment (anns (ann a))) of
     (Exact{}, _)
       | t == Text.pack "()" -> t
-    (_, (Any True, _,        _))        -> Text.pack "`" <> t <> Text.pack "`"
-    (_, (_,        Any True, _))        -> t
-    (_, (_,        _,        Any True)) -> Text.pack "(" <> t <> Text.pack ")"
-    _                                   -> t
+    (_, Just NameBackquotes) -> Text.pack "`" <> t <> Text.pack "`"
+    (_, Just NameParensHash) -> Text.pack "(#" <> t <> Text.pack "#)"
+    (_, Just NameSquare)     -> Text.pack "[" <> t <> Text.pack "]"
+    (_, Just NameParens)     -> Text.pack "(" <> t <> Text.pack ")"
+    _                        -> t
   where
     t :: Text
     t = f $ rdrNameToText n
 
-    check x = coerce (x == AnnBackquote, x == AnnCommaTuple, x == AnnOpenP)
-  -- anns <- mAsk
-  -- let t = f $ rdrNameToText n
-  -- let
-  --   hasUni x (ExactPrint.Types.G y, _) = x == y
-  --   hasUni _ _ = False
-  -- -- TODO: in general: we should _always_ process all annotaiton stuff here.
-  -- --       whatever we don't probably should have had some effect on the
-  -- --       output. in such cases, resorting to byExact is probably the safe
-  -- --       choice.
-  -- return $ case Map.lookup (ExactPrint.Types.mkAnnKey ast) anns of
-  --   Nothing -> t
-  --   Just (ExactPrint.Types.Ann _ _ _ aks _ _) -> case n of
-  --     Exact{} | t == Text.pack "()" -> t
-  --     _ | any (hasUni AnnBackquote) aks -> Text.pack "`" <> t <> Text.pack "`"
-  --     _ | any (hasUni AnnCommaTuple) aks -> t
-  --     _ | any (hasUni AnnOpenP) aks -> Text.pack "(" <> t <> Text.pack ")"
-  --     _ | otherwise -> t
-
 lrdrNameToTextAnn
-  :: Occurrences AnnKeywordId ann
-  => LocatedAn ann RdrName
+  :: LocatedN RdrName
   -> Text
 lrdrNameToTextAnn = lrdrNameToTextAnnGen id
 
@@ -183,8 +173,7 @@ specialCaseDataTypeEquality x
   | otherwise            = x
 
 lrdrNameToTextAnnTypeEqualityIsSpecial
-  :: Occurrences AnnKeywordId ann
-  => LocatedAn ann RdrName
+  :: LocatedN RdrName
   -> Text
 lrdrNameToTextAnnTypeEqualityIsSpecial =
   lrdrNameToTextAnnGen specialCaseDataTypeEquality

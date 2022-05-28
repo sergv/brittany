@@ -164,11 +164,6 @@ layoutBriDocM = \case
     --         deltaColumn :: !Int
     --       } deriving (Show,Eq,Ord,Data)
 
-    -- state <- mGet
-    -- let moveToExactLocationAction = case _lstate_curYOrAddNewline state of
-    --       Left{} -> pure ()
-    --       Right{} -> moveToExactAnn annKey -- moveToColumn
-
     state <- mGet
     let moveToExactLocationAction = case _lstate_curYOrAddNewline state of
           Cols{}           -> pure ()

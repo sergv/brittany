@@ -23,10 +23,9 @@ import Language.Haskell.GHC.ExactPrint (ExactPrint)
 layoutDataDecl
   :: ( ExactPrint (LocatedAn ann (TyClDecl GhcPs))
      , Occurrences AnnKeywordId ann
-     , Occurrences AnnKeywordId ann'
      )
   => LocatedAn ann (TyClDecl GhcPs)
-  -> LocatedAn ann' RdrName
+  -> LocatedN RdrName
   -> LHsQTyVars GhcPs
   -> HsDataDefn GhcPs
   -> ToBriDocM BriDocNumbered
