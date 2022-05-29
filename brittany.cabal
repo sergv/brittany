@@ -191,6 +191,7 @@ test-suite brittany-test-suite
 
   ghc-options:
     -rtsopts
+    -with-rtsopts "-M100M"
     -main-is BrittanyTestSuite
 
   build-depends:
