@@ -4,7 +4,6 @@
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE KindSignatures             #-}
-{-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE NoImplicitPrelude          #-}
 {-# LANGUAGE PatternSynonyms            #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
@@ -46,43 +45,44 @@ data ColsOrNewlines
   deriving (Eq, Ord, Show)
 
 data LayoutState = LayoutState
-  { _lstate_baseYs         :: [Int]
-     -- ^ stack of number of current indentation columns
-     -- (not number of indentations).
+  {
+
+    -- Stack of number of current indentation columns (not number of
+    -- indentations).
+    _lstate_baseYs           :: [Int]
+
   , _lstate_curYOrAddNewline :: ColsOrNewlines
-  , _lstate_indLevels      :: [Int]
-    -- ^ stack of current indentation levels. set for
-    -- any layout-affected elements such as
-    -- let/do/case/where elements.
-    -- The main purpose of this member is to
-    -- properly align comments, as their
-    -- annotation positions are relative to the
-    -- current layout indentation level.
-  , _lstate_indLevelLinger :: Int -- like a "last" of indLevel. Used for
-                                  -- properly treating cases where comments
-                                  -- on the first indented element have an
-                                  -- annotation offset relative to the last
-                                  -- non-indented element, which is confusing.
-  , _lstate_commentCol    :: Maybe Int -- this communicates two things:
-                                       -- firstly, that cursor is currently
-                                       -- at the end of a comment (so needs
-                                       -- newline before any actual content).
-                                       -- secondly, the column at which
-                                       -- insertion of comments started.
-  , _lstate_addSepSpace   :: Maybe Int -- number of spaces to insert if anyone
-                                       -- writes (any non-spaces) in the
-                                       -- current line.
-  , _lstate_commentNewlines :: Int -- number of newlines inserted due to
-                                   -- move-to-DP at a start of a comment.
-                                   -- Necessary because some keyword DPs
-                                   -- are relative to the last non-comment
-                                   -- entity (for some reason).
-                                   -- This is not very strictly reset to 0,
-                                   -- so we might in some cases get "artifacts"
-                                   -- from previous document elements.
-                                   -- But the worst effect at the moment would
-                                   -- be that we introduce less newlines on
-                                   -- moveToKWDP, which seems harmless enough.
+
+
+  -- Stack of current indentation levels. set for any layout-affected
+  -- elements such as let/do/case/where elements. The main purpose of
+  -- this member is to properly align comments, as their annotation
+  -- positions are relative to the current layout indentation level.
+  , _lstate_indLevels        :: [Int]
+
+  -- Like a "last" of indLevel. Used for properly treating cases where
+  -- comments on the first indented element have an annotation offset
+  -- relative to the last non-indented element, which is confusing.
+  , _lstate_indLevelLinger   :: !Int
+
+  -- This communicates two things: firstly, that cursor is currently
+  -- at the end of a comment (so needs newline before any actual
+  -- content). secondly, the column at which insertion of comments
+  -- started.
+  , _lstate_commentCol       :: Maybe Int
+
+  -- Number of spaces to insert if anyone writes (any non-spaces) in
+  -- the current line.
+  , _lstate_addSepSpace      :: Maybe Int
+
+  -- Number of newlines inserted due to move-to-DP at a start of a
+  -- comment. Necessary because some keyword DPs are relative to the
+  -- last non-comment entity (for some reason). This is not very
+  -- strictly reset to 0, so we might in some cases get "artifacts"
+  -- from previous document elements. But the worst effect at the
+  -- moment would be that we introduce less newlines on moveToKWDP,
+  -- which seems harmless enough.
+  , _lstate_commentNewlines  :: !Int
   }
 
 lstate_baseY :: LayoutState -> Int
@@ -120,13 +120,14 @@ data BrittanyError
   | ErrorOutputCheck String
     -- ^ checking the output for syntactic validity failed
 
+
 data BriSpacing = BriSpacing
-  { _bs_spacePastLineIndent :: Int -- space in the current,
-                                   -- potentially somewhat filled
-                                   -- line.
-  , _bs_spacePastIndent :: Int     -- space required in properly
-                                   -- indented blocks below the
-                                   -- current line.
+  {
+    -- Space in the current, potentially somewhat filled line.
+    _bs_spacePastLineIndent :: !Int
+    -- Space required in properly indented blocks below the current
+    -- line.
+  , _bs_spacePastIndent     :: !Int
   }
 
 data ColSig
@@ -176,9 +177,10 @@ data ColSig
   | ColImport
   deriving (Eq, Ord, Data.Data.Data, Show)
 
-data BrIndent = BrIndentNone
-              | BrIndentRegular
-              | BrIndentSpecial Int
+data BrIndent
+  = BrIndentNone
+  | BrIndentRegular
+  | BrIndentSpecial !Int
   deriving (Eq, Ord, Data.Data.Data, Show)
 
 type ToBriDocM = MultiRWSS.MultiRWS
@@ -212,22 +214,27 @@ data BriDoc
   | BDIndentLevelPushCur BriDoc
   | BDIndentLevelPop BriDoc
   | BDPar
-    { _bdpar_indent :: BrIndent
+    { _bdpar_indent     :: BrIndent
     , _bdpar_restOfLine :: BriDoc -- should not contain other BDPars
-    , _bdpar_indented :: BriDoc
+    , _bdpar_indented   :: BriDoc
     }
   -- | BDAddIndent BrIndent (BriDocF f)
   -- | BDNewline
   | BDAlt [BriDoc]
   | BDForwardLineMode BriDoc
-  | BDExternal Bool -- should print extra comment ?
-               Text
-  | BDPlain !Text -- used for QuasiQuotes, content can be multi-line
-                  -- (contrast to BDLit)
+  | BDExternal
+      Bool -- should print extra comment ?
+      Text
+  | BDPlain
+      !Text -- used for QuasiQuotes, content can be multi-line
+            -- (contrast to BDLit)
   | BDAnnotationPrior BriDoc
   | BDAnnotationKW (Maybe AnnKeywordId) BriDoc
   | BDAnnotationRest  BriDoc
-  | BDMoveToKWDP AnnKeywordId Bool BriDoc -- True if should respect x offset
+  | BDMoveToKWDP
+      AnnKeywordId
+      Bool -- True if should respect x offset
+      BriDoc
   | BDLines [BriDoc]
   | BDEnsureIndent BrIndent BriDoc
   -- the following constructors are only relevant for the alt transformation
@@ -256,22 +263,27 @@ data BriDocF f
   | BDFIndentLevelPushCur (f (BriDocF f))
   | BDFIndentLevelPop (f (BriDocF f))
   | BDFPar
-    { _bdfpar_indent :: BrIndent
+    { _bdfpar_indent     :: BrIndent
     , _bdfpar_restOfLine :: f (BriDocF f) -- should not contain other BDPars
-    , _bdfpar_indented :: f (BriDocF f)
+    , _bdfpar_indented   :: f (BriDocF f)
     }
   -- | BDAddIndent BrIndent (BriDocF f)
   -- | BDNewline
   | BDFAlt [f (BriDocF f)]
   | BDFForwardLineMode (f (BriDocF f))
-  | BDFExternal Bool -- should print extra comment ?
-                Text
-  | BDFPlain !Text -- used for QuasiQuotes, content can be multi-line
-                   -- (contrast to BDLit)
+  | BDFExternal
+      Bool -- should print extra comment ?
+      Text
+  | BDFPlain
+      !Text -- used for QuasiQuotes, content can be multi-line
+            -- (contrast to BDLit)
   | BDFAnnotationPrior (f (BriDocF f))
   | BDFAnnotationKW (Maybe AnnKeywordId) (f (BriDocF f))
   | BDFAnnotationRest  (f (BriDocF f))
-  | BDFMoveToKWDP AnnKeywordId Bool (f (BriDocF f)) -- True if should respect x offset
+  | BDFMoveToKWDP
+      AnnKeywordId
+      Bool -- True if should respect x offset
+      (f (BriDocF f))
   | BDFLines [(f (BriDocF f))]
   | BDFEnsureIndent BrIndent (f (BriDocF f))
   | BDFForceMultiline (f (BriDocF f))
@@ -355,48 +367,15 @@ isNotEmpty :: BriDoc -> Bool
 isNotEmpty BDEmpty = False
 isNotEmpty _       = True
 
--- this might not work. is not used anywhere either.
-briDocSeqSpine :: BriDoc -> ()
-briDocSeqSpine = \case
-  BDEmpty                  -> ()
-  BDLit _t                 -> ()
-  BDSeq list               -> foldl' ((briDocSeqSpine .) . seq) () list
-  BDCols _sig list         -> foldl' ((briDocSeqSpine .) . seq) () list
-  BDSeparator              -> ()
-  BDAddBaseY _ind bd       -> briDocSeqSpine bd
-  BDBaseYPushCur       bd  -> briDocSeqSpine bd
-  BDBaseYPop           bd  -> briDocSeqSpine bd
-  BDIndentLevelPushCur bd  -> briDocSeqSpine bd
-  BDIndentLevelPop     bd  -> briDocSeqSpine bd
-  BDPar _ind line indented -> briDocSeqSpine line `seq` briDocSeqSpine indented
-  BDAlt             alts   -> foldl' (\() -> briDocSeqSpine) () alts
-  BDForwardLineMode bd     -> briDocSeqSpine bd
-  BDExternal{}             -> ()
-  BDPlain{}                -> ()
-  BDAnnotationPrior bd     -> briDocSeqSpine bd
-  BDAnnotationKW _kw bd    -> briDocSeqSpine bd
-  BDAnnotationRest bd      -> briDocSeqSpine bd
-  BDMoveToKWDP _kw _b bd   -> briDocSeqSpine bd
-  BDLines lines            -> foldl' (\() -> briDocSeqSpine) () lines
-  BDEnsureIndent _ind bd   -> briDocSeqSpine bd
-  BDForceMultiline  bd     -> briDocSeqSpine bd
-  BDForceSingleline bd     -> briDocSeqSpine bd
-  BDNonBottomSpacing _ bd  -> briDocSeqSpine bd
-  BDSetParSpacing   bd     -> briDocSeqSpine bd
-  BDForceParSpacing bd     -> briDocSeqSpine bd
-  BDDebug _s bd            -> briDocSeqSpine bd
-
-briDocForceSpine :: BriDoc -> BriDoc
-briDocForceSpine bd = briDocSeqSpine bd `seq` bd
-
 data VerticalSpacingPar
-  = VerticalSpacingParNone -- no indented lines
-  | VerticalSpacingParSome   !Int -- indented lines, requiring this much
-                                  -- vertical space at most
-  | VerticalSpacingParAlways !Int -- indented lines, requiring this much
-                                  -- vertical space at most, but should
-                                  -- be considered as having space for
-                                  -- any spacing validity check.
+  -- No indented lines.
+  = VerticalSpacingParNone
+  -- Indented lines, requiring this much vertical space at most.
+  | VerticalSpacingParSome   !Int
+  -- Indented lines, requiring this much vertical space at most, but
+  -- should be considered as having space for any spacing validity
+  -- check.
+  | VerticalSpacingParAlways !Int
     -- TODO: it might be wrong not to extend "always" to the none case, i.e.
     -- we might get better properties of spacing operators by having a
     -- product like (Normal|Always, None|Some Int).
