@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE NamedFieldPuns      #-}
 {-# LANGUAGE NoImplicitPrelude   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -12,6 +13,7 @@ import Data.Foldable
 import Data.HList.HList
 import qualified Data.List as L
 import qualified Data.Map as Map
+import Data.Maybe
 import qualified Data.Semigroup as Semigroup
 import qualified Data.Text as T
 import qualified Data.Text as Text
@@ -93,20 +95,28 @@ ppModule m@HsModule{hsmodAnn, hsmodDecls} = do
       exactprintOnly :: Bool
       exactprintOnly = confUnpack (_conf_roundtrip_exactprint_only config')
 
-      (annsBefore, annsAfter) = splitAnnots m
+      (annsBefore, annotatedDecls, annsAfter) = splitAnnots' m
 
   ppPreamble $ setModComments annsBefore m
 
-  for_ hsmodDecls $ \decl -> do
+  for_ annotatedDecls $ \(cs, decl) -> do
+    let addAnn :: ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
+        addAnn = case cs of
+          []             -> id
+          L anchor _ : _ -> wrapPrior $ EpAnn
+            { entry    = anchor
+            , anns     = ()
+            , comments = EpaComments cs
+            }
     layoutBriDoc =<< if exactprintOnly
-      then briDocMToPPM $ briDocByExactNoComment decl
+      then briDocMToPPM $ addAnn $ briDocByExactNoComment decl
       else do
-        (r, errs, debugs) <- briDocMToPPMInner $ layoutDecl decl
+        (r, errs, debugs) <- briDocMToPPMInner $ addAnn $ layoutDecl decl
         mTell debugs
         mTell errs
         if null errs
           then pure r
-          else briDocMToPPM $ briDocByExactNoComment decl
+          else briDocMToPPM $ addAnn $ briDocByExactNoComment decl
 
   for_ annsAfter $ \comment@(L pos EpaComment{ac_tok}) -> do
     case anchor_op pos of
@@ -132,22 +142,44 @@ setModComments comments m@HsModule{hsmodAnn} = m
     EpAnnNotUsed        -> EpAnnNotUsed
   }
 
--- | Split module annotations into the ones that come before the first declaration
--- and after the last one.
-splitAnnots :: HsModule -> ([LEpaComment], [LEpaComment])
--- splitAnnots m@HsModule{hsmodAnn, hsmodDecls = []} = (priorComments $ epAnnComments hsmodAnn, [])
-splitAnnots m@HsModule{hsmodAnn, hsmodDecls} = case hsmodDecls of
-  []    -> (allComments,    [])
-  decls -> (commentsBefore, commentsAfter)
-    where
-      (commentsBefore, rest) = L.span (\x -> commentLoc x <= declLoc firstDecl) allComments
-      commentsAfter          = L.dropWhile (\x -> commentLoc x < declLoc lastDecl) rest
+splitAnnots' :: HsModule -> ([LEpaComment], [([LEpaComment], LHsDecl GhcPs)], [LEpaComment])
+splitAnnots' m@HsModule{hsmodAnn, hsmodDecls} =
+  case hsmodDecls of
+    []    -> (allComments, [], [])
+    decls -> (commentsBefore, decls', commentsAfter)
+      where
+        whereLoc :: Maybe RealSrcSpan
+        whereLoc =
+          case mapMaybe extractWhereLoc $ am_main $ anns hsmodAnn of
+            s1 : s2 : _ -> error $
+              "Module has more than one 'where' keyword: " ++ show s1 ++ " and " ++ show s2
+            []          -> Nothing
+            [whereSpan] -> Just whereSpan
 
-      firstDecl, lastDecl :: LHsDecl GhcPs
-      firstDecl = L.head hsmodDecls
-      lastDecl  = L.last hsmodDecls
+        (commentsBefore, rest) = case whereLoc of
+          Nothing  -> ([], allComments)
+          Just loc -> L.span (\x -> commentLoc x <= loc) allComments
+
+        (decls', commentsAfter) = annotateDecls [] rest decls
+
+        annotateDecls
+          :: [([LEpaComment], LHsDecl GhcPs)]
+          -> [LEpaComment]
+          -> [LHsDecl GhcPs]
+          -> ([([LEpaComment], LHsDecl GhcPs)], [LEpaComment])
+        annotateDecls acc cs []       = (L.reverse acc, cs)
+        annotateDecls acc cs (d : ds) = annotateDecls ((declComments, d) : acc) cs' ds
+          where
+            (declComments, cs') = L.span (\x -> commentLoc x <= declLoc d) cs
   where
+    allComments :: [LEpaComment]
     allComments = priorComments $ epAnnComments hsmodAnn
+
+    extractWhereLoc :: AddEpAnn -> Maybe RealSrcSpan
+    extractWhereLoc = \case
+      AddEpAnn AnnWhere (EpaSpan loc)  -> Just loc
+      AddEpAnn AnnWhere (EpaDelta _ _) -> error "Unexpected EpaDelta"
+      _                                -> Nothing
 
 -- | Prints the information associated with the module annotation,
 -- including the imports.
@@ -225,4 +257,3 @@ layoutBriDoc briDoc = do
   _ <- MultiRWSS.withMultiStateS state $ layoutBriDocM briDoc'
 
   return $ ()
-

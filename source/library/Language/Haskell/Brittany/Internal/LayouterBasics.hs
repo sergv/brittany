@@ -450,8 +450,14 @@ class DocWrapable a where
   docWrapNodePrior :: LocatedAn ann ast -> a -> a
   docWrapNodeRest  :: LocatedAn ann ast -> a -> a
 
-forgetAnn :: SrcSpanAnn' (EpAnn a) -> SrcSpanAnn' (EpAnn ())
-forgetAnn x = x { ann = void $ ann x }
+forgetAnn :: SrcSpanAnn' (EpAnn a) -> EpAnn ()
+forgetAnn x = void $ ann x
+
+wrapPrior :: EpAnn () -> ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
+wrapPrior epann bdm = do
+  bd <- bdm
+  i  <- allocNodeIndex
+  pure $ (i, BDFAnnotationPrior epann bd)
 
 instance DocWrapable (ToBriDocM BriDocNumbered) where
   docWrapNode (L ann _ast) bdm = do
@@ -464,10 +470,8 @@ instance DocWrapable (ToBriDocM BriDocNumbered) where
       $ (i2,)
       $ BDFAnnotationRest
       $ bd
-  docWrapNodePrior (L ann _ast) bdm = do
-    bd <- bdm
-    i1 <- allocNodeIndex
-    return $ (,) i1 $ BDFAnnotationPrior (forgetAnn ann) bd
+  docWrapNodePrior (L ann _ast) =
+    wrapPrior (forgetAnn ann)
   docWrapNodeRest _ast bdm = do
     bd <- bdm
     i2 <- allocNodeIndex

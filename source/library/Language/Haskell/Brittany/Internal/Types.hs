@@ -228,7 +228,7 @@ data BriDoc
   | BDPlain
       !Text -- used for QuasiQuotes, content can be multi-line
             -- (contrast to BDLit)
-  | BDAnnotationPrior (SrcSpanAnn' (EpAnn ())) BriDoc
+  | BDAnnotationPrior (EpAnn ()) BriDoc
   | BDAnnotationKW (Maybe AnnKeywordId) BriDoc
   | BDAnnotationRest  BriDoc
   | BDMoveToKWDP
@@ -277,7 +277,7 @@ data BriDocF f
   | BDFPlain
       !Text -- used for QuasiQuotes, content can be multi-line
             -- (contrast to BDLit)
-  | BDFAnnotationPrior (SrcSpanAnn' (EpAnn ())) (f (BriDocF f))
+  | BDFAnnotationPrior (EpAnn ()) (f (BriDocF f))
   | BDFAnnotationKW (Maybe AnnKeywordId) (f (BriDocF f))
   | BDFAnnotationRest  (f (BriDocF f))
   | BDFMoveToKWDP

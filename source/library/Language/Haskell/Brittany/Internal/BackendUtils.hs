@@ -326,10 +326,10 @@ moveToExactAnn
   :: ( MonadMultiWriter Text.Builder.Builder m
      , MonadMultiState LayoutState m
      )
-  => SrcSpanAnn' (EpAnn ann)
+  => EpAnn ann
   -> m ()
 moveToExactAnn a = moveNextLine $
-  case ann a of
+  case a of
     EpAnn{entry} -> case anchor_op entry of
       UnchangedAnchor -> 0
       MovedAnchor dp  -> getDeltaLine dp
@@ -358,12 +358,11 @@ unpackDeltaPos = \case
 
 ppmMoveToExactLoc
   :: MonadMultiWriter Text.Builder.Builder m => DeltaPos -> m ()
-ppmMoveToExactLoc = \case
-  SameLine{deltaColumn} ->
-    mTell $ stimes' deltaColumn $ Text.Builder.singleton ' '
-  DifferentLine{deltaLine, deltaColumn} -> do
-    mTell $ stimes' deltaLine $ Text.Builder.singleton '\n'
-    mTell $ stimes' deltaColumn $ Text.Builder.singleton ' '
+ppmMoveToExactLoc dp = do
+  mTell $ stimes' lines $ Text.Builder.singleton '\n'
+  mTell $ stimes' cols $ Text.Builder.singleton ' '
+  where
+    (lines, cols) = unpackDeltaPos dp
 
 layoutIndentRestorePostComment
   :: (MonadMultiState LayoutState m, MonadMultiWriter Text.Builder.Builder m)

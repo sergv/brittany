@@ -1,6 +1,7 @@
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE NamedFieldPuns      #-}
 {-# LANGUAGE NoImplicitPrelude   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -13,17 +14,21 @@ import qualified Data.IntMap.Strict as IntMapS
 import qualified Data.Semigroup as Semigroup
 import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
-import qualified Data.Text.Lazy.Builder as Text.Builder
+import qualified Data.Text.Lazy.Builder as TLB
+
 import Data.Traversable
 import qualified GHC.OldList as List
+import GHC.Parser.Annotation
+import GHC.Types.SrcLoc
 import Language.Haskell.Brittany.Internal.BackendUtils
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.PreludeUtils
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.Brittany.Internal.Utils
+import Language.Haskell.GHC.ExactPrint.Types
 import qualified Language.Haskell.GHC.ExactPrint.Types as ExactPrint.Types
-import GHC.Parser.Annotation
+import Language.Haskell.GHC.ExactPrint.Utils
 
 type ColIndex = Int
 
@@ -60,7 +65,7 @@ data ColBuildState = ColBuildState
 
 type LayoutConstraints m
   = ( MonadMultiReader Config m
-    , MonadMultiWriter Text.Builder.Builder m
+    , MonadMultiWriter TLB.Builder m
     , MonadMultiWriter (Seq String) m
     , MonadMultiState LayoutState m
     )
@@ -140,7 +145,7 @@ layoutBriDocM = \case
       unless (i == tlineCount) $
         layoutWriteNewlineBlock
   BDPlain t -> layoutWriteAppend t
-  BDAnnotationPrior ann bd -> do
+  BDAnnotationPrior a bd -> do
     -- data GenLocated l e = L l e
     -- getLoc         :: LocatedAn ann a -> SrcAnn ann
     -- ann            :: SrcAnn ann -> EpAnn ann
@@ -154,7 +159,7 @@ layoutBriDocM = \case
     -- -- This one doesn't normalise comment text: ghcCommentText :: LEpaComment -> String
     -- epaLocationRealSrcSpan :: EpaLocation -> RealSrcSpan
     -- tokComment :: LEpaComment -> Comment
-    let priorCmnts = []
+    let priorCmnts = priorComments $ epAnnComments a
         -- layoutMoveToCommentPos col row 1
 
     -- data DeltaPos
@@ -167,26 +172,33 @@ layoutBriDocM = \case
     state <- mGet
     let moveToExactLocationAction = case _lstate_curYOrAddNewline state of
           Cols{}           -> pure ()
-          InsertNewlines{} -> moveToExactAnn ann
+          InsertNewlines{} -> moveToExactAnn a
 
     case priorCmnts of
       [] -> moveToExactLocationAction
       ps -> do
         -- layoutResetSepSpace
-        for_ ps $ \(ExactPrint.Types.Comment comment _ _ _, delta) ->
-          when (comment /= "(" && comment /= ")") $ do
-            let commentLines = Text.lines $ Text.pack comment
-                (x, y)       = unpackDeltaPos delta
-            case comment of
-              -- Evil hack for CPP.
-              '#': _ -> layoutMoveToCommentPos y (-999) (length commentLines)
-              _      -> layoutMoveToCommentPos y x (length commentLines)
-            -- fixedX <- fixMoveToLineByIsNewline x
-            -- replicateM_ fixedX layoutWriteNewline
-            -- layoutMoveToIndentCol y
-            layoutWriteAppendMultiline commentLines
-          -- mModify $ \s -> s { _lstate_curYOrAddNewline = Right 0 }
-        moveToExactLocationAction
+        for_ ps $ \comment@(L pos EpaComment{ac_tok}) -> do
+          case anchor_op pos of
+            UnchangedAnchor -> pure ()
+            MovedAnchor dp  -> ppmMoveToExactLoc dp
+          mTell $ TLB.fromString $ commentContents $ tokComment comment
+          moveToExactLocationAction
+
+          -- let comment = Text.pack $ ExactPrint.Types.commentContents $ tokComment lcomment
+          -- when (comment /= "(" && comment /= ")") $ do
+          --   let commentLines = Text.lines comment
+          --       (x, y)       = unpackDeltaPos delta
+          --   case comment of
+          --     -- Evil hack for CPP.
+          --     '#': _ -> layoutMoveToCommentPos y (-999) (length commentLines)
+          --     _      -> layoutMoveToCommentPos y x (length commentLines)
+          --   -- fixedX <- fixMoveToLineByIsNewline x
+          --   -- replicateM_ fixedX layoutWriteNewline
+          --   -- layoutMoveToIndentCol y
+          --   layoutWriteAppendMultiline commentLines
+          -- -- mModify $ \s -> s { _lstate_curYOrAddNewline = Right 0 }
+        -- moveToExactLocationAction
     layoutBriDocM bd
   BDAnnotationKW _keyword bd -> do
     layoutBriDocM bd
@@ -254,7 +266,7 @@ layoutBriDocM = \case
   BDSetParSpacing bd -> layoutBriDocM bd
   BDForceParSpacing bd -> layoutBriDocM bd
   BDDebug s bd -> do
-    mTell $ Text.Builder.fromText $ Text.pack $ "{-" ++ s ++ "-}"
+    mTell $ TLB.fromText $ Text.pack $ "{-" ++ s ++ "-}"
     layoutBriDocM bd
 
 briDocLineLength :: BriDoc -> Int
