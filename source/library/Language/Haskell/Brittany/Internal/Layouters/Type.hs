@@ -238,7 +238,7 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
     runFilteredAlternative $ do
       addAlternative $
         docSeq
-        [ docWrapNodeRest ltype $ docParenL
+        [ docWrapNodeRest ltype docParenL
         , docForceSingleline typeDoc1
         , docParenR
         ]

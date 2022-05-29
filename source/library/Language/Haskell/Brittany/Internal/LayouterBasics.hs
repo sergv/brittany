@@ -452,20 +452,20 @@ class DocWrapable a where
   docWrapNodeRest  :: LocatedAn ann ast -> a -> a
 
 forgetAnn :: SrcSpanAnn' (EpAnn a) -> EpAnn ()
-forgetAnn x = void $ ann x
+forgetAnn = void . ann
 
 wrapPrior :: EpAnn () -> ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
 wrapPrior epann bdm = do
   bd <- bdm
   i  <- allocNodeIndex
-  pure $ (i, BDFAnnotationPrior epann bd)
+  pure (i, BDFAnnotationPrior epann bd)
 
 instance DocWrapable (ToBriDocM BriDocNumbered) where
   docWrapNode (L ann _ast) bdm = do
     bd <- bdm
     i1 <- allocNodeIndex
     i2 <- allocNodeIndex
-    return
+    pure
       $ (i1,)
       $ BDFAnnotationPrior (forgetAnn ann)
       $ (i2,)
@@ -473,53 +473,53 @@ instance DocWrapable (ToBriDocM BriDocNumbered) where
       $ bd
   docWrapNodePrior (L ann _ast) =
     wrapPrior (forgetAnn ann)
-  docWrapNodeRest _ast bdm = do
+  docWrapNodeRest (L ann _ast) bdm = do
     bd <- bdm
     i2 <- allocNodeIndex
-    return $ (,) i2 $ BDFAnnotationRest bd
+    pure $ (,) i2 $ BDFAnnotationRest bd
 
 instance DocWrapable (ToBriDocM a) => DocWrapable [ToBriDocM a] where
   docWrapNode ast bdms = case bdms of
-    [] -> []
+    []   -> []
     [bd] -> [docWrapNode ast bd]
-    (bd1 : bdR) | (bdN : bdM) <- reverse bdR ->
+    bd1 : bdR | bdN : bdM <- reverse bdR ->
       [docWrapNodePrior ast bd1] ++ reverse bdM ++ [docWrapNodeRest ast bdN]
-    _ -> error "cannot happen (TM)"
+    _    -> error "cannot happen (TM)"
   docWrapNodePrior ast bdms = case bdms of
-    [] -> []
-    [bd] -> [docWrapNodePrior ast bd]
-    (bd1 : bdR) -> docWrapNodePrior ast bd1 : bdR
+    []        -> []
+    [bd]      -> [docWrapNodePrior ast bd]
+    bd1 : bdR -> docWrapNodePrior ast bd1 : bdR
   docWrapNodeRest ast bdms = case reverse bdms of
-    [] -> []
-    (bdN : bdR) -> reverse $ docWrapNodeRest ast bdN : bdR
+    []        -> []
+    bdN : bdR -> reverse $ docWrapNodeRest ast bdN : bdR
 
 instance DocWrapable (ToBriDocM a) => DocWrapable (ToBriDocM [a]) where
   docWrapNode ast bdsm = do
     bds <- bdsm
     case bds of
-      [] -> return [] -- TODO: this might be bad. maybe. then again, not really. well.
+      [] -> pure [] -- TODO: this might be bad. maybe. then again, not really. well.
       [bd] -> do
-        bd' <- docWrapNode ast (return bd)
-        return [bd']
-      (bd1 : bdR) | (bdN : bdM) <- reverse bdR -> do
-        bd1' <- docWrapNodePrior ast (return bd1)
-        bdN' <- docWrapNodeRest ast (return bdN)
-        return $ [bd1'] ++ reverse bdM ++ [bdN']
+        bd' <- docWrapNode ast (pure bd)
+        pure [bd']
+      bd1 : bdR | bdN : bdM <- reverse bdR -> do
+        bd1' <- docWrapNodePrior ast (pure bd1)
+        bdN' <- docWrapNodeRest ast (pure bdN)
+        pure $ [bd1'] ++ reverse bdM ++ [bdN']
       _ -> error "cannot happen (TM)"
   docWrapNodePrior ast bdsm = do
     bds <- bdsm
     case bds of
-      [] -> return []
+      []          -> pure []
       (bd1 : bdR) -> do
-        bd1' <- docWrapNodePrior ast (return bd1)
-        return (bd1' : bdR)
+        bd1' <- docWrapNodePrior ast (pure bd1)
+        pure (bd1' : bdR)
   docWrapNodeRest ast bdsm = do
     bds <- bdsm
     case reverse bds of
-      [] -> return []
-      (bdN : bdR) -> do
-        bdN' <- docWrapNodeRest ast (return bdN)
-        return $ reverse (bdN' : bdR)
+      []        -> pure []
+      bdN : bdR -> do
+        bdN' <- docWrapNodeRest ast (pure bdN)
+        pure $ reverse (bdN' : bdR)
 
 instance DocWrapable (ToBriDocM a) => DocWrapable (ToBriDocM (Seq a)) where
   docWrapNode ast bdsm = do
