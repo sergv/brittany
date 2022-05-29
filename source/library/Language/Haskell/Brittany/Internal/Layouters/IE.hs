@@ -23,7 +23,7 @@ import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.Brittany.Internal.Utils
 
 layoutIE :: LIE GhcPs -> ToBriDocM BriDocNumbered
-layoutIE lie@(L _ ie) = docWrapNode lie $ case ie of
+layoutIE lie@(L _ ie) = docWrapNodeAround lie $ case ie of
   IEVar _ x -> layoutWrapped lie x
   IEThingAbs _ x -> layoutWrapped lie x
   IEThingAll _ x -> docSeq [layoutWrapped lie x, docLitS "(..)"]
@@ -40,12 +40,12 @@ layoutIE lie@(L _ ie) = docWrapNode lie $ case ie of
         ++ intersperse docCommaSep (map nameDoc sortedNs)
         ++ [docParenR]
       addAlternative
-        $ docWrapNodeRest lie
+        $ docWrapNodeAfter lie
         $ docAddBaseY BrIndentRegular
         $ docPar (layoutWrapped lie x) (layoutItems (splitFirstLast sortedNs))
    where
     nameDoc = docLit . lrdrNameToTextAnn . ieLWrappedName
-    layoutItem n = docSeq [docCommaSep, docWrapNode n $ nameDoc n]
+    layoutItem n = docSeq [docCommaSep, docWrapNodeAround n $ nameDoc n]
     layoutItems FirstLastEmpty = docSetBaseY $ docLines
       [ docSeq [docParenLSep, docNodeAnnKW lie (Just AnnOpenP) docEmpty]
       , docParenR
@@ -57,7 +57,7 @@ layoutIE lie@(L _ ie) = docWrapNode lie $ case ie of
     layoutItems (FirstLast n1 nMs nN) =
       docSetBaseY
         $ docLines
-        $ [docSeq [docParenLSep, docWrapNode n1 $ nameDoc n1]]
+        $ [docSeq [docParenLSep, docWrapNodeAround n1 $ nameDoc n1]]
         ++ map layoutItem nMs
         ++ [ docSeq [docCommaSep, docNodeAnnKW lie (Just AnnOpenP) $ nameDoc nN]
            , docParenR
@@ -99,7 +99,7 @@ layoutAnnAndSepLLIEs shouldSort llies@(L _ lies) = do
       ShouldSortItems -> sortedLies
       KeepItemsUnsorted -> lies
   ieCommaDocs <-
-    docWrapNodeRest llies $ sequence $ case splitFirstLast ieDocs of
+    docWrapNodeAfter llies $ sequence $ case splitFirstLast ieDocs of
       FirstLastEmpty -> []
       FirstLastSingleton ie -> [ie]
       FirstLast ie1 ieMs ieN ->
@@ -161,7 +161,7 @@ layoutLLIEs enableSingleline shouldSort llies = do
     [] -> do
       addAlternativeCond (not hasComments) $ docLitS "()"
       addAlternativeCond hasComments $ docPar
-        (docSeq [docParenLSep, docWrapNodeRest llies docEmpty])
+        (docSeq [docParenLSep, docWrapNodeAfter llies docEmpty])
         docParenR
     (ieDsH : ieDsT) -> do
       addAlternativeCond (not hasComments && enableSingleline)

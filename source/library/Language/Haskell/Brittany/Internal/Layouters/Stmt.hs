@@ -23,7 +23,7 @@ layoutStmt lstmt@(L _ stmt) = do
   indentPolicy <- mAsk <&> _conf_layout .> _lconfig_indentPolicy .> confUnpack
   indentAmount :: Int <-
     mAsk <&> _conf_layout .> _lconfig_indentAmount .> confUnpack
-  docWrapNode lstmt $ case stmt of
+  docWrapNodeAround lstmt $ case stmt of
     LastStmt _ body Nothing _ -> do
       layoutExpr body
     BindStmt _ lPat expr -> do

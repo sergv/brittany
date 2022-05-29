@@ -106,9 +106,9 @@ transformAlts =
     --         BDForceMultiline  bd    -> BDFForceMultiline <$> go bd
     --         BDForceSingleline bd    -> BDFForceSingleline <$> go bd
     --         BDForwardLineMode bd    -> BDFForwardLineMode <$> go bd
-    --         BDExternal k ks c t         -> return $ BDFExternal k ks c t
-    --         BDAnnotationPrior annKey bd -> BDFAnnotationPrior annKey <$> go bd
-    --         BDAnnotationPost  annKey bd -> BDFAnnotationRest  annKey <$> go bd
+    --         BDExternal k ks c t          -> return $ BDFExternal k ks c t
+    --         BDAnnotationBefore annKey bd -> BDFAnnotationBefore annKey <$> go bd
+    --         BDAnnotationPost  annKey bd  -> BDFAnnotationAter  annKey <$> go bd
     --         BDLines lines         -> BDFLines <$> go `mapM` lines
     --         BDEnsureIndent ind bd -> BDFEnsureIndent ind <$> go bd
     --         BDProhibitMTEL bd     -> BDFProhibitMTEL <$> go bd
@@ -263,14 +263,14 @@ transformAlts =
         return $ x
       BDFExternal{} -> processSpacingSimple bdX $> bdX
       BDFPlain{} -> processSpacingSimple bdX $> bdX
-      BDFAnnotationPrior ann bd -> do
+      BDFAnnotationBefore ann bd -> do
         acp <- mGet
         mSet
           $ acp { _acp_forceMLFlag = altLineModeDecay $ _acp_forceMLFlag acp }
         bd' <- rec bd
-        return $ reWrap $ BDFAnnotationPrior ann bd'
-      BDFAnnotationRest bd ->
-        reWrap . BDFAnnotationRest <$> rec bd
+        return $ reWrap $ BDFAnnotationBefore ann bd'
+      BDFAnnotationAfter bd ->
+        reWrap . BDFAnnotationAfter <$> rec bd
       BDFAnnotationKW kw bd ->
         reWrap . BDFAnnotationKW kw <$> rec bd
       BDFMoveToKWDP kw b bd ->
@@ -457,9 +457,9 @@ getSpacing !bridoc = rec bridoc
       BDFPlain txt -> return $ LineModeValid $ case Text.lines txt of
         [t] -> VerticalSpacing (Text.length t) VerticalSpacingParNone False
         _ -> VerticalSpacing 999 VerticalSpacingParNone False
-      BDFAnnotationPrior _ bd -> rec bd
+      BDFAnnotationBefore _ bd -> rec bd
       BDFAnnotationKW _kw bd -> rec bd
-      BDFAnnotationRest bd -> rec bd
+      BDFAnnotationAfter bd -> rec bd
       BDFMoveToKWDP _kw _b bd -> rec bd
       BDFLines [] ->
         return $ LineModeValid $ VerticalSpacing 0 VerticalSpacingParNone False
@@ -758,9 +758,9 @@ getSpacings limit bridoc = preFilterLimit <$> rec bridoc
               VerticalSpacing (Text.length t1) (VerticalSpacingParAlways 0) True
         | allowHangingQuasiQuotes
         ]
-      BDFAnnotationPrior _ bd -> rec bd
+      BDFAnnotationBefore _ bd -> rec bd
       BDFAnnotationKW _kw bd  -> rec bd
-      BDFAnnotationRest bd    -> rec bd
+      BDFAnnotationAfter bd    -> rec bd
       BDFMoveToKWDP _kw _b bd -> rec bd
       BDFLines []             -> return [VerticalSpacing 0 VerticalSpacingParNone False]
       BDFLines ls@(_ : _)     -> do

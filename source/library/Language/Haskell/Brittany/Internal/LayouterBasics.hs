@@ -375,7 +375,7 @@ docMoveToKWDP kw shouldRestoreIndent bdm =
 
 docAnnotationRest
   :: ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
-docAnnotationRest bdm = allocateNode . BDFAnnotationRest =<< bdm
+docAnnotationRest bdm = allocateNode . BDFAnnotationAfter =<< bdm
 
 docNonBottomSpacing :: ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
 docNonBottomSpacing bdm = allocateNode . BDFNonBottomSpacing False =<< bdm
@@ -447,126 +447,126 @@ docNodeMoveToKWDP _ast kw shouldRestoreIndent bdm =
   docMoveToKWDP kw shouldRestoreIndent bdm
 
 class DocWrapable a where
-  docWrapNode      :: LocatedAn ann ast -> a -> a
-  docWrapNodePrior :: LocatedAn ann ast -> a -> a
-  docWrapNodeRest  :: LocatedAn ann ast -> a -> a
+  docWrapNodeAround      :: LocatedAn ann ast -> a -> a
+  docWrapNodeBefore :: LocatedAn ann ast -> a -> a
+  docWrapNodeAfter  :: LocatedAn ann ast -> a -> a
 
 forgetAnn :: SrcSpanAnn' (EpAnn a) -> EpAnn ()
 forgetAnn = void . ann
 
-wrapPrior :: EpAnn () -> ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
-wrapPrior epann bdm = do
+wrapBefore :: EpAnn () -> ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
+wrapBefore epann bdm = do
   bd <- bdm
   i  <- allocNodeIndex
-  pure (i, BDFAnnotationPrior epann bd)
+  pure (i, BDFAnnotationBefore epann bd)
 
 instance DocWrapable (ToBriDocM BriDocNumbered) where
-  docWrapNode (L ann _ast) bdm = do
+  docWrapNodeAround (L ann _ast) bdm = do
     bd <- bdm
     i1 <- allocNodeIndex
     i2 <- allocNodeIndex
     pure
       $ (i1,)
-      $ BDFAnnotationPrior (forgetAnn ann)
+      $ BDFAnnotationBefore (forgetAnn ann)
       $ (i2,)
-      $ BDFAnnotationRest
+      $ BDFAnnotationAfter
       $ bd
-  docWrapNodePrior (L ann _ast) =
-    wrapPrior (forgetAnn ann)
-  docWrapNodeRest (L ann _ast) bdm = do
+  docWrapNodeBefore (L ann _ast) =
+    wrapBefore (forgetAnn ann)
+  docWrapNodeAfter (L ann _ast) bdm = do
     bd <- bdm
     i2 <- allocNodeIndex
-    pure $ (,) i2 $ BDFAnnotationRest bd
+    pure $ (,) i2 $ BDFAnnotationAfter bd
 
 instance DocWrapable (ToBriDocM a) => DocWrapable [ToBriDocM a] where
-  docWrapNode ast bdms = case bdms of
+  docWrapNodeAround ast bdms = case bdms of
     []   -> []
-    [bd] -> [docWrapNode ast bd]
+    [bd] -> [docWrapNodeAround ast bd]
     bd1 : bdR | bdN : bdM <- reverse bdR ->
-      [docWrapNodePrior ast bd1] ++ reverse bdM ++ [docWrapNodeRest ast bdN]
+      [docWrapNodeBefore ast bd1] ++ reverse bdM ++ [docWrapNodeAfter ast bdN]
     _    -> error "cannot happen (TM)"
-  docWrapNodePrior ast bdms = case bdms of
+  docWrapNodeBefore ast bdms = case bdms of
     []        -> []
-    [bd]      -> [docWrapNodePrior ast bd]
-    bd1 : bdR -> docWrapNodePrior ast bd1 : bdR
-  docWrapNodeRest ast bdms = case reverse bdms of
+    [bd]      -> [docWrapNodeBefore ast bd]
+    bd1 : bdR -> docWrapNodeBefore ast bd1 : bdR
+  docWrapNodeAfter ast bdms = case reverse bdms of
     []        -> []
-    bdN : bdR -> reverse $ docWrapNodeRest ast bdN : bdR
+    bdN : bdR -> reverse $ docWrapNodeAfter ast bdN : bdR
 
 instance DocWrapable (ToBriDocM a) => DocWrapable (ToBriDocM [a]) where
-  docWrapNode ast bdsm = do
+  docWrapNodeAround ast bdsm = do
     bds <- bdsm
     case bds of
       [] -> pure [] -- TODO: this might be bad. maybe. then again, not really. well.
       [bd] -> do
-        bd' <- docWrapNode ast (pure bd)
+        bd' <- docWrapNodeAround ast (pure bd)
         pure [bd']
       bd1 : bdR | bdN : bdM <- reverse bdR -> do
-        bd1' <- docWrapNodePrior ast (pure bd1)
-        bdN' <- docWrapNodeRest ast (pure bdN)
+        bd1' <- docWrapNodeBefore ast (pure bd1)
+        bdN' <- docWrapNodeAfter ast (pure bdN)
         pure $ [bd1'] ++ reverse bdM ++ [bdN']
       _ -> error "cannot happen (TM)"
-  docWrapNodePrior ast bdsm = do
+  docWrapNodeBefore ast bdsm = do
     bds <- bdsm
     case bds of
       []          -> pure []
       (bd1 : bdR) -> do
-        bd1' <- docWrapNodePrior ast (pure bd1)
+        bd1' <- docWrapNodeBefore ast (pure bd1)
         pure (bd1' : bdR)
-  docWrapNodeRest ast bdsm = do
+  docWrapNodeAfter ast bdsm = do
     bds <- bdsm
     case reverse bds of
       []        -> pure []
       bdN : bdR -> do
-        bdN' <- docWrapNodeRest ast (pure bdN)
+        bdN' <- docWrapNodeAfter ast (pure bdN)
         pure $ reverse (bdN' : bdR)
 
 instance DocWrapable (ToBriDocM a) => DocWrapable (ToBriDocM (Seq a)) where
-  docWrapNode ast bdsm = do
+  docWrapNodeAround ast bdsm = do
     bds <- bdsm
     case Seq.viewl bds of
       Seq.EmptyL -> return Seq.empty -- TODO: this might be bad. maybe. then again, not really. well.
       bd1 Seq.:< rest -> case Seq.viewr rest of
         Seq.EmptyR -> do
-          bd1' <- docWrapNode ast (return bd1)
+          bd1' <- docWrapNodeAround ast (return bd1)
           return $ Seq.singleton bd1'
         bdM Seq.:> bdN -> do
-          bd1' <- docWrapNodePrior ast (return bd1)
-          bdN' <- docWrapNodeRest ast (return bdN)
+          bd1' <- docWrapNodeBefore ast (return bd1)
+          bdN' <- docWrapNodeAfter ast (return bdN)
           return $ (bd1' Seq.<| bdM) Seq.|> bdN'
-  docWrapNodePrior ast bdsm = do
+  docWrapNodeBefore ast bdsm = do
     bds <- bdsm
     case Seq.viewl bds of
       Seq.EmptyL -> return Seq.empty
       bd1 Seq.:< bdR -> do
-        bd1' <- docWrapNodePrior ast (return bd1)
+        bd1' <- docWrapNodeBefore ast (return bd1)
         return $ bd1' Seq.<| bdR
-  docWrapNodeRest ast bdsm = do
+  docWrapNodeAfter ast bdsm = do
     bds <- bdsm
     case Seq.viewr bds of
       Seq.EmptyR -> return Seq.empty
       bdR Seq.:> bdN -> do
-        bdN' <- docWrapNodeRest ast (return bdN)
+        bdN' <- docWrapNodeAfter ast (return bdN)
         return $ bdR Seq.|> bdN'
 
 instance DocWrapable (ToBriDocM ([BriDocNumbered], BriDocNumbered, a)) where
-  docWrapNode ast stuffM = do
+  docWrapNodeAround ast stuffM = do
     (bds, bd, x) <- stuffM
     if null bds
       then do
-        bd' <- docWrapNode ast (return bd)
+        bd' <- docWrapNodeAround ast (return bd)
         return (bds, bd', x)
       else do
-        bds' <- docWrapNodePrior ast (return bds)
-        bd' <- docWrapNodeRest ast (return bd)
+        bds' <- docWrapNodeBefore ast (return bds)
+        bd' <- docWrapNodeAfter ast (return bd)
         return (bds', bd', x)
-  docWrapNodePrior ast stuffM = do
+  docWrapNodeBefore ast stuffM = do
     (bds, bd, x) <- stuffM
-    bds' <- docWrapNodePrior ast (return bds)
+    bds' <- docWrapNodeBefore ast (return bds)
     return (bds', bd, x)
-  docWrapNodeRest ast stuffM = do
+  docWrapNodeAfter ast stuffM = do
     (bds, bd, x) <- stuffM
-    bd' <- docWrapNodeRest ast (return bd)
+    bd' <- docWrapNodeAfter ast (return bd)
     return (bds, bd', x)
 
 

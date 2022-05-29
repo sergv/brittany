@@ -37,7 +37,7 @@ layoutSigType (L _ HsSig{sig_bndrs, sig_body}) =
 layoutContext :: LHsContext GhcPs -> ToBriDocM BriDocNumbered
 layoutContext lcs@(L _ cs) = do
   cs' <- traverse (docSharedWrapper layoutType) cs
-  docWrapNode lcs $ case cs' of
+  docWrapNodeAround lcs $ case cs' of
     []  -> docLitS "()"
     [x] -> x
     _   -> runFilteredAlternative $ do
@@ -99,7 +99,7 @@ layoutForallType bndrs ltype = do
             (docLines
               [ docCols
                 ColTyOpPrefix
-                [ docWrapNodeRest ltype $ docLitS " . "
+                [ docWrapNodeAfter ltype $ docLitS " . "
                 , docAddBaseY (BrIndentSpecial 3) contextDoc
                 ]
               , docCols
@@ -131,7 +131,7 @@ layoutForallType bndrs ltype = do
             (docSeq $ forallDoc : tyVarDocLineList)
             (docCols
               ColTyOpPrefix
-              [ docWrapNodeRest typ $ docLitS " . "
+              [ docWrapNodeAfter typ $ docLitS " . "
               , maybeForceML typeDoc
               ])
         -- :: forall
@@ -151,18 +151,18 @@ layoutForallType bndrs ltype = do
                   ])
             ++ [ docCols
                    ColTyOpPrefix
-                   [ docWrapNodeRest typ $ docLitS " . "
+                   [ docWrapNodeAfter typ $ docLitS " . "
                    , maybeForceML typeDoc
                    ]
                ])
 
 layoutType :: LHsType GhcPs -> ToBriDocM BriDocNumbered
-layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
+layoutType ltype@(L _ typ) = docWrapNodeAround ltype $ case typ of
   HsTyVar _ promoted name -> do
     let t = lrdrNameToTextAnnTypeEqualityIsSpecial name
     case promoted of
-      IsPromoted  -> docSeq [docSeparator, docTick, docWrapNode name $ docLit t]
-      NotPromoted -> docWrapNode name $ docLit t
+      IsPromoted  -> docSeq [docSeparator, docTick, docWrapNodeAround name $ docLit t]
+      NotPromoted -> docWrapNodeAround name $ docLit t
 
   HsForAllTy _ hsf typ -> do
     let bndrs = getBinders hsf
@@ -230,7 +230,7 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
           (docNodeAnnKW ltype Nothing typeDoc1)
           (docCols
             ColTyOpPrefix
-            [ docWrapNodeRest ltype $ appSep $ docLitS "->"
+            [ docWrapNodeAfter ltype $ appSep $ docLitS "->"
             , docAddBaseY (BrIndentSpecial 3) $ maybeForceML typeDoc2
             ])
   HsParTy _ typ1 -> do
@@ -238,7 +238,7 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
     runFilteredAlternative $ do
       addAlternative $
         docSeq
-        [ docWrapNodeRest ltype docParenL
+        [ docWrapNodeAfter ltype docParenL
         , docForceSingleline typeDoc1
         , docParenR
         ]
@@ -246,7 +246,7 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
         docPar
         (docCols
           ColTyOpPrefix
-          [ docWrapNodeRest ltype $ docParenLSep
+          [ docWrapNodeAfter ltype $ docParenLSep
           , docAddBaseY (BrIndentSpecial 2) $ typeDoc1
           ])
         docParenR
@@ -281,7 +281,7 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
     runFilteredAlternative $ do
       addAlternative $
         docSeq
-        [ docWrapNodeRest ltype $ docLitS "["
+        [ docWrapNodeAfter ltype $ docLitS "["
         , docForceSingleline typeDoc1
         , docLitS "]"
         ]
@@ -289,7 +289,7 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
         docPar
           (docCols
             ColTyOpPrefix
-            [ docWrapNodeRest ltype $ docLitS "[ "
+            [ docWrapNodeAfter ltype $ docLitS "[ "
             , docAddBaseY (BrIndentSpecial 2) $ typeDoc1
             ])
           (docLitS "]")
@@ -313,13 +313,13 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
         addAlternative $
           docSeq
             $ [docParenL]
-            ++ docWrapNodeRest ltype commaDocs
+            ++ docWrapNodeAfter ltype commaDocs
             ++ [docParenR]
         addAlternative $ do
           let line1 = docCols ColTyOpPrefix [docParenLSep, head docs]
           docPar
             (docAddBaseY (BrIndentSpecial 2) line1)
-            (docLines $ docWrapNodeRest ltype lines ++ [docParenR])
+            (docLines $ docWrapNodeAfter ltype lines ++ [docParenR])
     unboxedL = do
       docs <- docSharedWrapper layoutType `mapM` typs
       let start = docParenHashLSep
@@ -328,7 +328,7 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
         addAlternative $
           docSeq
             $ [start]
-            ++ docWrapNodeRest ltype (List.intersperse docCommaSep docs)
+            ++ docWrapNodeAfter ltype (List.intersperse docCommaSep docs)
             ++ [end]
         addAlternative $ do
           let line1 = docCols ColTyOpPrefix [start, head docs]
@@ -404,7 +404,7 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
     runFilteredAlternative $ do
       addAlternative $
         docSeq
-          [ docWrapNodeRest ltype $ docLitS $ "?" ++ showSDocUnsafe (ftext ipName) ++ "::"
+          [ docWrapNodeAfter ltype $ docLitS $ "?" ++ showSDocUnsafe (ftext ipName) ++ "::"
           , docForceSingleline typeDoc1
           ]
       addAlternative $
@@ -412,7 +412,7 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
           (docLitS $ "?" ++ showSDocUnsafe (ftext ipName))
           (docCols
             ColTyOpPrefix
-            [ docWrapNodeRest ltype $ docLitS ":: "
+            [ docWrapNodeAfter ltype $ docLitS ":: "
             , docAddBaseY (BrIndentSpecial 2) typeDoc1
             ])
   -- TODO: test KindSig
@@ -444,12 +444,12 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
         then docLines
           [ docCols
             ColTyOpPrefix
-            [ docWrapNodeRest ltype $ docParenLSep
+            [ docWrapNodeAfter ltype $ docParenLSep
             , docAddBaseY (BrIndentSpecial 3) $ typeDoc1
             ]
           , docCols
             ColTyOpPrefix
-            [ docWrapNodeRest ltype $ docLitS ":: "
+            [ docWrapNodeAfter ltype $ docLitS ":: "
             , docAddBaseY (BrIndentSpecial 3) kindDoc1
             ]
           , (docParenR)
@@ -458,7 +458,7 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
           typeDoc1
           (docCols
             ColTyOpPrefix
-            [ docWrapNodeRest ltype $ docLitS ":: "
+            [ docWrapNodeAfter ltype $ docLitS ":: "
             , docAddBaseY (BrIndentSpecial 3) kindDoc1
             ])
   HsBangTy{} -> -- TODO

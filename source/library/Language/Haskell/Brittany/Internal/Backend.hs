@@ -145,7 +145,7 @@ layoutBriDocM = \case
       unless (i == tlineCount) $
         layoutWriteNewlineBlock
   BDPlain t -> layoutWriteAppend t
-  BDAnnotationPrior a bd -> do
+  BDAnnotationBefore a bd -> do
     -- data GenLocated l e = L l e
     -- getLoc         :: LocatedAn ann a -> SrcAnn ann
     -- ann            :: SrcAnn ann -> EpAnn ann
@@ -216,7 +216,7 @@ layoutBriDocM = \case
         -- layoutMoveToIndentCol y
         layoutWriteAppendMultiline commentLines
       -- mModify $ \s -> s { _lstate_curYOrAddNewline = Right 0 }
-  BDAnnotationRest bd -> do
+  BDAnnotationAfter bd -> do
     layoutBriDocM bd
     let followingComments = []
     case followingComments of
@@ -292,9 +292,9 @@ briDocLineLength briDoc = flip StateS.evalState False $ rec briDoc
       BDForwardLineMode bd    -> rec bd
       BDExternal _ t          -> return $ Text.length t
       BDPlain t               -> return $ Text.length t
-      BDAnnotationPrior _ bd  -> rec bd
+      BDAnnotationBefore _ bd  -> rec bd
       BDAnnotationKW _ bd     -> rec bd
-      BDAnnotationRest bd     -> rec bd
+      BDAnnotationAfter bd     -> rec bd
       BDMoveToKWDP _ _ bd     -> rec bd
       BDLines ls@(_ : _)      -> do
         x <- StateS.get
@@ -330,9 +330,9 @@ briDocIsMultiLine briDoc = rec briDoc
       BDExternal{}                         -> True
       BDPlain t | [_] <- Text.lines t      -> False
       BDPlain _                            -> True
-      BDAnnotationPrior _ bd               -> rec bd
+      BDAnnotationBefore _ bd               -> rec bd
       BDAnnotationKW _ bd                  -> rec bd
-      BDAnnotationRest bd                  -> rec bd
+      BDAnnotationAfter bd                  -> rec bd
       BDMoveToKWDP _ _ bd                  -> rec bd
       BDLines (_ : _ : _)                  -> True
       BDLines [_]                          -> False

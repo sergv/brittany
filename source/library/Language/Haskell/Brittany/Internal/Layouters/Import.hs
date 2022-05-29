@@ -88,14 +88,14 @@ layoutImport importD = case importD of
                 ]
               else do
                 ieDs <- layoutAnnAndSepLLIEs ShouldSortItems llies
-                docWrapNodeRest llies
+                docWrapNodeAfter llies
                   $ docEnsureIndent (BrIndentSpecial hidDocCol)
                   $ case ieDs of
                     -- ..[hiding].( )
                       [] -> if hasComments
                         then docPar
                           (docSeq
-                            [hidDoc, docParenLSep, docWrapNode llies docEmpty]
+                            [hidDoc, docParenLSep, docWrapNodeAround llies docEmpty]
                           )
                           (docEnsureIndent
                             (BrIndentSpecial hidDocColDiff)

@@ -35,7 +35,7 @@ layoutExpr :: LHsExpr GhcPs -> ToBriDocM BriDocNumbered
 layoutExpr lexpr@(L _ expr) = do
   indentPolicy <- mAsk <&> _conf_layout .> _lconfig_indentPolicy .> confUnpack
   let allowFreeIndent = indentPolicy == IndentPolicyFree
-  docWrapNode lexpr $ case expr of
+  docWrapNodeAround lexpr $ case expr of
     HsVar _ vname ->
       docLit $ lrdrNameToTextAnn vname
     HsUnboundVar _ oname -> docLitS $ occNameString oname
@@ -87,7 +87,7 @@ layoutExpr lexpr@(L _ expr) = do
           [ -- single line
             docSeq
             [ docLitS "\\"
-            , docWrapNode lmatch $ docForceSingleline funcPatternPartLine
+            , docWrapNodeAround lmatch $ docForceSingleline funcPatternPartLine
             , appSep $ docLitS "->"
             , docForceSingleline bodyDoc
             ]
@@ -95,7 +95,7 @@ layoutExpr lexpr@(L _ expr) = do
           , docSetParSpacing $ docAddBaseY BrIndentRegular $ docPar
             (docSeq
               [ docLitS "\\"
-              , docWrapNode lmatch $ appSep $ docForceSingleline
+              , docWrapNodeAround lmatch $ appSep $ docForceSingleline
                 funcPatternPartLine
               , docLitS "->"
               ]
@@ -104,7 +104,7 @@ layoutExpr lexpr@(L _ expr) = do
             -- wrapped par spacing
           , docSetParSpacing $ docSeq
             [ docLitS "\\"
-            , docWrapNode lmatch $ docForceSingleline funcPatternPartLine
+            , docWrapNodeAround lmatch $ docForceSingleline funcPatternPartLine
             , appSep $ docLitS "->"
             , docForceParSpacing bodyDoc
             ]
@@ -112,7 +112,7 @@ layoutExpr lexpr@(L _ expr) = do
           , docSetParSpacing $ docAddBaseY BrIndentRegular $ docPar
             (docSeq
               [ docLitS "\\"
-              , docWrapNode lmatch $ appSep $ docForceSingleline
+              , docWrapNodeAround lmatch $ appSep $ docForceSingleline
                 funcPatternPartLine
               , docLitS "->"
               ]
@@ -127,7 +127,7 @@ layoutExpr lexpr@(L _ expr) = do
     HsLamCase _ (MG _ lmatches@(L _ matches) _) -> do
       binderDoc <- docLitS "->"
       funcPatDocs <-
-        docWrapNode lmatches
+        docWrapNodeAround lmatches
         $ layoutPatternBind Nothing binderDoc
         `mapM` matches
       docSetParSpacing $ docAddBaseY BrIndentRegular $ docPar
@@ -354,7 +354,7 @@ layoutExpr lexpr@(L _ expr) = do
       opDoc <- docSharedWrapper layoutExpr op
       docSeq [docLitS "-", opDoc]
     HsPar _ innerExp -> do
-      innerExpDoc <- docSharedWrapper (docWrapNode lexpr . layoutExpr) innerExp
+      innerExpDoc <- docSharedWrapper (docWrapNodeAround lexpr . layoutExpr) innerExp
       docAlt
         [ docSeq
           [ docParenL
@@ -444,7 +444,7 @@ layoutExpr lexpr@(L _ expr) = do
       cExpDoc <- docSharedWrapper layoutExpr cExp
       binderDoc <- docLitS "->"
       funcPatDocs <-
-        docWrapNode lmatches
+        docWrapNodeAround lmatches
         $ layoutPatternBind Nothing binderDoc
         `mapM` matches
       docAlt
@@ -798,7 +798,7 @@ layoutExpr lexpr@(L _ expr) = do
     ExplicitList _ [] -> docLitS "[]"
     RecordCon _ lname fields -> case fields of
       HsRecFields fs Nothing -> do
-        let nameDoc = docWrapNode lname $ docLit $ lrdrNameToText lname
+        let nameDoc = docWrapNodeAround lname $ docLit $ lrdrNameToText lname
         rFs <- for fs $ \lfield@(L _ (HsRecField _ann (L _ fieldOcc) rFExpr pun)) -> do
           let FieldOcc _ lnameF = fieldOcc
           rFExpDoc <- if pun
@@ -808,9 +808,9 @@ layoutExpr lexpr@(L _ expr) = do
         recordExpression False indentPolicy lexpr nameDoc rFs
       HsRecFields [] (Just (L _ 0)) -> do
         let t = lrdrNameToText lname
-        docWrapNode lname $ docLit $ t <> Text.pack " { .. }"
+        docWrapNodeAround lname $ docLit $ t <> Text.pack " { .. }"
       HsRecFields fs@(_ : _) (Just (L _ dotdoti)) | dotdoti == length fs -> do
-        let nameDoc = docWrapNode lname $ docLit $ lrdrNameToText lname
+        let nameDoc = docWrapNodeAround lname $ docLit $ lrdrNameToText lname
         fieldDocs <- for fs $ \fieldl@(L _ (HsRecField _ann (L _ fieldOcc) fExpr pun)) -> do
           let FieldOcc _ lnameF = fieldOcc
           fExpDoc <- if pun
@@ -956,12 +956,12 @@ recordExpression dotdot indentPolicy lexpr nameDoc rFs@(rF1 : rFr) = do
       [ docNodeAnnKW lexpr Nothing $ appSep $ docForceSingleline nameDoc
       , appSep $ docLitS "{"
       , docSeq $ List.intersperse docCommaSep $ rFs <&> \case
-        (lfield, fieldStr, Just fieldDoc) -> docWrapNode lfield $ docSeq
+        (lfield, fieldStr, Just fieldDoc) -> docWrapNodeAround lfield $ docSeq
           [ appSep $ docLit fieldStr
           , appSep $ docLitS "="
           , docForceSingleline fieldDoc
           ]
-        (lfield, fieldStr, Nothing) -> docWrapNode lfield $ docLit fieldStr
+        (lfield, fieldStr, Nothing) -> docWrapNodeAround lfield $ docLit fieldStr
       , if dotdot
         then docSeq [docCommaSep, docLitS "..", docSeparator]
         else docSeparator
@@ -979,14 +979,14 @@ recordExpression dotdot indentPolicy lexpr nameDoc rFs@(rF1 : rFr) = do
           line1 = docCols
             ColRec
             [ appSep $ docLitS "{"
-            , docWrapNodePrior rF1f $ appSep $ docLit rF1n
+            , docWrapNodeBefore rF1f $ appSep $ docLit rF1n
             , case rF1e of
-              Just x -> docWrapNodeRest rF1f $ docSeq
+              Just x -> docWrapNodeAfter rF1f $ docSeq
                 [appSep $ docLitS "=", docForceSingleline x]
               Nothing -> docEmpty
             ]
           lineR = rFr <&> \(lfield, fText, fDoc) ->
-            docWrapNode lfield $ docCols
+            docWrapNodeAround lfield $ docCols
               ColRec
               [ docCommaSep
               , appSep $ docLit fText
@@ -1019,8 +1019,8 @@ recordExpression dotdot indentPolicy lexpr nameDoc rFs@(rF1 : rFr) = do
           line1 = docCols
             ColRec
             [ appSep $ docLitS "{"
-            , docWrapNodePrior rF1f $ appSep $ docLit rF1n
-            , docWrapNodeRest rF1f $ case rF1e of
+            , docWrapNodeBefore rF1f $ appSep $ docLit rF1n
+            , docWrapNodeAfter rF1f $ case rF1e of
               Just x -> runFilteredAlternative $ do
                 addAlternativeCond (indentPolicy == IndentPolicyFree) $ do
                   docSeq [appSep $ docLitS "=", docSetBaseY x]
@@ -1033,7 +1033,7 @@ recordExpression dotdot indentPolicy lexpr nameDoc rFs@(rF1 : rFr) = do
               Nothing -> docEmpty
             ]
           lineR = rFr <&> \(lfield, fText, fDoc) ->
-            docWrapNode lfield $ docCols
+            docWrapNodeAround lfield $ docCols
               ColRec
               [ docCommaSep
               , appSep $ docLit fText

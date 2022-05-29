@@ -228,9 +228,9 @@ data BriDoc
   | BDPlain
       !Text -- used for QuasiQuotes, content can be multi-line
             -- (contrast to BDLit)
-  | BDAnnotationPrior (EpAnn ()) BriDoc
+  | BDAnnotationBefore (EpAnn ()) BriDoc
   | BDAnnotationKW (Maybe AnnKeywordId) BriDoc
-  | BDAnnotationRest  BriDoc
+  | BDAnnotationAfter  BriDoc
   | BDMoveToKWDP
       AnnKeywordId
       Bool -- True if should respect x offset
@@ -277,9 +277,9 @@ data BriDocF f
   | BDFPlain
       !Text -- used for QuasiQuotes, content can be multi-line
             -- (contrast to BDLit)
-  | BDFAnnotationPrior (EpAnn ()) (f (BriDocF f))
+  | BDFAnnotationBefore (EpAnn ()) (f (BriDocF f))
   | BDFAnnotationKW (Maybe AnnKeywordId) (f (BriDocF f))
-  | BDFAnnotationRest  (f (BriDocF f))
+  | BDFAnnotationAfter  (f (BriDocF f))
   | BDFMoveToKWDP
       AnnKeywordId
       Bool -- True if should respect x offset
@@ -300,66 +300,66 @@ type BriDocFInt = BriDocF ((,) Int)
 type BriDocNumbered = (Int, BriDocFInt)
 
 instance Uniplate.Uniplate BriDoc where
-  uniplate x@BDEmpty{}                = plate x
-  uniplate x@BDLit{}                  = plate x
-  uniplate (BDSeq list     )          = plate BDSeq ||* list
-  uniplate (BDCols sig list)          = plate BDCols |- sig ||* list
-  uniplate x@BDSeparator              = plate x
-  uniplate (BDAddBaseY ind bd      )  = plate BDAddBaseY |- ind |* bd
-  uniplate (BDBaseYPushCur       bd)  = plate BDBaseYPushCur |* bd
-  uniplate (BDBaseYPop           bd)  = plate BDBaseYPop |* bd
-  uniplate (BDIndentLevelPushCur bd)  = plate BDIndentLevelPushCur |* bd
-  uniplate (BDIndentLevelPop     bd)  = plate BDIndentLevelPop |* bd
-  uniplate (BDPar ind line indented)  = plate BDPar |- ind |* line |* indented
-  uniplate (BDAlt             alts )  = plate BDAlt ||* alts
-  uniplate (BDForwardLineMode bd   )  = plate BDForwardLineMode |* bd
-  uniplate x@BDExternal{}             = plate x
-  uniplate x@BDPlain{}                = plate x
-  uniplate (BDAnnotationPrior ann bd) = plate BDAnnotationPrior |- ann |* bd
-  uniplate (BDAnnotationKW kw bd)     = plate BDAnnotationKW |- kw |* bd
-  uniplate (BDAnnotationRest bd)      = plate BDAnnotationRest |* bd
-  uniplate (BDMoveToKWDP kw b bd)     = plate BDMoveToKWDP |- kw |- b |* bd
-  uniplate (BDLines lines          )  = plate BDLines ||* lines
-  uniplate (BDEnsureIndent ind bd  )  = plate BDEnsureIndent |- ind |* bd
-  uniplate (BDForceMultiline  bd   )  = plate BDForceMultiline |* bd
-  uniplate (BDForceSingleline bd   )  = plate BDForceSingleline |* bd
-  uniplate (BDNonBottomSpacing b bd)  = plate BDNonBottomSpacing |- b |* bd
-  uniplate (BDSetParSpacing   bd   )  = plate BDSetParSpacing |* bd
-  uniplate (BDForceParSpacing bd   )  = plate BDForceParSpacing |* bd
-  uniplate (BDDebug s bd           )  = plate BDDebug |- s |* bd
+  uniplate x@BDEmpty{}                 = plate x
+  uniplate x@BDLit{}                   = plate x
+  uniplate (BDSeq list     )           = plate BDSeq ||* list
+  uniplate (BDCols sig list)           = plate BDCols |- sig ||* list
+  uniplate x@BDSeparator               = plate x
+  uniplate (BDAddBaseY ind bd      )   = plate BDAddBaseY |- ind |* bd
+  uniplate (BDBaseYPushCur       bd)   = plate BDBaseYPushCur |* bd
+  uniplate (BDBaseYPop           bd)   = plate BDBaseYPop |* bd
+  uniplate (BDIndentLevelPushCur bd)   = plate BDIndentLevelPushCur |* bd
+  uniplate (BDIndentLevelPop     bd)   = plate BDIndentLevelPop |* bd
+  uniplate (BDPar ind line indented)   = plate BDPar |- ind |* line |* indented
+  uniplate (BDAlt             alts )   = plate BDAlt ||* alts
+  uniplate (BDForwardLineMode bd   )   = plate BDForwardLineMode |* bd
+  uniplate x@BDExternal{}              = plate x
+  uniplate x@BDPlain{}                 = plate x
+  uniplate (BDAnnotationBefore ann bd) = plate BDAnnotationBefore |- ann |* bd
+  uniplate (BDAnnotationKW kw bd)      = plate BDAnnotationKW |- kw |* bd
+  uniplate (BDAnnotationAfter bd)      = plate BDAnnotationAfter |* bd
+  uniplate (BDMoveToKWDP kw b bd)      = plate BDMoveToKWDP |- kw |- b |* bd
+  uniplate (BDLines lines          )   = plate BDLines ||* lines
+  uniplate (BDEnsureIndent ind bd  )   = plate BDEnsureIndent |- ind |* bd
+  uniplate (BDForceMultiline  bd   )   = plate BDForceMultiline |* bd
+  uniplate (BDForceSingleline bd   )   = plate BDForceSingleline |* bd
+  uniplate (BDNonBottomSpacing b bd)   = plate BDNonBottomSpacing |- b |* bd
+  uniplate (BDSetParSpacing   bd   )   = plate BDSetParSpacing |* bd
+  uniplate (BDForceParSpacing bd   )   = plate BDForceParSpacing |* bd
+  uniplate (BDDebug s bd           )   = plate BDDebug |- s |* bd
 
 newtype NodeAllocIndex = NodeAllocIndex Int
 
 -- TODO: rename to "dropLabels" ?
 unwrapBriDocNumbered :: BriDocNumbered -> BriDoc
 unwrapBriDocNumbered tpl = case snd tpl of
-  BDFEmpty                  -> BDEmpty
-  BDFLit t                  -> BDLit t
-  BDFSeq list               -> BDSeq $ rec <$> list
-  BDFCols sig list          -> BDCols sig $ rec <$> list
-  BDFSeparator              -> BDSeparator
-  BDFAddBaseY ind bd        -> BDAddBaseY ind $ rec bd
-  BDFBaseYPushCur       bd  -> BDBaseYPushCur $ rec bd
-  BDFBaseYPop           bd  -> BDBaseYPop $ rec bd
-  BDFIndentLevelPushCur bd  -> BDIndentLevelPushCur $ rec bd
-  BDFIndentLevelPop     bd  -> BDIndentLevelPop $ rec bd
-  BDFPar ind line indented  -> BDPar ind (rec line) (rec indented)
-  BDFAlt             alts   -> BDAlt $ rec <$> alts -- not that this will happen
-  BDFForwardLineMode bd     -> BDForwardLineMode $ rec bd
-  BDFExternal c t           -> BDExternal c t
-  BDFPlain t                -> BDPlain t
-  BDFAnnotationPrior ann bd -> BDAnnotationPrior ann $ rec bd
-  BDFAnnotationKW kw bd     -> BDAnnotationKW kw $ rec bd
-  BDFAnnotationRest bd      -> BDAnnotationRest $ rec bd
-  BDFMoveToKWDP kw b bd     -> BDMoveToKWDP kw b $ rec bd
-  BDFLines lines            -> BDLines $ rec <$> lines
-  BDFEnsureIndent ind bd    -> BDEnsureIndent ind $ rec bd
-  BDFForceMultiline  bd     -> BDForceMultiline $ rec bd
-  BDFForceSingleline bd     -> BDForceSingleline $ rec bd
-  BDFNonBottomSpacing b bd  -> BDNonBottomSpacing b $ rec bd
-  BDFSetParSpacing   bd     -> BDSetParSpacing $ rec bd
-  BDFForceParSpacing bd     -> BDForceParSpacing $ rec bd
-  BDFDebug s bd             -> BDDebug (s ++ "@" ++ show (fst tpl)) $ rec bd
+  BDFEmpty                   -> BDEmpty
+  BDFLit t                   -> BDLit t
+  BDFSeq list                -> BDSeq $ rec <$> list
+  BDFCols sig list           -> BDCols sig $ rec <$> list
+  BDFSeparator               -> BDSeparator
+  BDFAddBaseY ind bd         -> BDAddBaseY ind $ rec bd
+  BDFBaseYPushCur       bd   -> BDBaseYPushCur $ rec bd
+  BDFBaseYPop           bd   -> BDBaseYPop $ rec bd
+  BDFIndentLevelPushCur bd   -> BDIndentLevelPushCur $ rec bd
+  BDFIndentLevelPop     bd   -> BDIndentLevelPop $ rec bd
+  BDFPar ind line indented   -> BDPar ind (rec line) (rec indented)
+  BDFAlt             alts    -> BDAlt $ rec <$> alts -- not that this will happen
+  BDFForwardLineMode bd      -> BDForwardLineMode $ rec bd
+  BDFExternal c t            -> BDExternal c t
+  BDFPlain t                 -> BDPlain t
+  BDFAnnotationBefore ann bd -> BDAnnotationBefore ann $ rec bd
+  BDFAnnotationKW kw bd      -> BDAnnotationKW kw $ rec bd
+  BDFAnnotationAfter bd      -> BDAnnotationAfter $ rec bd
+  BDFMoveToKWDP kw b bd      -> BDMoveToKWDP kw b $ rec bd
+  BDFLines lines             -> BDLines $ rec <$> lines
+  BDFEnsureIndent ind bd     -> BDEnsureIndent ind $ rec bd
+  BDFForceMultiline  bd      -> BDForceMultiline $ rec bd
+  BDFForceSingleline bd      -> BDForceSingleline $ rec bd
+  BDFNonBottomSpacing b bd   -> BDNonBottomSpacing b $ rec bd
+  BDFSetParSpacing   bd      -> BDSetParSpacing $ rec bd
+  BDFForceParSpacing bd      -> BDForceParSpacing $ rec bd
+  BDFDebug s bd              -> BDDebug (s ++ "@" ++ show (fst tpl)) $ rec bd
   where
     rec = unwrapBriDocNumbered
 

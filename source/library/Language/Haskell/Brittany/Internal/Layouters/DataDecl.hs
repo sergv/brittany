@@ -34,7 +34,7 @@ layoutDataDecl ltycl name (HsQTvs _ bndrs) defn = case defn of
   HsDataDefn _ext NewType Nothing _ctype Nothing [cons] mDerivs ->
     case cons of
       L _ (ConDeclH98 _ext consName False _qvars (Just (L _ [])) details _conDoc)
-        -> docWrapNode ltycl $ do
+        -> docWrapNodeAround ltycl $ do
           let nameStr     = lrdrNameToTextAnn name
               consNameStr = lrdrNameToTextAnn consName
           tyVarLine   <- pure <$> createBndrDoc bndrs
@@ -58,7 +58,7 @@ layoutDataDecl ltycl name (HsQTvs _ bndrs) defn = case defn of
   -- data MyData a b
   -- (zero constructors)
   HsDataDefn _ext DataType (Just (L _ lhsContext)) _ctype Nothing [] mDerivs ->
-    docWrapNode ltycl $ do
+    docWrapNodeAround ltycl $ do
       let nameStr = lrdrNameToTextAnn name
       lhsContextDoc <- docSharedWrapper createContextDoc lhsContext
       tyVarLine <- return <$> createBndrDoc bndrs
@@ -74,7 +74,7 @@ layoutDataDecl ltycl name (HsQTvs _ bndrs) defn = case defn of
   HsDataDefn _ext DataType (Just (L _ lhsContext)) _ctype Nothing [cons] mDerivs ->
     case cons of
       L _ (ConDeclH98 _ext consName _hasForall qvars mRhsContext details _conDoc)
-        -> docWrapNode ltycl $ do
+        -> docWrapNodeAround ltycl $ do
           let nameStr     = lrdrNameToTextAnn name
               consNameStr = lrdrNameToTextAnn consName
           lhsContextDoc    <- docSharedWrapper createContextDoc lhsContext
@@ -261,9 +261,9 @@ derivingClauseDoc :: LHsDerivingClause GhcPs -> ToBriDocM BriDocNumbered
 derivingClauseDoc (L _ (HsDerivingClause _ext mStrategy types@(L _ ts))) =
   docSeq
     [ docDeriving
-    , docWrapNodePrior types $ lhsStrategy
+    , docWrapNodeBefore types $ lhsStrategy
     , docSeparator
-    , docWrapNodeRest types
+    , docWrapNodeAfter types
     $ case ts of
         DctSingle _ext typ -> layoutSigType typ
         DctMulti  _ext typ -> docSeq $
@@ -332,9 +332,9 @@ createDetailsDoc consNameStr details = case details of
       addAlternativeCond allowSingleline $ docSeq
         [ docLit consNameStr
         , docSeparator
-        , docWrapNodePrior lRec $ docLitS "{"
+        , docWrapNodeBefore lRec $ docLitS "{"
         , docSeparator
-        , docWrapNodeRest lRec
+        , docWrapNodeAfter lRec
         $ docForceSingleline
         $ docSeq
         $ join
@@ -354,7 +354,7 @@ createDetailsDoc consNameStr details = case details of
         ]
       addAlternative $ docPar
         (docLit consNameStr)
-        (docWrapNodePrior lRec $ docNonBottomSpacingS $ docLines
+        (docWrapNodeBefore lRec $ docNonBottomSpacingS $ docLines
           [ docAlt
             [ docCols
               ColRecDecl
@@ -371,7 +371,7 @@ createDetailsDoc consNameStr details = case details of
                 (docSeq [docLitS "::", docSeparator, fType1])
               ]
             ]
-          , docWrapNodeRest lRec $ docLines $ fDocR <&> \(fName, fType) ->
+          , docWrapNodeAfter lRec $ docLines $ fDocR <&> \(fName, fType) ->
             docAlt
               [ docCols
                 ColRecDecl
@@ -418,9 +418,9 @@ createNamesAndTypeDoc
   -> LHsType GhcPs
   -> (ToBriDocM BriDocNumbered, ToBriDocM BriDocNumbered)
 createNamesAndTypeDoc lField names t =
-  ( docNodeAnnKW lField Nothing $ docWrapNodePrior lField $ docSeq
+  ( docNodeAnnKW lField Nothing $ docWrapNodeBefore lField $ docSeq
     [ docSeq $ List.intersperse docCommaSep $ names <&> \case
         L _ (FieldOcc _ fieldName) -> docLit (lrdrNameToTextAnn fieldName)
     ]
-  , docWrapNodeRest lField $ layoutType t
+  , docWrapNodeAfter lField $ layoutType t
   )

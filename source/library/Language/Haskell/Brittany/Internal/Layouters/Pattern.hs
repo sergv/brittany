@@ -35,7 +35,7 @@ import Language.Haskell.Brittany.Internal.Types
 -- We will use `case .. of` as the imagined prefix to the examples used in
 -- the different cases below.
 layoutPat :: LPat GhcPs -> ToBriDocM (Seq BriDocNumbered)
-layoutPat lpat@(L _ pat) = docWrapNode lpat $ case pat of
+layoutPat lpat@(L _ pat) = docWrapNodeAround lpat $ case pat of
   WildPat _ -> fmap Seq.singleton $ docLitS "_"
     -- _ -> expr
   VarPat _ n -> fmap Seq.singleton $ docLit $ lrdrNameToText n
@@ -184,7 +184,7 @@ layoutPat lpat@(L _ pat) = docWrapNode lpat $ case pat of
   NPat ann llit@(L _ ol) mNegative _ -> do
     -- -13 -> expr
     let llit' = first (SrcSpanAnn ann) llit
-    litDoc <- docWrapNode llit' $ allocateNode $ overLitValBriDoc $ GHC.ol_val ol
+    litDoc <- docWrapNodeAround llit' $ allocateNode $ overLitValBriDoc $ GHC.ol_val ol
     negDoc <- docLitS "-"
     pure $ case mNegative of
       Just{} -> Seq.fromList [negDoc, litDoc]

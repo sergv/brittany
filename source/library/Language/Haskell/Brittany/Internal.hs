@@ -103,7 +103,7 @@ ppModule m@HsModule{hsmodAnn, hsmodDecls} = do
     let addAnn :: ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
         addAnn = case cs of
           []             -> id
-          L anchor _ : _ -> wrapPrior $ EpAnn
+          L anchor _ : _ -> wrapBefore $ EpAnn
             { entry    = anchor
             , anns     = ()
             , comments = EpaComments cs

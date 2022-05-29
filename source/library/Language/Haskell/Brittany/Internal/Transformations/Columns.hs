@@ -48,25 +48,25 @@ transformSimplifyColumns = Uniplate.rewrite $ \case
       BDLines l -> l
       x -> [x]
   -- prior floating in
-  BDAnnotationPrior ann (BDSeq (l : lr)) ->
-    Just $ BDSeq (BDAnnotationPrior ann l : lr)
-  BDAnnotationPrior ann (BDLines (l : lr)) ->
-    Just $ BDLines (BDAnnotationPrior ann l : lr)
-  BDAnnotationPrior ann (BDCols sig (l : lr)) ->
-    Just $ BDCols sig (BDAnnotationPrior ann l : lr)
+  BDAnnotationBefore ann (BDSeq (l : lr)) ->
+    Just $ BDSeq (BDAnnotationBefore ann l : lr)
+  BDAnnotationBefore ann (BDLines (l : lr)) ->
+    Just $ BDLines (BDAnnotationBefore ann l : lr)
+  BDAnnotationBefore ann (BDCols sig (l : lr)) ->
+    Just $ BDCols sig (BDAnnotationBefore ann l : lr)
   -- post floating in
-  BDAnnotationRest (BDSeq list) ->
-    Just $ BDSeq $ List.init list ++ [BDAnnotationRest $ List.last list]
-  BDAnnotationRest (BDLines list) ->
+  BDAnnotationAfter (BDSeq list) ->
+    Just $ BDSeq $ List.init list ++ [BDAnnotationAfter $ List.last list]
+  BDAnnotationAfter (BDLines list) ->
     Just
       $ BDLines
       $ List.init list
-      ++ [BDAnnotationRest $ List.last list]
-  BDAnnotationRest (BDCols sig cols) ->
+      ++ [BDAnnotationAfter $ List.last list]
+  BDAnnotationAfter (BDCols sig cols) ->
     Just
       $ BDCols sig
       $ List.init cols
-      ++ [BDAnnotationRest $ List.last cols]
+      ++ [BDAnnotationAfter $ List.last cols]
   BDAnnotationKW kw (BDSeq list) ->
     Just
       $ BDSeq
@@ -151,9 +151,9 @@ transformSimplifyColumns = Uniplate.rewrite $ \case
   BDExternal{}           -> Nothing
   BDPlain{}              -> Nothing
   BDLines{}              -> Nothing
-  BDAnnotationPrior{}    -> Nothing
+  BDAnnotationBefore{}    -> Nothing
   BDAnnotationKW{}       -> Nothing
-  BDAnnotationRest{}     -> Nothing
+  BDAnnotationAfter{}     -> Nothing
   BDMoveToKWDP{}         -> Nothing
   BDEnsureIndent{}       -> Nothing
   BDSetParSpacing{}      -> Nothing
