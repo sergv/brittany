@@ -309,6 +309,7 @@ docExt f x shouldAddComment = allocateNode $ BDFExternal
 docAlt :: [ToBriDocM BriDocNumbered] -> ToBriDocM BriDocNumbered
 docAlt l = allocateNode . BDFAlt =<< sequence l
 
+
 newtype CollectAltM a = CollectAltM (Writer.Writer [ToBriDocM BriDocNumbered] a)
   deriving (Functor, Applicative, Monad)
 
