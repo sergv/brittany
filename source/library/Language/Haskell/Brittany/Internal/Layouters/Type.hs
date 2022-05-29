@@ -9,7 +9,6 @@ module Language.Haskell.Brittany.Internal.Layouters.Type
   , processTyVarBndrsSingleline
   ) where
 
-
 import qualified Data.Text as Text
 import GHC (AnnKeywordId(..), GenLocated(L))
 import GHC.Hs
@@ -24,9 +23,136 @@ import Language.Haskell.Brittany.Internal.PreludeUtils
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.Brittany.Internal.Utils (FirstLastView(..), splitFirstLast)
 
--- TODO: maybe take the 'sig_bndrs' field of 'LHsSigType' into account here?
+forgetTyVarBndrFlag :: LHsTyVarBndr a (NoGhcTc GhcPs) -> LHsTyVarBndr () (NoGhcTc GhcPs)
+forgetTyVarBndrFlag (L a bndr) = L a $ case bndr of
+  UserTyVar   ext flag x   -> UserTyVar ext () x
+  KindedTyVar ext flag x y -> KindedTyVar ext () x y
+
 layoutSigType :: LHsSigType GhcPs -> ToBriDocM BriDocNumbered
-layoutSigType = layoutType . sig_body . unLoc
+layoutSigType (L _ HsSig{sig_bndrs, sig_body}) =
+  case sig_bndrs of
+    HsOuterImplicit{}          -> layoutType sig_body
+    HsOuterExplicit{hso_bndrs} -> layoutForallType (map forgetTyVarBndrFlag hso_bndrs) sig_body
+
+layoutForallType :: [LHsTyVarBndr () (NoGhcTc GhcPs)] -> LHsType GhcPs -> ToBriDocM BriDocNumbered
+layoutForallType bndrs ltype = do
+  forallDoc <- docSharedWrapper docLitS "forall"
+  tyVarDocs <- layoutTyVarBndrs bndrs
+  case ltype of
+    L _ HsQualTy{hst_ctxt = Just (L _ cntxts), hst_body} -> do
+      typeDoc   <- docSharedWrapper layoutType hst_body
+      cntxtDocs <- traverse (docSharedWrapper layoutType) cntxts
+      let maybeForceML = case hst_body of
+            L _ HsFunTy{} -> docForceMultiline
+            _             -> id
+          tyVarDocLineList = processTyVarBndrsSingleline tyVarDocs
+          forallHeader     = docAlt
+            [ docSeq ([forallDoc] ++ tyVarDocLineList)
+            , docPar
+              forallDoc
+              (docLines $ tyVarDocs <&> \case
+                (tname, Nothing)  -> docEnsureIndent BrIndentRegular $ docLit tname
+                (tname, Just doc) -> docEnsureIndent BrIndentRegular $ docLines
+                  [ docCols ColTyOpPrefix [docParenLSep, docLit tname]
+                  , docCols ColTyOpPrefix [docLitS ":: ", doc]
+                  , docParenR
+                  ]
+              )
+            ]
+          contextDoc = case cntxtDocs of
+            []  -> docLitS "()"
+            [x] -> x
+            _   -> docAlt
+              [ let
+                  list = List.intersperse docCommaSep $ docForceSingleline <$> cntxtDocs
+                in docSeq ([docParenL] ++ list ++ [docParenR])
+              , let
+                  open = docCols
+                    ColTyOpPrefix
+                    [docParenLSep, docAddBaseY (BrIndentSpecial 2) $ head cntxtDocs]
+                  list = List.tail cntxtDocs <&> \cntxtDoc -> docCols
+                    ColTyOpPrefix
+                    [docCommaSep, docAddBaseY (BrIndentSpecial 2) cntxtDoc]
+                in docPar open $ docLines $ list ++ [docParenR]
+              ]
+      docAlt
+        -- :: forall a b c . (Foo a b c) => a b -> c
+        [ docSeq
+          [ if null bndrs
+            then docEmpty
+            else docSeq ([forallHeader, docSeparator] ++ tyVarDocLineList ++ [docLitS " . "])
+          , docForceSingleline contextDoc
+          , docLitS " => "
+          , docForceSingleline typeDoc
+          ]
+        -- :: forall a b c
+        --  . (Foo a b c)
+        -- => a b
+        -- -> c
+        , docPar
+          forallHeader
+          (docLines
+            [ docCols
+              ColTyOpPrefix
+              [ docWrapNodeRest ltype $ docLitS " . "
+              , docAddBaseY (BrIndentSpecial 3) contextDoc
+              ]
+            , docCols
+              ColTyOpPrefix
+              [ docLitS "=> "
+              , docAddBaseY (BrIndentSpecial 3) $ maybeForceML typeDoc
+              ]
+            ]
+          )
+        ]
+    typ -> do
+      -- typeDoc   <- layoutType typ
+      typeDoc <- docSharedWrapper layoutType typ
+      let maybeForceML = case typ of
+            L _ HsFunTy{} -> docForceMultiline
+            _             -> id
+      let tyVarDocLineList = processTyVarBndrsSingleline tyVarDocs
+      docAlt
+        -- forall x . x
+        [ docSeq
+          [ if null bndrs
+            then docEmpty
+            else docSeq ([forallDoc] ++ tyVarDocLineList ++ [docLitS " . "])
+          , docForceSingleline typeDoc
+          ]
+        -- :: forall x
+        --  . x
+        , docPar
+          (docSeq $ forallDoc : tyVarDocLineList)
+          (docCols
+            ColTyOpPrefix
+            [ docWrapNodeRest typ $ docLitS " . "
+            , maybeForceML typeDoc
+            ]
+          )
+        -- :: forall
+        --      (x :: *)
+        --  . x
+        , docPar
+          forallDoc
+          (docLines
+          $ (tyVarDocs <&> \case
+              (tname, Nothing)  ->
+                docEnsureIndent BrIndentRegular $ docLit tname
+              (tname, Just doc) -> docEnsureIndent BrIndentRegular $ docLines
+                [ docCols ColTyOpPrefix [docParenLSep, docLit tname]
+                , docCols ColTyOpPrefix [docLitS ":: ", doc]
+                , docParenR
+                ]
+            )
+          ++ [ docCols
+                 ColTyOpPrefix
+                 [ docWrapNodeRest typ $ docLitS " . "
+                 , maybeForceML typeDoc
+                 ]
+             ]
+          )
+        ]
 
 layoutType :: LHsType GhcPs -> ToBriDocM BriDocNumbered
 layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
@@ -37,133 +163,10 @@ layoutType ltype@(L _ typ) = docWrapNode ltype $ case typ of
       IsPromoted  -> docSeq [docSeparator, docTick, docWrapNode name $ docLit t]
       NotPromoted -> docWrapNode name $ docLit t
 
-  HsForAllTy _ hsf (L _ HsQualTy{hst_ctxt = Just (L _ cntxts), hst_body}) -> do
+  HsForAllTy _ hsf typ -> do
     let bndrs = getBinders hsf
-    typeDoc   <- docSharedWrapper layoutType hst_body
-    tyVarDocs <- layoutTyVarBndrs bndrs
-    cntxtDocs <- cntxts `forM` docSharedWrapper layoutType
-    let maybeForceML = case hst_body of
-          L _ HsFunTy{} -> docForceMultiline
-          _             -> id
-    let
-      tyVarDocLineList = processTyVarBndrsSingleline tyVarDocs
-      forallDoc = docAlt
-        [ let open = docLitS "forall"
-          in docSeq ([open] ++ tyVarDocLineList)
-        , docPar
-          (docLitS "forall")
-          (docLines $ tyVarDocs <&> \case
-            (tname, Nothing) -> docEnsureIndent BrIndentRegular $ docLit tname
-            (tname, Just doc) -> docEnsureIndent BrIndentRegular $ docLines
-              [ docCols ColTyOpPrefix [docParenLSep, docLit tname]
-              , docCols ColTyOpPrefix [docLitS ":: ", doc]
-              , docParenR
-              ]
-          )
-        ]
-      contextDoc = case cntxtDocs of
-        [] -> docLitS "()"
-        [x] -> x
-        _ -> docAlt
-          [ let
-              list = List.intersperse docCommaSep $ docForceSingleline <$> cntxtDocs
-            in docSeq ([docParenL] ++ list ++ [docParenR])
-          , let
-              open = docCols
-                ColTyOpPrefix
-                [docParenLSep, docAddBaseY (BrIndentSpecial 2) $ head cntxtDocs]
-              list = List.tail cntxtDocs <&> \cntxtDoc -> docCols
-                ColTyOpPrefix
-                [docCommaSep, docAddBaseY (BrIndentSpecial 2) cntxtDoc]
-            in docPar open $ docLines $ list ++ [docParenR]
-          ]
-    docAlt
-      -- :: forall a b c . (Foo a b c) => a b -> c
-      [ docSeq
-        [ if null bndrs
-          then docEmpty
-          else
-            let
-              open = docLitS "forall"
-              close = docLitS " . "
-            in docSeq ([open, docSeparator] ++ tyVarDocLineList ++ [close])
-        , docForceSingleline contextDoc
-        , docLitS " => "
-        , docForceSingleline typeDoc
-        ]
-      -- :: forall a b c
-      --  . (Foo a b c)
-      -- => a b
-      -- -> c
-      , docPar
-        forallDoc
-        (docLines
-          [ docCols
-            ColTyOpPrefix
-            [ docWrapNodeRest ltype $ docLitS " . "
-            , docAddBaseY (BrIndentSpecial 3) $ contextDoc
-            ]
-          , docCols
-            ColTyOpPrefix
-            [ docLitS "=> "
-            , docAddBaseY (BrIndentSpecial 3) $ maybeForceML $ typeDoc
-            ]
-          ]
-        )
-      ]
-  HsForAllTy _ hsf typ2 -> do
-    let bndrs = getBinders hsf
-    typeDoc   <- layoutType typ2
-    tyVarDocs <- layoutTyVarBndrs bndrs
-    let maybeForceML = case typ2 of
-          L _ HsFunTy{} -> docForceMultiline
-          _             -> id
-    let tyVarDocLineList = processTyVarBndrsSingleline tyVarDocs
-    docAlt
-      -- forall x . x
-      [ docSeq
-        [ if null bndrs
-          then docEmpty
-          else
-            let
-              open = docLitS "forall"
-              close = docLitS " . "
-            in docSeq ([open] ++ tyVarDocLineList ++ [close])
-        , docForceSingleline $ return $ typeDoc
-        ]
-      -- :: forall x
-      --  . x
-      , docPar
-        (docSeq $ docLitS "forall" : tyVarDocLineList)
-        (docCols
-          ColTyOpPrefix
-          [ docWrapNodeRest ltype $ docLitS " . "
-          , maybeForceML $ return typeDoc
-          ]
-        )
-      -- :: forall
-      --      (x :: *)
-      --  . x
-      , docPar
-        (docLitS "forall")
-        (docLines
-        $ (tyVarDocs <&> \case
-            (tname, Nothing) ->
-              docEnsureIndent BrIndentRegular $ docLit tname
-            (tname, Just doc) -> docEnsureIndent BrIndentRegular $ docLines
-              [ docCols ColTyOpPrefix [docParenLSep, docLit tname]
-              , docCols ColTyOpPrefix [docLitS ":: ", doc]
-              , docParenR
-              ]
-          )
-        ++ [ docCols
-               ColTyOpPrefix
-               [ docWrapNodeRest ltype $ docLitS " . "
-               , maybeForceML $ return typeDoc
-               ]
-           ]
-        )
-      ]
+    layoutForallType bndrs typ
+
   -- TODO: confirm this implementation makes sense, maybe unify with
   -- the following case.
   HsQualTy _ Nothing typ1 -> do
