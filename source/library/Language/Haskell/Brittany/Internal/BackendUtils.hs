@@ -20,7 +20,7 @@ import Language.Haskell.Brittany.Internal.Utils
 import qualified Language.Haskell.GHC.ExactPrint.Types as ExactPrint
 
 traceLocal :: MonadMultiState LayoutState m => a -> m ()
-traceLocal _ = return ()
+traceLocal _ = pure ()
 
 stimes' :: Monoid a => Int -> a -> a
 stimes' n x
@@ -66,10 +66,10 @@ layoutWriteAppendMultiline
 layoutWriteAppendMultiline ts = do
   traceLocal ("layoutWriteAppendMultiline", ts)
   case ts of
-    [] -> layoutWriteAppend (Text.pack "") -- need to write empty, too.
-    (l : lr) -> do
+    []     -> layoutWriteAppend (Text.pack "") -- need to write empty, too.
+    l : lr -> do
       layoutWriteAppend l
-      lr `forM_` \x -> do
+      for_ lr $ \x -> do
         layoutWriteNewline
         layoutWriteAppend x
 
@@ -88,10 +88,9 @@ layoutWriteNewlineBlock = do
 layoutSetCommentCol :: MonadMultiState LayoutState m => m ()
 layoutSetCommentCol = do
   state <- mGet
-  let
-    col = case _lstate_curYOrAddNewline state of
-      Cols i           -> i + fromMaybe 0 (_lstate_addSepSpace state)
-      InsertNewlines{} -> lstate_baseY state
+  let col = case _lstate_curYOrAddNewline state of
+        Cols i           -> i + fromMaybe 0 (_lstate_addSepSpace state)
+        InsertNewlines{} -> lstate_baseY state
   traceLocal ("layoutSetCommentCol", col)
   unless (Data.Maybe.isJust $ _lstate_commentCol state)
     $ mSet state { _lstate_commentCol = Just col }
@@ -112,14 +111,14 @@ layoutMoveToCommentPos y x commentLines = do
       Cols i           -> if y == 0 then Cols i else InsertNewlines y
       InsertNewlines{} -> InsertNewlines y
     , _lstate_addSepSpace =
-      Just $ if Data.Maybe.isJust (_lstate_commentCol state)
-        then case _lstate_curYOrAddNewline state of
+      Just $ case _lstate_commentCol state of
+        Just _  -> case _lstate_curYOrAddNewline state of
           Cols{}           -> if y == 0 then x else _lstate_indLevelLinger state + x
           InsertNewlines{} -> _lstate_indLevelLinger state + x
-        else if y == 0 then x else _lstate_indLevelLinger state + x
+        Nothing -> if y == 0 then x else _lstate_indLevelLinger state + x
     , _lstate_commentCol = Just $ case _lstate_commentCol state of
       Just existing -> existing
-      Nothing -> case _lstate_curYOrAddNewline state of
+      Nothing       -> case _lstate_curYOrAddNewline state of
         Cols i           -> i + fromMaybe 0 (_lstate_addSepSpace state)
         InsertNewlines{} -> lstate_baseY state
     , _lstate_commentNewlines =

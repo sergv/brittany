@@ -373,10 +373,6 @@ docMoveToKWDP
 docMoveToKWDP kw shouldRestoreIndent bdm =
   allocateNode . BDFMoveToKWDP kw shouldRestoreIndent =<< bdm
 
-docAnnotationRest
-  :: ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
-docAnnotationRest bdm = allocateNode . BDFAnnotationAfter =<< bdm
-
 docNonBottomSpacing :: ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
 docNonBottomSpacing bdm = allocateNode . BDFNonBottomSpacing False =<< bdm
 

@@ -65,19 +65,18 @@ layoutSig :: LSig GhcPs -> ToBriDocM BriDocNumbered
 layoutSig lsig@(L _loc sig) = case sig of
   InlineSig _ name (InlinePragma _ spec _arity phaseAct conlike) ->
     docWrapNodeAround lsig $ do
-      let nameStr = lrdrNameToTextAnn name
       specStr <- specStringCompat lsig spec
-      let phaseStr = case phaseAct of
+      let nameStr  = lrdrNameToTextAnn name
+          phaseStr = case phaseAct of
             NeverActive      -> "" -- not [] - for NOINLINE NeverActive is
                                    -- in fact the default
             AlwaysActive     -> ""
             ActiveBefore _ i -> "[~" ++ show i ++ "] "
             ActiveAfter _ i  -> "[" ++ show i ++ "] "
             FinalActive      -> error "brittany internal error: FinalActive"
-      let
-        conlikeStr = case conlike of
-          FunLike -> ""
-          ConLike -> "CONLIKE "
+          conlikeStr = case conlike of
+            FunLike -> ""
+            ConLike -> "CONLIKE "
       docLit
         $ T.pack ("{-# " ++ specStr ++ conlikeStr ++ phaseStr)
         <> nameStr
@@ -93,9 +92,9 @@ layoutSig lsig@(L _loc sig) = case sig of
       -> LHsSigType GhcPs
       -> ToBriDocM BriDocNumbered
     layoutNamesAndType mKeyword names typ = docWrapNodeAround lsig $ do
-      let keyDoc = case mKeyword of
+      let keyDoc      = case mKeyword of
             Just key -> [appSep $ docLitS key]
-            Nothing -> []
+            Nothing  -> []
           nameStrs    = map lrdrNameToTextAnn names
           nameStr     = Text.intercalate ", " $ nameStrs
           hasComments = hasAnyCommentsBelow lsig

@@ -149,9 +149,9 @@ transformSimplifyFloating = stepBO .> stepFull
            transformUp f
    where
     f = \case
-      x@BDAnnotationBefore{}    -> descendPrior x
+      x@BDAnnotationBefore{}   -> descendPrior x
       x@BDAnnotationKW{}       -> descendKW x
-      x@BDAnnotationAfter{}     -> descendRest x
+      x@BDAnnotationAfter{}    -> descendRest x
       x@BDAddBaseY{}           -> descendAddB x
       x@BDBaseYPushCur{}       -> descendBYPush x
       x@BDBaseYPop{}           -> descendBYPop x
