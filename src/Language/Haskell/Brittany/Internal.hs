@@ -8,6 +8,10 @@ module Language.Haskell.Brittany.Internal
   , pPrintModuleAndCheck
   ) where
 
+import qualified Debug.Trace
+import Prettyprinter.Combinators
+import Prettyprinter.Data
+
 import qualified Control.Monad.Trans.MultiRWS.Strict as MultiRWSS
 import Data.Foldable
 import Data.HList.HList
@@ -136,8 +140,8 @@ declLoc = anchor . entry . ann . getLoc
 setModComments :: [LEpaComment] -> HsModule -> HsModule
 setModComments comments m@HsModule{hsmodAnn} = m
   { hsmodAnn = case hsmodAnn of
-    EpAnn entry anns cs -> EpAnn entry anns (cs { priorComments = comments })
-    EpAnnNotUsed        -> EpAnnNotUsed
+    EpAnn entry as cs -> EpAnn entry as (cs { priorComments = comments })
+    EpAnnNotUsed      -> EpAnnNotUsed
   }
 
 splitAnnots' :: HsModule -> ([LEpaComment], [([LEpaComment], LHsDecl GhcPs)], [LEpaComment])

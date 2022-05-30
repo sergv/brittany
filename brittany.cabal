@@ -15,6 +15,7 @@ author:               Lennart Spitzner
 maintainer:           Lennart Spitzner <hexagoxel@hexagoxel.de>
 copyright:            Copyright (C) 2016-2019 Lennart Spitzner
                       Copyright (C) 2019 PRODA LTD
+                      Copyright (C) 2022 Sergey Vinokurov
 category:             Language
 build-type:           Simple
 homepage:             https://github.com/lspitzner/brittany/
@@ -64,77 +65,18 @@ common ghc-options
     ghc-options:
       -Wno-missing-kind-signatures
 
-common library
-  build-depends:
-    , aeson ^>= 2.0.1
-    , base ^>= 4.16.0
-    , butcher ^>= 1.3.3
-    , bytestring ^>= 0.11.3
-    , cmdargs ^>= 0.10.21
-    , containers ^>= 0.6.4
-    , czipwith ^>= 1.0.1
-    , data-tree-print ^>= 0.1.0
-    , deepseq ^>= 1.4.5
-    , directory ^>= 1.3.6
-    , extra ^>= 1.7.10
-    , filepath ^>= 1.4.2
-    , ghc ^>= 9.2.2
-    , ghc-boot-th ^>= 9.2.2
-    , ghc-exactprint ^>= 1.5
-    , monad-memo ^>= 0.5.3
-    , mtl ^>= 2.2.2
-    , multistate ^>= 0.8.0
-    , pretty ^>= 1.1.3
-    , prettyprinter
-    , prettyprinter-combinators
-    , random ^>= 1.2.1
-    , safe ^>= 0.3.19
-    , semigroups ^>= 0.19.2
-    , strict ^>= 0.4.0
-    , syb ^>= 0.7.2
-    , text ^>= 1.2.5
-    , transformers ^>= 0.5.6
-    , uniplate ^>= 1.6.13
-    , vector ^>= 0.12.3
-    , yaml ^>= 0.11.7
-  default-language: Haskell2010
-  ghc-options:
-    -Weverything
-    -Wno-all-missed-specialisations
-    -Wno-incomplete-uni-patterns
-    -Wno-missing-deriving-strategies
-    -Wno-missing-export-lists
-    -Wno-missing-import-lists
-    -Wno-missing-local-signatures
-    -Wno-missing-safe-haskell-mode
-    -Wno-monomorphism-restriction
-    -Wno-prepositive-qualified-module
-    -Wno-safe
-    -Wno-unsafe
-    -Wno-missing-kind-signatures
-
-    -Wno-unused-imports
-    -Wno-name-shadowing
-    -Wno-unused-matches
-    -Wno-redundant-constraints
-
   if flag(pedantic)
     ghc-options: -Werror
 
-common executable
-  import: library
-
-  build-depends: brittany
-  ghc-options:
-    -rtsopts
-    -threaded
-    -Wno-unused-packages
-
 library
-  import: library
+  -- import: ghc-options
 
-  autogen-modules: Paths_brittany
-  hs-source-dirs: source/library
+  autogen-modules:
+    Paths_brittany
+
+  hs-source-dirs:
+    src
+
   exposed-modules:
     Data.Occurrences
     Data.List.Reversed
@@ -174,11 +116,79 @@ library
 
     GHC.PrettyInstances
 
-executable brittany
-  import: executable
+  build-depends:
+    , aeson ^>= 2.0.1
+    , base ^>= 4.16.0
+    , butcher ^>= 1.3.3
+    , bytestring ^>= 0.11.3
+    , cmdargs ^>= 0.10.21
+    , containers ^>= 0.6.4
+    , czipwith ^>= 1.0.1
+    , data-tree-print ^>= 0.1.0
+    , deepseq ^>= 1.4.5
+    , directory ^>= 1.3.6
+    , extra ^>= 1.7.10
+    , filepath ^>= 1.4.2
+    , ghc ^>= 9.2.2
+    , ghc-boot-th ^>= 9.2.2
+    , ghc-exactprint ^>= 1.5
+    , monad-memo ^>= 0.5.3
+    , mtl ^>= 2.2.2
+    , multistate ^>= 0.8.0
+    , pretty ^>= 1.1.3
+    , prettyprinter-combinators
+    , random ^>= 1.2.1
+    , safe ^>= 0.3.19
+    , semigroups ^>= 0.19.2
+    , strict ^>= 0.4.0
+    , syb ^>= 0.7.2
+    , text ^>= 1.2.5
+    , transformers ^>= 0.5.6
+    , uniplate ^>= 1.6.13
+    , vector ^>= 0.12.3
+    , yaml ^>= 0.11.7
 
-  hs-source-dirs: source/executable
-  main-is: Main.hs
+  ghc-options:
+    -Weverything
+    -Wno-implicit-prelude
+    -Wno-all-missed-specialisations
+    -Wno-incomplete-uni-patterns
+    -Wno-missing-deriving-strategies
+    -Wno-missing-export-lists
+    -Wno-missing-import-lists
+    -Wno-missing-local-signatures
+    -Wno-missing-safe-haskell-mode
+    -Wno-monomorphism-restriction
+    -Wno-prepositive-qualified-module
+    -Wno-safe
+    -Wno-unsafe
+    -Wno-missing-kind-signatures
+
+    -Wno-unused-imports
+    -Wno-name-shadowing
+    -Wno-unused-matches
+    -Wno-redundant-constraints
+  default-language:
+    Haskell2010
+
+executable brittany
+  -- import: ghc-options
+
+  hs-source-dirs:
+    exe
+  main-is:
+    Main.hs
+
+  build-depends:
+    , base
+    , brittany
+
+  ghc-options:
+    -rtsopts
+    -threaded
+    -Wno-unused-packages
+  default-language:
+    Haskell2010
 
 test-suite brittany-test-suite
   import: ghc-options
@@ -188,14 +198,9 @@ test-suite brittany-test-suite
   main-is:
     BrittanyTestSuite.hs
   hs-source-dirs:
-    source/test-suite
+    test
   other-modules:
     Language.Haskell.Brittany.Internal.Layouters.Module.Tests
-
-  ghc-options:
-    -rtsopts
-    -with-rtsopts "-M100M"
-    -main-is BrittanyTestSuite
 
   build-depends:
     , base
@@ -209,15 +214,23 @@ test-suite brittany-test-suite
     , tasty-hunit ^>= 0.10
     , text ^>= 1.2 || ^>= 2.0
 
+  ghc-options:
+    -rtsopts
+    -with-rtsopts "-M100M"
+    -main-is BrittanyTestSuite
+  default-language:
+    Haskell2010
+
 executable brittany-investigation
   import: ghc-options
   main-is:
     BrittanyInvestigation.hs
   other-modules:
+    GHC.PrettyInstances
     Language.Haskell.Brittany.Internal.ParseModule
   hs-source-dirs:
-    source/executable
-    source/library
+    src
+    exe
   build-depends:
     , base >= 4.9
     , ghc ^>= 9.2.2
@@ -228,3 +241,5 @@ executable brittany-investigation
   ghc-options:
     -rtsopts
     -main-is BrittanyInvestigation
+  default-language:
+    Haskell2010

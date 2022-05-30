@@ -5,6 +5,7 @@
 
 module Language.Haskell.Brittany.Internal.BackendUtils where
 
+import Data.Foldable
 import qualified Data.Map as Map
 import qualified Data.Maybe
 import qualified Data.Semigroup as Semigroup
