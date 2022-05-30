@@ -355,13 +355,16 @@ unpackDeltaPos = \case
   SameLine{deltaColumn}                 -> (0, deltaColumn)
   DifferentLine{deltaLine, deltaColumn} -> (deltaLine, deltaColumn)
 
-ppmMoveToExactLoc
-  :: MonadMultiWriter Text.Builder.Builder m => DeltaPos -> m ()
-ppmMoveToExactLoc dp = do
-  mTell $ stimes' lines $ Text.Builder.singleton '\n'
-  mTell $ stimes' cols $ Text.Builder.singleton ' '
-  where
-    (lines, cols) = unpackDeltaPos dp
+ppmMoveToExactLocAnchor
+  :: MonadMultiWriter Text.Builder.Builder m => Anchor -> m ()
+ppmMoveToExactLocAnchor an =
+  case anchor_op an of
+    UnchangedAnchor -> pure ()
+    MovedAnchor dp  -> do
+      mTell $ stimes' lines $ Text.Builder.singleton '\n'
+      mTell $ stimes' cols $ Text.Builder.singleton ' '
+      where
+        (lines, cols) = unpackDeltaPos dp
 
 layoutIndentRestorePostComment
   :: (MonadMultiState LayoutState m, MonadMultiWriter Text.Builder.Builder m)

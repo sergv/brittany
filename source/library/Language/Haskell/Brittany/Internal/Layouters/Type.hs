@@ -1,6 +1,7 @@
-{-# LANGUAGE LambdaCase        #-}
-{-# LANGUAGE NamedFieldPuns    #-}
-{-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE NamedFieldPuns      #-}
+{-# LANGUAGE NoImplicitPrelude   #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Language.Haskell.Brittany.Internal.Layouters.Type
   ( layoutSigType
@@ -17,6 +18,7 @@ import GHC.Types.Basic
 import GHC.Types.SourceText
 import GHC.Types.SrcLoc
 import GHC.Utils.Outputable (ftext, showSDocUnsafe)
+import Language.Haskell.Brittany.Internal.ExactPrintUtils
 import Language.Haskell.Brittany.Internal.LayouterBasics
 import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.PreludeUtils
@@ -157,7 +159,7 @@ layoutForallType bndrs ltype = do
                ])
 
 layoutType :: LHsType GhcPs -> ToBriDocM BriDocNumbered
-layoutType ltype@(L _ typ) = docWrapNodeAround ltype $ case typ of
+layoutType ltype@(L typAnn typ) = docWrapNodeAround ltype $ case typ of
   HsTyVar _ promoted name -> do
     let t = lrdrNameToTextAnnTypeEqualityIsSpecial name
     case promoted of
@@ -211,13 +213,17 @@ layoutType ltype@(L _ typ) = docWrapNodeAround ltype $ case typ of
           [ docLitS "=> "
           , docAddBaseY (BrIndentSpecial 3) $ maybeForceML typeDoc
           ])
-  HsFunTy _ _ typ1 typ2 -> do
-    typeDoc1 <- docSharedWrapper layoutType typ1
-    typeDoc2 <- docSharedWrapper layoutType typ2
-    let maybeForceML = case typ2 of
+  HsFunTy funAnn (HsUnrestrictedArrow NormalSyntax) typ1 typ2 -> do
+    let comments = case anns funAnn of
+          AddRarrowAnn (EpaDelta dp comments) ->
+            EpAnn (Anchor (realSrcSpan' (locA typAnn)) (MovedAnchor dp)) () (EpaComments comments)
+          _ -> error "Expected AddRarrowAnn"
+        maybeForceML = case typ2 of
           L _ HsFunTy{} -> docForceMultiline
           _             -> id
         hasComments  = hasAnyCommentsBelow ltype
+    typeDoc1 <- docSharedWrapper layoutType typ1
+    typeDoc2 <- docSharedWrapper layoutType typ2
     runFilteredAlternative $ do
       addAlternativeCond (not hasComments) $
         docSeq
@@ -227,12 +233,14 @@ layoutType ltype@(L _ typ) = docWrapNodeAround ltype $ case typ of
           ]
       addAlternative $
         docPar
-          (docNodeAnnKW ltype Nothing typeDoc1)
+          (wrapAfter comments $ docNodeAnnKW ltype Nothing typeDoc1)
           (docCols
             ColTyOpPrefix
-            [ docWrapNodeAfter ltype $ appSep $ docLitS "->"
+            [ appSep $ docLitS "->"
             , docAddBaseY (BrIndentSpecial 3) $ maybeForceML typeDoc2
             ])
+  HsFunTy{} -> -- TODO
+    briDocByExactInlineOnly "HsFunTy{}" ltype
   HsParTy _ typ1 -> do
     typeDoc1 <- docSharedWrapper layoutType typ1
     runFilteredAlternative $ do

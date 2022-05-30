@@ -443,7 +443,7 @@ docNodeMoveToKWDP _ast kw shouldRestoreIndent bdm =
   docMoveToKWDP kw shouldRestoreIndent bdm
 
 class DocWrapable a where
-  docWrapNodeAround      :: LocatedAn ann ast -> a -> a
+  docWrapNodeAround :: LocatedAn ann ast -> a -> a
   docWrapNodeBefore :: LocatedAn ann ast -> a -> a
   docWrapNodeAfter  :: LocatedAn ann ast -> a -> a
 
@@ -456,23 +456,27 @@ wrapBefore epann bdm = do
   i  <- allocNodeIndex
   pure (i, BDFAnnotationBefore epann bd)
 
+wrapAfter :: EpAnn () -> ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
+wrapAfter epann bdm = do
+  bd <- bdm
+  i  <- allocNodeIndex
+  pure (i, BDFAnnotationAfter epann bd)
+
 instance DocWrapable (ToBriDocM BriDocNumbered) where
   docWrapNodeAround (L ann _ast) bdm = do
     bd <- bdm
     i1 <- allocNodeIndex
-    i2 <- allocNodeIndex
+    -- i2 <- allocNodeIndex
     pure
       $ (i1,)
       $ BDFAnnotationBefore (forgetAnn ann)
-      $ (i2,)
-      $ BDFAnnotationAfter
+      --  $ (i2,)
+      --  $ BDFAnnotationAfter
       $ bd
   docWrapNodeBefore (L ann _ast) =
     wrapBefore (forgetAnn ann)
-  docWrapNodeAfter (L ann _ast) bdm = do
-    bd <- bdm
-    i2 <- allocNodeIndex
-    pure $ (,) i2 $ BDFAnnotationAfter bd
+  docWrapNodeAfter (L ann _ast) =
+    wrapAfter (forgetAnn ann)
 
 instance DocWrapable (ToBriDocM a) => DocWrapable [ToBriDocM a] where
   docWrapNodeAround ast bdms = case bdms of

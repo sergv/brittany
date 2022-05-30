@@ -46,27 +46,27 @@ transformSimplifyFloating = stepBO .> stepFull
     _ -> Nothing
   descendRest = transformDownMay $ \case
     -- post floating in
-    BDAnnotationAfter (BDPar ind line indented) ->
-      Just $ BDPar ind line $ BDAnnotationAfter indented
-    BDAnnotationAfter (BDSeq list) ->
+    BDAnnotationAfter ann (BDPar ind line indented) ->
+      Just $ BDPar ind line $ BDAnnotationAfter ann indented
+    BDAnnotationAfter ann (BDSeq list) ->
       Just
         $ BDSeq
         $ List.init list
-        ++ [BDAnnotationAfter $ List.last list]
-    BDAnnotationAfter (BDLines list) ->
+        ++ [BDAnnotationAfter ann $ List.last list]
+    BDAnnotationAfter ann (BDLines list) ->
       Just
         $ BDLines
         $ List.init list
-        ++ [BDAnnotationAfter $ List.last list]
-    BDAnnotationAfter (BDCols sig cols) ->
+        ++ [BDAnnotationAfter ann $ List.last list]
+    BDAnnotationAfter ann (BDCols sig cols) ->
       Just
         $ BDCols sig
         $ List.init cols
-        ++ [BDAnnotationAfter $ List.last cols]
-    BDAnnotationAfter (BDAddBaseY indent x) ->
-      Just $ BDAddBaseY indent $ BDAnnotationAfter x
-    BDAnnotationAfter (BDDebug s x) ->
-      Just $ BDDebug s $ BDAnnotationAfter x
+        ++ [BDAnnotationAfter ann $ List.last cols]
+    BDAnnotationAfter ann (BDAddBaseY indent x) ->
+      Just $ BDAddBaseY indent $ BDAnnotationAfter ann x
+    BDAnnotationAfter ann (BDDebug s x) ->
+      Just $ BDDebug s $ BDAnnotationAfter ann x
     _ -> Nothing
   descendKW = transformDownMay $ \case
     -- post floating in
@@ -126,8 +126,8 @@ transformSimplifyFloating = stepBO .> stepFull
       Just $ BDPar (mergeIndents ind1 ind2) line indented
     BDAddBaseY ind (BDAnnotationBefore ann x) ->
       Just $ BDAnnotationBefore ann (BDAddBaseY ind x)
-    BDAddBaseY ind (BDAnnotationAfter x) ->
-      Just $ BDAnnotationAfter (BDAddBaseY ind x)
+    BDAddBaseY ind (BDAnnotationAfter ann x) ->
+      Just $ BDAnnotationAfter ann (BDAddBaseY ind x)
     BDAddBaseY ind (BDAnnotationKW kw x) ->
       Just $ BDAnnotationKW kw (BDAddBaseY ind x)
     BDAddBaseY ind (BDSeq list) ->
@@ -193,21 +193,21 @@ transformSimplifyFloating = stepBO .> stepFull
     -- BDEnsureIndent indent (BDLines lines) ->
     --   Just $ BDLines $ BDEnsureIndent indent <$> lines
     -- post floating in
-    BDAnnotationAfter (BDPar ind line indented) ->
-      Just $ BDPar ind line $ BDAnnotationAfter indented
-    BDAnnotationAfter (BDSeq list) ->
+    BDAnnotationAfter ann (BDPar ind line indented) ->
+      Just $ BDPar ind line $ BDAnnotationAfter ann indented
+    BDAnnotationAfter ann (BDSeq list) ->
       Just
         $ BDSeq
         $ List.init list
-        ++ [BDAnnotationAfter $ List.last list]
-    BDAnnotationAfter (BDLines list) ->
+        ++ [BDAnnotationAfter ann $ List.last list]
+    BDAnnotationAfter ann (BDLines list) ->
       Just
         $ BDLines
         $ List.init list
-        ++ [BDAnnotationAfter $ List.last list]
-    BDAnnotationAfter (BDCols sig cols) ->
+        ++ [BDAnnotationAfter ann $ List.last list]
+    BDAnnotationAfter ann (BDCols sig cols) ->
       Just
         $ BDCols sig
         $ List.init cols
-        ++ [BDAnnotationAfter $ List.last cols]
+        ++ [BDAnnotationAfter ann $ List.last cols]
     _ -> Nothing

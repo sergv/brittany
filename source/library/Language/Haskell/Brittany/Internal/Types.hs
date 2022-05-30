@@ -230,7 +230,7 @@ data BriDoc
             -- (contrast to BDLit)
   | BDAnnotationBefore (EpAnn ()) BriDoc
   | BDAnnotationKW (Maybe AnnKeywordId) BriDoc
-  | BDAnnotationAfter  BriDoc
+  | BDAnnotationAfter (EpAnn ()) BriDoc
   | BDMoveToKWDP
       AnnKeywordId
       Bool -- True if should respect x offset
@@ -279,7 +279,7 @@ data BriDocF f
             -- (contrast to BDLit)
   | BDFAnnotationBefore (EpAnn ()) (f (BriDocF f))
   | BDFAnnotationKW (Maybe AnnKeywordId) (f (BriDocF f))
-  | BDFAnnotationAfter  (f (BriDocF f))
+  | BDFAnnotationAfter (EpAnn ()) (f (BriDocF f))
   | BDFMoveToKWDP
       AnnKeywordId
       Bool -- True if should respect x offset
@@ -317,7 +317,7 @@ instance Uniplate.Uniplate BriDoc where
   uniplate x@BDPlain{}                 = plate x
   uniplate (BDAnnotationBefore ann bd) = plate BDAnnotationBefore |- ann |* bd
   uniplate (BDAnnotationKW kw bd)      = plate BDAnnotationKW |- kw |* bd
-  uniplate (BDAnnotationAfter bd)      = plate BDAnnotationAfter |* bd
+  uniplate (BDAnnotationAfter ann bd)  = plate BDAnnotationAfter |- ann |* bd
   uniplate (BDMoveToKWDP kw b bd)      = plate BDMoveToKWDP |- kw |- b |* bd
   uniplate (BDLines lines          )   = plate BDLines ||* lines
   uniplate (BDEnsureIndent ind bd  )   = plate BDEnsureIndent |- ind |* bd
@@ -350,7 +350,7 @@ unwrapBriDocNumbered tpl = case snd tpl of
   BDFPlain t                 -> BDPlain t
   BDFAnnotationBefore ann bd -> BDAnnotationBefore ann $ rec bd
   BDFAnnotationKW kw bd      -> BDAnnotationKW kw $ rec bd
-  BDFAnnotationAfter bd      -> BDAnnotationAfter $ rec bd
+  BDFAnnotationAfter ann bd  -> BDAnnotationAfter ann $ rec bd
   BDFMoveToKWDP kw b bd      -> BDMoveToKWDP kw b $ rec bd
   BDFLines lines             -> BDLines $ rec <$> lines
   BDFEnsureIndent ind bd     -> BDEnsureIndent ind $ rec bd

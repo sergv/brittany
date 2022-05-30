@@ -100,28 +100,26 @@ ppModule m@HsModule{hsmodAnn, hsmodDecls} = do
   ppPreamble $ setModComments annsBefore m
 
   for_ annotatedDecls $ \(cs, decl) -> do
-    let addAnn :: ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
-        addAnn = case cs of
-          []             -> id
-          L anchor _ : _ -> wrapBefore $ EpAnn
-            { entry    = anchor
+    let prependComments :: ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
+        prependComments = case cs of
+          [] -> id
+          _  -> wrapBefore $ EpAnn
+            { entry    = entry $ ann $ getLoc decl
             , anns     = ()
             , comments = EpaComments cs
             }
     layoutBriDoc =<< if exactprintOnly
-      then briDocMToPPM $ addAnn $ briDocByExactNoComment decl
+      then briDocMToPPM $ prependComments $ briDocByExactNoComment decl
       else do
-        (r, errs, debugs) <- briDocMToPPMInner $ addAnn $ layoutDecl decl
+        (r, errs, debugs) <- briDocMToPPMInner $ prependComments $ layoutDecl decl
         mTell debugs
         mTell errs
         if null errs
           then pure r
-          else briDocMToPPM $ addAnn $ briDocByExactNoComment decl
+          else briDocMToPPM $ prependComments $ briDocByExactNoComment decl
 
   for_ annsAfter $ \comment@(L pos EpaComment{ac_tok}) -> do
-    case anchor_op pos of
-      UnchangedAnchor -> pure ()
-      MovedAnchor dp  -> ppmMoveToExactLoc dp
+    ppmMoveToExactLocAnchor pos
     case ac_tok of
       EpaEofComment -> pure ()
       _             ->

@@ -269,8 +269,8 @@ transformAlts =
           $ acp { _acp_forceMLFlag = altLineModeDecay $ _acp_forceMLFlag acp }
         bd' <- rec bd
         return $ reWrap $ BDFAnnotationBefore ann bd'
-      BDFAnnotationAfter bd ->
-        reWrap . BDFAnnotationAfter <$> rec bd
+      BDFAnnotationAfter ann bd ->
+        reWrap . BDFAnnotationAfter ann <$> rec bd
       BDFAnnotationKW kw bd ->
         reWrap . BDFAnnotationKW kw <$> rec bd
       BDFMoveToKWDP kw b bd ->
@@ -458,9 +458,9 @@ getSpacing !bridoc = rec bridoc
         [t] -> VerticalSpacing (Text.length t) VerticalSpacingParNone False
         _ -> VerticalSpacing 999 VerticalSpacingParNone False
       BDFAnnotationBefore _ bd -> rec bd
-      BDFAnnotationKW _kw bd -> rec bd
-      BDFAnnotationAfter bd -> rec bd
-      BDFMoveToKWDP _kw _b bd -> rec bd
+      BDFAnnotationKW _kw bd   -> rec bd
+      BDFAnnotationAfter _ bd  -> rec bd
+      BDFMoveToKWDP _kw _b bd  -> rec bd
       BDFLines [] ->
         return $ LineModeValid $ VerticalSpacing 0 VerticalSpacingParNone False
       BDFLines ls@(_ : _) -> do
@@ -759,11 +759,11 @@ getSpacings limit bridoc = preFilterLimit <$> rec bridoc
         | allowHangingQuasiQuotes
         ]
       BDFAnnotationBefore _ bd -> rec bd
-      BDFAnnotationKW _kw bd  -> rec bd
-      BDFAnnotationAfter bd    -> rec bd
-      BDFMoveToKWDP _kw _b bd -> rec bd
-      BDFLines []             -> return [VerticalSpacing 0 VerticalSpacingParNone False]
-      BDFLines ls@(_ : _)     -> do
+      BDFAnnotationKW _kw bd   -> rec bd
+      BDFAnnotationAfter _ bd  -> rec bd
+      BDFMoveToKWDP _kw _b bd  -> rec bd
+      BDFLines []              -> pure [VerticalSpacing 0 VerticalSpacingParNone False]
+      BDFLines ls@(_ : _)      -> do
         -- we simply assume that lines is only used "properly", i.e. in
         -- such a way that the first line can be treated "as a part of the
         -- paragraph". That most importantly means that Lines should never

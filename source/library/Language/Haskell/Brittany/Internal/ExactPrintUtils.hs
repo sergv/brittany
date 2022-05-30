@@ -8,6 +8,7 @@ module Language.Haskell.Brittany.Internal.ExactPrintUtils
   ( withTransformedAnns
   -- , ToplevelAnns(..)
   -- , extractToplevelAnns
+  , realSrcSpan'
   ) where
 
 import qualified Control.Monad.State.Class as State.Class
@@ -30,6 +31,7 @@ import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.PreludeUtils
 import qualified Language.Haskell.GHC.ExactPrint as ExactPrint
 import qualified Language.Haskell.GHC.ExactPrint.Types as ExactPrint
+import GHC.Types.SrcLoc
 
 -- newtype ToplevelAnns = ToplevelAnns { unToplevelAnns :: Map AnnKey Anns }
 --
@@ -91,4 +93,9 @@ withTransformedAnns _ast m = m
 --       ((), (annsBalanced, _), _) =
 --         ExactPrint.runTransform anns (commentAnnFixTransformGlob ast)
 --     in annsBalanced
+
+realSrcSpan' :: SrcSpan -> RealSrcSpan
+realSrcSpan' = \case
+  RealSrcSpan x _   -> x
+  UnhelpfulSpan err -> error $ "Unhelpful span: " ++ show err
 

@@ -55,18 +55,18 @@ transformSimplifyColumns = Uniplate.rewrite $ \case
   BDAnnotationBefore ann (BDCols sig (l : lr)) ->
     Just $ BDCols sig (BDAnnotationBefore ann l : lr)
   -- post floating in
-  BDAnnotationAfter (BDSeq list) ->
-    Just $ BDSeq $ List.init list ++ [BDAnnotationAfter $ List.last list]
-  BDAnnotationAfter (BDLines list) ->
+  BDAnnotationAfter ann (BDSeq list) ->
+    Just $ BDSeq $ List.init list ++ [BDAnnotationAfter ann $ List.last list]
+  BDAnnotationAfter ann (BDLines list) ->
     Just
       $ BDLines
       $ List.init list
-      ++ [BDAnnotationAfter $ List.last list]
-  BDAnnotationAfter (BDCols sig cols) ->
+      ++ [BDAnnotationAfter ann $ List.last list]
+  BDAnnotationAfter ann (BDCols sig cols) ->
     Just
       $ BDCols sig
       $ List.init cols
-      ++ [BDAnnotationAfter $ List.last cols]
+      ++ [BDAnnotationAfter ann $ List.last cols]
   BDAnnotationKW kw (BDSeq list) ->
     Just
       $ BDSeq

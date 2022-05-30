@@ -13,7 +13,7 @@ import qualified Data.IntMap.Lazy as IntMapL
 import qualified Data.IntMap.Strict as IntMapS
 import qualified Data.Semigroup as Semigroup
 import qualified Data.Sequence as Seq
-import qualified Data.Text as Text
+import qualified Data.Text as T
 import qualified Data.Text.Lazy.Builder as TLB
 
 import Data.Traversable
@@ -134,11 +134,11 @@ layoutBriDocM = \case
   BDForwardLineMode bd          -> layoutBriDocM bd
   BDExternal shouldAddComment t -> do
     let
-      tlines = Text.lines $ t <> Text.singleton '\n'
+      tlines = T.lines $ t <> T.singleton '\n'
       tlineCount = length tlines
     when shouldAddComment $ do
       layoutWriteAppend
-        $ Text.pack
+        $ T.pack
         $ "{- BRITTANY TODO SHOULD ADD COMMENT -}"
     for_ (zip [1 ..] tlines) $ \(i, l) -> do
       layoutWriteAppend l
@@ -159,8 +159,6 @@ layoutBriDocM = \case
     -- -- This one doesn't normalise comment text: ghcCommentText :: LEpaComment -> String
     -- epaLocationRealSrcSpan :: EpaLocation -> RealSrcSpan
     -- tokComment :: LEpaComment -> Comment
-    let priorCmnts = priorComments $ epAnnComments a
-        -- layoutMoveToCommentPos col row 1
 
     -- data DeltaPos
     --   = SameLine { deltaColumn :: !Int }
@@ -170,24 +168,23 @@ layoutBriDocM = \case
     --       } deriving (Show,Eq,Ord,Data)
 
     state <- mGet
-    let moveToExactLocationAction = case _lstate_curYOrAddNewline state of
+    let moveToExactLocation = case _lstate_curYOrAddNewline state of
           Cols{}           -> pure ()
           InsertNewlines{} -> moveToExactAnn a
 
-    case priorCmnts of
-      [] -> moveToExactLocationAction
+    case priorComments $ epAnnComments a of
+      [] -> moveToExactLocation
       ps -> do
         -- layoutResetSepSpace
         for_ ps $ \comment@(L pos EpaComment{ac_tok}) -> do
-          case anchor_op pos of
-            UnchangedAnchor -> pure ()
-            MovedAnchor dp  -> ppmMoveToExactLoc dp
-          mTell $ TLB.fromString $ commentContents $ tokComment comment
-          moveToExactLocationAction
+          ppmMoveToExactLocAnchor pos
+          -- mTell $ TLB.fromString $ commentContents $ tokComment comment
+          layoutWriteAppend $ T.pack $ commentContents $ tokComment comment
+        moveToExactLocation
 
-          -- let comment = Text.pack $ ExactPrint.Types.commentContents $ tokComment lcomment
+          -- let comment = T.pack $ ExactPrint.Types.commentContents $ tokComment lcomment
           -- when (comment /= "(" && comment /= ")") $ do
-          --   let commentLines = Text.lines comment
+          --   let commentLines = T.lines comment
           --       (x, y)       = unpackDeltaPos delta
           --   case comment of
           --     -- Evil hack for CPP.
@@ -205,7 +202,7 @@ layoutBriDocM = \case
     let comments = []
     for_ comments $ \(ExactPrint.Types.Comment comment _ _ _, delta) ->
       when (comment /= "(" && comment /= ")") $ do
-        let commentLines = Text.lines $ Text.pack comment
+        let commentLines = T.lines $ T.pack comment
             (x, y)       = unpackDeltaPos delta
         -- evil hack for CPP:
         case comment of
@@ -216,27 +213,17 @@ layoutBriDocM = \case
         -- layoutMoveToIndentCol y
         layoutWriteAppendMultiline commentLines
       -- mModify $ \s -> s { _lstate_curYOrAddNewline = Right 0 }
-  BDAnnotationAfter bd -> do
+  BDAnnotationAfter a bd -> do
     layoutBriDocM bd
-    let followingComments = []
-    case followingComments of
-      []       -> pure ()
-      comments -> do
-        for_ comments $ \(ExactPrint.Types.Comment comment _ _ _, delta) ->
-          when (comment /= "(" && comment /= ")") $ do
-            let commentLines = Text.lines $ Text.pack comment
-                (x, y)       = unpackDeltaPos delta
-            case comment of
-              -- Evil hack for CPP
-              '#': _ -> layoutMoveToCommentPos y (-999) 1
-              -- Fixes the formatting of parens on the lhs of type alias defs
-              ")"    -> pure ()
-              _      -> layoutMoveToCommentPos y x (length commentLines)
-            -- fixedX <- fixMoveToLineByIsNewline x
-            -- replicateM_ fixedX layoutWriteNewline
-            -- layoutMoveToIndentCol y
-            layoutWriteAppendMultiline commentLines
-      -- mModify $ \s -> s { _lstate_curYOrAddNewline = Right 0 }
+
+    case priorComments $ epAnnComments a of
+      [] -> pure ()
+      ps -> do
+        -- layoutResetSepSpace
+        for_ ps $ \comment@(L pos EpaComment{ac_tok}) -> do
+          ppmMoveToExactLocAnchor pos
+          -- mTell $ TLB.fromString $ commentContents $ tokComment comment
+          layoutWriteAppend $ T.pack $ commentContents $ tokComment comment
   BDMoveToKWDP _keyword _shouldRestoreIndent bd -> do
     -- mDP <- do
     --   state <- mGet
@@ -263,10 +250,10 @@ layoutBriDocM = \case
     --     layoutMoveToCommentPos y (if shouldRestoreIndent then x else 0) 1
     layoutBriDocM bd
   BDNonBottomSpacing _ bd -> layoutBriDocM bd
-  BDSetParSpacing bd -> layoutBriDocM bd
-  BDForceParSpacing bd -> layoutBriDocM bd
-  BDDebug s bd -> do
-    mTell $ TLB.fromText $ Text.pack $ "{-" ++ s ++ "-}"
+  BDSetParSpacing bd      -> layoutBriDocM bd
+  BDForceParSpacing bd    -> layoutBriDocM bd
+  BDDebug s bd            -> do
+    mTell $ TLB.fromText $ T.pack $ "{-" ++ s ++ "-}"
     layoutBriDocM bd
 
 briDocLineLength :: BriDoc -> Int
@@ -275,10 +262,10 @@ briDocLineLength briDoc = flip StateS.evalState False $ rec briDoc
                           -- appended at the current position.
   where
     rec = \case
-      BDEmpty                 -> return $ 0
-      BDLit t                 -> StateS.put False $> Text.length t
-      BDSeq bds               -> sum <$> rec `mapM` bds
-      BDCols _ bds            -> sum <$> rec `mapM` bds
+      BDEmpty                 -> pure 0
+      BDLit t                 -> StateS.put False $> T.length t
+      BDSeq bds               -> sum <$> traverse rec bds
+      BDCols _ bds            -> sum <$> traverse rec bds
       BDSeparator             -> StateS.get >>= \b -> StateS.put True $> if b then 0 else 1
       BDAddBaseY _ bd         -> rec bd
       BDBaseYPushCur bd       -> rec bd
@@ -290,11 +277,11 @@ briDocLineLength briDoc = flip StateS.evalState False $ rec briDoc
       BDForceMultiline bd     -> rec bd
       BDForceSingleline bd    -> rec bd
       BDForwardLineMode bd    -> rec bd
-      BDExternal _ t          -> return $ Text.length t
-      BDPlain t               -> return $ Text.length t
-      BDAnnotationBefore _ bd  -> rec bd
+      BDExternal _ t          -> return $ T.length t
+      BDPlain t               -> return $ T.length t
+      BDAnnotationBefore _ bd -> rec bd
       BDAnnotationKW _ bd     -> rec bd
-      BDAnnotationAfter bd     -> rec bd
+      BDAnnotationAfter _ bd  -> rec bd
       BDMoveToKWDP _ _ bd     -> rec bd
       BDLines ls@(_ : _)      -> do
         x <- StateS.get
@@ -311,37 +298,37 @@ briDocIsMultiLine briDoc = rec briDoc
   where
     rec :: BriDoc -> Bool
     rec = \case
-      BDEmpty                              -> False
-      BDLit _                              -> False
-      BDSeq bds                            -> any rec bds
-      BDCols _ bds                         -> any rec bds
-      BDSeparator                          -> False
-      BDAddBaseY _ bd                      -> rec bd
-      BDBaseYPushCur bd                    -> rec bd
-      BDBaseYPop bd                        -> rec bd
-      BDIndentLevelPushCur bd              -> rec bd
-      BDIndentLevelPop bd                  -> rec bd
-      BDPar{}                              -> True
-      BDAlt{}                              -> error "briDocIsMultiLine BDAlt"
-      BDForceMultiline _                   -> True
-      BDForceSingleline bd                 -> rec bd
-      BDForwardLineMode bd                 -> rec bd
-      BDExternal _ t | [_] <- Text.lines t -> False
-      BDExternal{}                         -> True
-      BDPlain t | [_] <- Text.lines t      -> False
-      BDPlain _                            -> True
-      BDAnnotationBefore _ bd               -> rec bd
-      BDAnnotationKW _ bd                  -> rec bd
-      BDAnnotationAfter bd                  -> rec bd
-      BDMoveToKWDP _ _ bd                  -> rec bd
-      BDLines (_ : _ : _)                  -> True
-      BDLines [_]                          -> False
-      BDLines []                           -> error "briDocIsMultiLine BDLines []"
-      BDEnsureIndent _ bd                  -> rec bd
-      BDSetParSpacing bd                   -> rec bd
-      BDForceParSpacing bd                 -> rec bd
-      BDNonBottomSpacing _ bd              -> rec bd
-      BDDebug _ bd                         -> rec bd
+      BDEmpty                           -> False
+      BDLit _                           -> False
+      BDSeq bds                         -> any rec bds
+      BDCols _ bds                      -> any rec bds
+      BDSeparator                       -> False
+      BDAddBaseY _ bd                   -> rec bd
+      BDBaseYPushCur bd                 -> rec bd
+      BDBaseYPop bd                     -> rec bd
+      BDIndentLevelPushCur bd           -> rec bd
+      BDIndentLevelPop bd               -> rec bd
+      BDPar{}                           -> True
+      BDAlt{}                           -> error "briDocIsMultiLine BDAlt"
+      BDForceMultiline _                -> True
+      BDForceSingleline bd              -> rec bd
+      BDForwardLineMode bd              -> rec bd
+      BDExternal _ t | [_] <- T.lines t -> False
+      BDExternal{}                      -> True
+      BDPlain t | [_]      <- T.lines t -> False
+      BDPlain _                         -> True
+      BDAnnotationBefore _ bd           -> rec bd
+      BDAnnotationKW _ bd               -> rec bd
+      BDAnnotationAfter _ bd            -> rec bd
+      BDMoveToKWDP _ _ bd               -> rec bd
+      BDLines (_ : _ : _)               -> True
+      BDLines [_]                       -> False
+      BDLines []                        -> error "briDocIsMultiLine BDLines []"
+      BDEnsureIndent _ bd               -> rec bd
+      BDSetParSpacing bd                -> rec bd
+      BDForceParSpacing bd              -> rec bd
+      BDNonBottomSpacing _ bd           -> rec bd
+      BDDebug _ bd                      -> rec bd
 
 -- In theory
 -- =========
