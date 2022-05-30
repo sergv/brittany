@@ -63,7 +63,6 @@ layoutDecl d@(L loc decl) = case decl of
 
 layoutSig :: LSig GhcPs -> ToBriDocM BriDocNumbered
 layoutSig lsig@(L _loc sig) = case sig of
-  TypeSig _ names (HsWC _ typ) -> layoutNamesAndType Nothing names typ
   InlineSig _ name (InlinePragma _ spec _arity phaseAct conlike) ->
     docWrapNodeAround lsig $ do
       let nameStr = lrdrNameToTextAnn name
@@ -83,10 +82,10 @@ layoutSig lsig@(L _loc sig) = case sig of
         $ T.pack ("{-# " ++ specStr ++ conlikeStr ++ phaseStr)
         <> nameStr
         <> " #-}"
+  TypeSig _ names (HsWC _ typ) -> layoutNamesAndType Nothing names typ
   ClassOpSig _ False names typ -> layoutNamesAndType Nothing names typ
-  PatSynSig _ names typ ->
-    layoutNamesAndType (Just "pattern") names typ
-  _ -> briDocByExactNoComment lsig -- TODO
+  PatSynSig _ names typ        -> layoutNamesAndType (Just "pattern") names typ
+  _                            -> briDocByExactNoComment lsig -- TODO
   where
     layoutNamesAndType
       :: Maybe String
@@ -107,7 +106,6 @@ layoutSig lsig@(L _loc sig) = case sig of
         then
           docSeq
             [ appSep
-            $ docWrapNodeAfter lsig
             $ docSeq
             $ keyDoc
             <> [docLit nameStr]
@@ -121,7 +119,7 @@ layoutSig lsig@(L _loc sig) = case sig of
             ]
         else layoutLhsAndType
           hasComments
-          (appSep . docWrapNodeAfter lsig . docSeq $ keyDoc <> [docLit nameStr])
+          (appSep . docSeq $ keyDoc <> [docLit nameStr])
           "::"
           typeDoc
 
@@ -973,16 +971,20 @@ layoutLhsAndType hasComments lhs sep typeDoc = do
     -- (separators probably are "=" or "::")
     -- lhs = type
     -- lhs :: type
-    addAlternativeCond (not hasComments) $ docSeq
-      [lhs, docSeparator, docLitS sep, docSeparator, docForceSingleline typeDoc]
+    addAlternativeCond (not hasComments) $
+      docSeq
+        [lhs, docSeparator, docLitS sep, docSeparator, docForceSingleline typeDoc]
     -- lhs
     --   :: typeA
     --   -> typeB
     -- lhs
     --   =  typeA
     --   -> typeB
-    addAlternative $ docAddBaseY BrIndentRegular $ docPar lhs $ docCols
-      ColTyOpPrefix
-      [ appSep $ docLitS sep
-      , docAddBaseY (BrIndentSpecial (length sep + 1)) typeDoc
-      ]
+    addAlternative
+      $ docAddBaseY BrIndentRegular
+      $ docPar lhs
+      $ docCols
+          ColTyOpPrefix
+          [ appSep $ docLitS sep
+          , docAddBaseY (BrIndentSpecial (length sep + 1)) typeDoc
+          ]
