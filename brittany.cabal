@@ -85,6 +85,7 @@ common library
     , mtl ^>= 2.2.2
     , multistate ^>= 0.8.0
     , pretty ^>= 1.1.3
+    , prettyprinter
     , prettyprinter-combinators
     , random ^>= 1.2.1
     , safe ^>= 0.3.19
@@ -170,6 +171,8 @@ library
     Language.Haskell.Brittany.Internal.Utils
     Language.Haskell.Brittany.Main
     Paths_brittany
+
+    GHC.PrettyInstances
 
 executable brittany
   import: executable
