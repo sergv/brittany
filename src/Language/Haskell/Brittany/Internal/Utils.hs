@@ -5,11 +5,36 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Language.Haskell.Brittany.Internal.Utils where
+module Language.Haskell.Brittany.Internal.Utils
+  ( parDoc
+  , parDocW
+  , showSDoc_
+  , showOutputable
+  , fromMaybeIdentity
+  , fromOptionIdentity
+  , Max(..)
+  , ShowIsId(..)
+  , A(..)
+  , customLayouterNoAnnsF
+  , traceIfDumpConf
+  , tellDebugMess
+  , tellDebugMessShow
+  , mModify
+  , astToDoc
+  , briDocToDoc
+  , briDocToDocWithAnns
+  , breakEither
+  , spanMaybe
+  , FirstLastView(..)
+  , splitFirstLast
+  , transformUp
+  , transformDownMay
+  ) where
 
 import qualified Data.ByteString as B
 import qualified Data.Coerce
 import Data.Data
+import Data.Functor
 import Data.Generics.Aliases
 import qualified Data.Generics.Uniplate.Direct as Uniplate
 import qualified Data.Semigroup as Semigroup
@@ -17,27 +42,20 @@ import qualified Data.Sequence as Seq
 import DataTreePrint
 import qualified GHC.Data.FastString as GHC
 import qualified GHC.Driver.Ppr as GHC
-import qualified GHC.Driver.Session as GHC
-import qualified GHC.Hs.Extension as HsExtension
 import qualified GHC.OldList as List
 import GHC.Types.Name.Occurrence as OccName (occNameString)
 import qualified GHC.Types.SrcLoc as GHC
 import qualified GHC.Utils.Outputable as GHC
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.Prelude
-import Language.Haskell.Brittany.Internal.PreludeUtils
 import Language.Haskell.Brittany.Internal.Types
-import qualified Language.Haskell.GHC.ExactPrint.Types as ExactPrint.Types
-import qualified Language.Haskell.GHC.ExactPrint.Utils as ExactPrint.Utils
 import qualified Text.PrettyPrint as PP
-import qualified Language.Haskell.Syntax.Extension as HsExtension
 
 parDoc :: String -> PP.Doc
 parDoc = PP.fsep . fmap PP.text . List.words
 
 parDocW :: [String] -> PP.Doc
 parDocW = PP.fsep . fmap PP.text . List.words . List.unwords
-
 
 showSDoc_ :: GHC.SDoc -> String
 showSDoc_ = GHC.showSDocUnsafe
@@ -197,7 +215,7 @@ traceIfDumpConf
   -> a
   -> m ()
 traceIfDumpConf s accessor val = do
-  whenM (mAsk <&> _conf_debug .> accessor .> confUnpack) $ do
+  whenM (mAsk <&> (_conf_debug >>> accessor >>> confUnpack)) $ do
     trace ("---- " ++ s ++ " ----\n" ++ show val) $ return ()
 
 tellDebugMess :: MonadMultiWriter (Seq String) m => String -> m ()
@@ -271,6 +289,3 @@ _transformDownRec :: Uniplate.Uniplate on => (on -> Maybe on) -> (on -> on)
 _transformDownRec f = g
   where
     g x = maybe (Uniplate.descend g x) g $ f x
-
-absurdExt :: HsExtension.NoExtCon -> a
-absurdExt = HsExtension.noExtCon

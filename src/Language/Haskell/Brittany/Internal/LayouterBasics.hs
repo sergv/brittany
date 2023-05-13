@@ -7,40 +7,107 @@
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TupleSections              #-}
 
-module Language.Haskell.Brittany.Internal.LayouterBasics where
+module Language.Haskell.Brittany.Internal.LayouterBasics
+  ( processDefault
+  , briDocByExact
+  , briDocByExactNoComment
+  , briDocByExactNoComment'
+  , briDocByExactInlineOnly
+  , rdrNameToText
+  , lrdrNameToText
+  , nameAdornment
+  , lrdrNameToTextAnnGen
+  , lrdrNameToTextAnn
+  , isDataTypeEquality
+  , specialCaseDataTypeEquality
+  , lrdrNameToTextAnnTypeEqualityIsSpecial
+  , extractAllComments
+  , extractFollowingComments
+  , hasAnyCommentsBelow
+  , hasCommentsBetween
+  , hasAnyCommentsConnected
+  , hasAnyRegularCommentsConnected
+  , isRegularComment
+  , astFoldConnectedComments
+  , hasAnyRegularCommentsRest
+  , hasAnnKeywordComment
+  , hasAnnKeyword
+  , allocateNode
+  , allocNodeIndex
+  , docEmpty
+  , docLit
+  , docLitS
+  , docExt
+  , docAlt
+  , CollectAltM
+  , addAlternativeCond
+  , addAlternative
+  , runFilteredAlternative
+  , docSeq
+  , docLines
+  , docCols
+  , docAddBaseY
+  , docSetBaseY
+  , docSetIndentLevel
+  , docSetBaseAndIndent
+  , docSeparator
+  , docAnnotationKW
+  , docMoveToKWDP
+  , docNonBottomSpacing
+  , docNonBottomSpacingS
+  , docSetParSpacing
+  , docForceParSpacing
+  , docDebug
+  , appSep
+  , docCommaSep
+  , docParenLSep
+  , docParenL
+  , docParenR
+  , docParenHashLSep
+  , docParenHashRSep
+  , docBracketL
+  , docBracketR
+  , docTick
+  , docNodeAnnKW
+  , docNodeMoveToKWDP
+  , DocWrapable(..)
+  , forgetAnn
+  , wrapBefore
+  , wrapAfter
+  , docPar
+  , docForceSingleline
+  , docForceMultiline
+  , docEnsureIndent
+  , unknownNodeError
+  , spacifyDocs
+  , briDocMToPPM
+  , briDocMToPPMInner
+  , docSharedWrapper
+  ) where
 
 import qualified Control.Monad.Trans.MultiRWS.Strict as MultiRWSS
 import qualified Control.Monad.Writer.Strict as Writer
 import qualified Data.Char as Char
-import Data.Coerce (coerce)
 import Data.Data (Data)
+import Data.Functor
 import qualified Data.Generics as SYB
-import qualified Data.Map as Map
 import Data.Maybe
 import Data.Monoid as Monoid
 import Data.Occurrences
 import qualified Data.Semigroup as Semigroup
 import qualified Data.Sequence as Seq
-import qualified Data.Set as Set
-import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy.Builder as Text.Builder
-import DataTreePrint
-import GHC (GenLocated(L), Located, moduleName, moduleNameString, getFollowingComments)
+import GHC (GenLocated(L), moduleName, moduleNameString)
 import qualified GHC.OldList as List
-import GHC.Parser.Annotation (AnnKeywordId(..))
 import GHC.Parser.Annotation as GHC
 import GHC.Types.Name (getOccString)
 import GHC.Types.Name.Occurrence (occNameString)
 import GHC.Types.Name.Reader (RdrName(..))
-import GHC.Types.SrcLoc (getLoc, unLoc)
-import qualified GHC.Types.SrcLoc as GHC
+import GHC.Types.SrcLoc (getLoc)
 import Language.Haskell.Brittany.Internal.Config.Types
-import Language.Haskell.Brittany.Internal.ExactPrintUtils
 import Language.Haskell.Brittany.Internal.Prelude
-import Language.Haskell.Brittany.Internal.PreludeUtils
 import Language.Haskell.Brittany.Internal.Types
-import Language.Haskell.Brittany.Internal.Utils
 import Language.Haskell.GHC.ExactPrint (ExactPrint(..), exactPrint)
 import qualified Language.Haskell.GHC.ExactPrint as ExactPrint
 import Language.Haskell.GHC.ExactPrint.Types
@@ -98,7 +165,7 @@ briDocByExactNoComment' f x = docExt f x False
 -- not contain any newlines. If this property is not met, the semantics
 -- depend on the @econf_AllowRiskyExactPrintUse@ config flag.
 briDocByExactInlineOnly
-  :: Data ast
+  :: (Typeable ann, Data ast)
   => ExactPrint (LocatedAn ann ast)
   => String
   -> LocatedAn ann ast
@@ -106,7 +173,7 @@ briDocByExactInlineOnly
 briDocByExactInlineOnly infoStr ast = do
   let exactPrinted = Text.pack $ ExactPrint.exactPrint ast
   fallbackMode <-
-    mAsk <&> _conf_errorHandling .> _econf_ExactPrintFallback .> confUnpack
+    mAsk <&> (_conf_errorHandling >>> _econf_ExactPrintFallback >>> confUnpack)
   let
     exactPrintNode t = allocateNode $ BDFExternal False t
   let
@@ -140,6 +207,7 @@ nameAdornment = \case
   NameAnnRArrow{}               -> Nothing
   NameAnnQuote{}                -> Nothing
   NameAnnTrailing{}             -> Nothing
+  NameAnnBars{nann_adornment}   -> Just nann_adornment
 
 lrdrNameToTextAnnGen
   :: (Text -> Text)
@@ -205,13 +273,13 @@ hasCommentsBetween
   -> AnnKeywordId
   -> Bool
 hasCommentsBetween ast leftKey rightKey = do
-  case (epaLocationRealSrcSpan <$> find leftKey, epaLocationRealSrcSpan <$> find rightKey) of
+  case (epaLocationRealSrcSpan <$> findAnn leftKey, epaLocationRealSrcSpan <$> findAnn rightKey) of
     (Just left, Just right) ->
       any (between (ss2posEnd left) (ss2pos right) . ss2pos . GHC.anchor . ExactPrint.commentAnchor . ExactPrint.Utils.tokComment) $ extractAllComments ast
     _ -> False
   where
-    find :: AnnKeywordId -> Maybe EpaLocation
-    find target = Monoid.getFirst $ foldAllOccurrences
+    findAnn :: AnnKeywordId -> Maybe EpaLocation
+    findAnn target = Monoid.getFirst $ foldAllOccurrences
       (\(AddEpAnn kw loc) -> if kw == target then Monoid.First (Just loc) else mempty)
       (getLoc ast)
 
@@ -309,7 +377,6 @@ docExt f x shouldAddComment = allocateNode $ BDFExternal
 docAlt :: [ToBriDocM BriDocNumbered] -> ToBriDocM BriDocNumbered
 docAlt l = allocateNode . BDFAlt =<< sequence l
 
-
 newtype CollectAltM a = CollectAltM (Writer.Writer [ToBriDocM BriDocNumbered] a)
   deriving (Functor, Applicative, Monad)
 
@@ -322,10 +389,9 @@ addAlternative = CollectAltM . Writer.tell . (: [])
 runFilteredAlternative :: CollectAltM () -> ToBriDocM BriDocNumbered
 runFilteredAlternative (CollectAltM action) = docAlt $ Writer.execWriter action
 
-
 docSeq :: [ToBriDocM BriDocNumbered] -> ToBriDocM BriDocNumbered
 docSeq [] = docEmpty
-docSeq l = allocateNode . BDFSeq =<< sequence l
+docSeq l  = allocateNode . BDFSeq =<< sequence l
 
 docLines :: [ToBriDocM BriDocNumbered] -> ToBriDocM BriDocNumbered
 docLines l = allocateNode . BDFLines =<< sequence l

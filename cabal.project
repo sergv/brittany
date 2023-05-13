@@ -1,1 +1,17 @@
 packages: .
+
+constraints:
+  brittany +pedantic
+
+allow-newer:
+  , multistate:base
+  , multistate:transformers
+  , multistate:mtl
+  , data-tree-print:base
+  , czipwith:base
+  , czipwith:template-haskell
+  , butcher:base
+  , butcher:bifunctors
+  , butcher:transformers
+  , butcher:mtl
+  , yaml:template-haskell

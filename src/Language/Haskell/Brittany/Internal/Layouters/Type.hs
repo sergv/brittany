@@ -10,25 +10,22 @@ module Language.Haskell.Brittany.Internal.Layouters.Type
   , processTyVarBndrsSingleline
   ) where
 
+import Data.Functor
 import qualified Data.Text as Text
-import GHC (AnnKeywordId(..), GenLocated(L))
 import GHC.Hs
 import qualified GHC.OldList as List
-import GHC.Types.Basic
 import GHC.Types.SourceText
 import GHC.Types.SrcLoc
 import GHC.Utils.Outputable (ftext, showSDocUnsafe)
-import Language.Haskell.Brittany.Internal.ExactPrintUtils
 import Language.Haskell.Brittany.Internal.LayouterBasics
 import Language.Haskell.Brittany.Internal.Prelude
-import Language.Haskell.Brittany.Internal.PreludeUtils
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.Brittany.Internal.Utils (FirstLastView(..), splitFirstLast)
 
 forgetTyVarBndrFlag :: LHsTyVarBndr a (NoGhcTc GhcPs) -> LHsTyVarBndr () (NoGhcTc GhcPs)
 forgetTyVarBndrFlag (L a bndr) = L a $ case bndr of
-  UserTyVar   ext flag x   -> UserTyVar ext () x
-  KindedTyVar ext flag x y -> KindedTyVar ext () x y
+  UserTyVar   ext _ x   -> UserTyVar ext () x
+  KindedTyVar ext _ x y -> KindedTyVar ext () x y
 
 layoutSigType :: LHsSigType GhcPs -> ToBriDocM BriDocNumbered
 layoutSigType (L _ HsSig{sig_bndrs, sig_body}) =
@@ -60,7 +57,7 @@ layoutForallType bndrs ltype = do
   forallDoc <- docSharedWrapper docLitS "forall"
   tyVarDocs <- layoutTyVarBndrs bndrs
   case ltype of
-    L _ HsQualTy{hst_ctxt = Just context, hst_body} -> do
+    L _ HsQualTy { hst_ctxt = context, hst_body } -> do
       typeDoc    <- docSharedWrapper layoutType hst_body
       contextDoc <- docSharedWrapper layoutContext context
       let maybeForceML = case hst_body of
@@ -159,20 +156,20 @@ layoutForallType bndrs ltype = do
                ])
 
 layoutType :: LHsType GhcPs -> ToBriDocM BriDocNumbered
-layoutType ltype@(L typAnn typ) = docWrapNodeAround ltype $ case typ of
+layoutType ltype@(L _typAnn typ) = docWrapNodeAround ltype $ case typ of
   HsTyVar _ promoted name -> do
     let t = lrdrNameToTextAnnTypeEqualityIsSpecial name
     case promoted of
       IsPromoted  -> docSeq [docSeparator, docTick, docWrapNodeAround name $ docLit t]
       NotPromoted -> docWrapNodeAround name $ docLit t
 
-  HsForAllTy _ hsf typ -> do
+  HsForAllTy _ hsf subtyp -> do
     let bndrs = getBinders hsf
-    layoutForallType bndrs typ
+    layoutForallType bndrs subtyp
 
   -- TODO: confirm this implementation makes sense, maybe unify with
   -- the following case.
-  HsQualTy _ Nothing typ1 -> do
+  HsQualTy _ (L _ []) typ1 -> do
     typeDoc <- docSharedWrapper layoutType typ1
     let maybeForceML = case typ1 of
           L _ HsFunTy{} -> docForceMultiline
@@ -189,7 +186,7 @@ layoutType ltype@(L typAnn typ) = docWrapNodeAround ltype $ case typ of
           [ docLitS "   "
           , docAddBaseY (BrIndentSpecial 3) $ maybeForceML typeDoc
           ]
-  HsQualTy _ (Just context) typ1 -> do
+  HsQualTy _ context typ1 -> do
     typeDoc    <- docSharedWrapper layoutType typ1
     contextDoc <- docSharedWrapper layoutContext context
     let maybeForceML = case typ1 of
@@ -213,11 +210,13 @@ layoutType ltype@(L typAnn typ) = docWrapNodeAround ltype $ case typ of
           [ docLitS "=> "
           , docAddBaseY (BrIndentSpecial 3) $ maybeForceML typeDoc
           ])
-  HsFunTy funAnn (HsUnrestrictedArrow NormalSyntax) typ1 typ2 -> do
-    let comments = case anns funAnn of
-          AddRarrowAnn (EpaDelta dp comments) ->
-            EpAnn (Anchor (realSrcSpan' (locA typAnn)) (MovedAnchor dp)) () (EpaComments comments)
-          _ -> error "Expected AddRarrowAnn"
+  HsFunTy funAnn (HsUnrestrictedArrow (L _ HsNormalTok)) typ1 typ2 -> do
+    let funComments :: EpAnn ()
+        funComments = void funAnn
+        -- case anns funAnn of
+        --   AddRarrowAnn (EpaDelta dp comments)
+        --     -> EpAnn (Anchor (realSrcSpan' (locA typAnn)) (MovedAnchor dp)) () (EpaComments comments)
+        --   _ -> error "Expected AddRarrowAnn"
         maybeForceML = case typ2 of
           L _ HsFunTy{} -> docForceMultiline
           _             -> id
@@ -233,7 +232,7 @@ layoutType ltype@(L typAnn typ) = docWrapNodeAround ltype $ case typ of
           ]
       addAlternative $
         docPar
-          (wrapAfter comments $ docNodeAnnKW ltype Nothing typeDoc1)
+          (wrapAfter funComments $ docNodeAnnKW ltype Nothing typeDoc1)
           (docCols
             ColTyOpPrefix
             [ appSep $ docLitS "->"

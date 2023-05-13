@@ -11,26 +11,9 @@ module Language.Haskell.Brittany.Internal.ExactPrintUtils
   , realSrcSpan'
   ) where
 
-import qualified Control.Monad.State.Class as State.Class
 import qualified Control.Monad.Trans.MultiRWS.Strict as MultiRWSS
-import Data.Data
-import Data.Foldable
-import qualified Data.Generics as SYB
-import Data.HList.HList
-import qualified Data.Map as Map
-import qualified Data.Maybe
-import qualified Data.Sequence as Seq
-import qualified Data.Set as Set
-import GHC (GenLocated(L))
-import qualified GHC hiding (parseModule)
-import GHC.Hs
-import qualified GHC.Types.SrcLoc as GHC
-import GHC.Types.SrcLoc (Located, SrcSpan)
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.Prelude
-import Language.Haskell.Brittany.Internal.PreludeUtils
-import qualified Language.Haskell.GHC.ExactPrint as ExactPrint
-import qualified Language.Haskell.GHC.ExactPrint.Types as ExactPrint
 import GHC.Types.SrcLoc
 
 -- newtype ToplevelAnns = ToplevelAnns { unToplevelAnns :: Map AnnKey Anns }
@@ -74,8 +57,7 @@ import GHC.Types.SrcLoc
 -- --   insert k a (Just m) = Just (Map.insert k a m)
 
 withTransformedAnns
-  :: Data ast
-  => ast
+  :: ast
   -> MultiRWSS.MultiRWS '[Config] w s a
   -> MultiRWSS.MultiRWS '[Config] w s a
 withTransformedAnns _ast m = m

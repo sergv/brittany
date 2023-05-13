@@ -1,11 +1,31 @@
 {-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE DeriveGeneric      #-}
+{-# LANGUAGE FlexibleInstances  #-}
+{-# LANGUAGE NoImplicitPrelude  #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TemplateHaskell    #-}
 
-module Language.Haskell.Brittany.Internal.Config.Types where
+module Language.Haskell.Brittany.Internal.Config.Types
+  ( confUnpack
+  , CDebugConfig(..)
+  , CLayoutConfig(..)
+  , CForwardOptions(..)
+  , CErrorHandlingConfig(..)
+  , CPreProcessorConfig(..)
+  , CConfig(..)
+
+  , IndentPolicy(..)
+  , AltChooser(..)
+  , ColumnAlignMode(..)
+  , CPPMode(..)
+  , ExactPrintFallbackMode(..)
+
+  , DebugConfig
+  , LayoutConfig
+  , ForwardOptions
+  , ErrorHandlingConfig
+  , Config
+  ) where
 
 import Data.CZipWith
 import Data.Coerce (Coercible, coerce)
@@ -16,8 +36,6 @@ import Data.Semigroup.Generic
 import GHC.Generics
 import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.PreludeUtils ()
-
-
 
 confUnpack :: Coercible a b => Identity a -> b
 confUnpack (Identity x) = coerce x
@@ -35,8 +53,7 @@ data CDebugConfig f = DebugConfig
   , _dconf_dump_bridoc_simpl_indent :: f (Semigroup.Last Bool)
   , _dconf_dump_bridoc_final :: f (Semigroup.Last Bool)
   , _dconf_roundtrip_exactprint_only :: f (Semigroup.Last Bool)
-  }
-  deriving Generic
+  } deriving Generic
 
 data CLayoutConfig f = LayoutConfig
   { _lconfig_cols :: f (Last Int) -- the thing that has default 80.
@@ -125,13 +142,11 @@ data CLayoutConfig f = LayoutConfig
   --   -- >   { x :: Double
   --   -- >   , y :: Double
   --   -- >   }
-  }
-  deriving Generic
+  } deriving Generic
 
 data CForwardOptions f = ForwardOptions
   { _options_ghc :: f [String]
-  }
-  deriving Generic
+  } deriving Generic
 
 data CErrorHandlingConfig f = ErrorHandlingConfig
   { _econf_produceOutputOnErrors :: f (Semigroup.Last Bool)
@@ -157,29 +172,28 @@ data CPreProcessorConfig f = PreProcessorConfig
     -- string from the transformation output.
     -- The flag is intentionally misspelled to prevent clashing with
     -- inline-config stuff.
-  }
-  deriving Generic
+  } deriving Generic
 
 data CConfig f = Config
-  { _conf_version :: f (Semigroup.Last Int)
-  , _conf_debug :: CDebugConfig f
-  , _conf_layout :: CLayoutConfig f
-  , _conf_errorHandling :: CErrorHandlingConfig f
-  , _conf_forward :: CForwardOptions f
-  , _conf_preprocessor :: CPreProcessorConfig f
+  { _conf_version                   :: f (Semigroup.Last Int)
+  , _conf_debug                     :: CDebugConfig f
+  , _conf_layout                    :: CLayoutConfig f
+  , _conf_errorHandling             :: CErrorHandlingConfig f
+  , _conf_forward                   :: CForwardOptions f
+  , _conf_preprocessor              :: CPreProcessorConfig f
+    -- This field is somewhat of a duplicate of the one in
+    -- DebugConfig. It is used for per-declaration disabling by the
+    -- inline config implementation. Could have re-used the existing
+    -- field, but felt risky to use a "debug" labeled field for
+    -- non-debug functionality.
   , _conf_roundtrip_exactprint_only :: f (Semigroup.Last Bool)
-    -- ^ this field is somewhat of a duplicate of the one in DebugConfig.
-    -- It is used for per-declaration disabling by the inline config
-    -- implementation. Could have re-used the existing field, but felt risky
-    -- to use a "debug" labeled field for non-debug functionality.
-  , _conf_disable_formatting :: f (Semigroup.Last Bool)
-    -- ^ Used for inline config that disables brittany entirely for this
-    -- module. Useful for wildcard application
-    -- (`find -name "*.hs" | xargs brittany --write-mode inplace` or something
-    -- in that direction).
-  , _conf_obfuscate :: f (Semigroup.Last Bool)
-  }
-  deriving Generic
+    -- Used for inline config that disables brittany entirely for this
+    -- module. Useful for wildcard application (`find -name "*.hs" |
+    -- xargs brittany --write-mode inplace` or something in that
+    -- direction).
+  , _conf_disable_formatting        :: f (Semigroup.Last Bool)
+  , _conf_obfuscate                 :: f (Semigroup.Last Bool)
+  } deriving Generic
 
 type DebugConfig         = CDebugConfig Identity
 type LayoutConfig        = CLayoutConfig Identity
@@ -255,24 +269,25 @@ instance Monoid (CPreProcessorConfig Maybe) where
 instance Monoid (CConfig Maybe) where
   mempty = gmempty
 
-
-data IndentPolicy = IndentPolicyLeft -- never create a new indentation at more
-                                     -- than old indentation + amount
-                  | IndentPolicyFree -- can create new indentations whereever
-                  | IndentPolicyMultiple -- can create indentations only
-                                         -- at any n * amount.
+data IndentPolicy
+  -- Never create a new indentation at more than old indentation + amount.
+  = IndentPolicyLeft
+  -- Can create new indentations whereever.
+  | IndentPolicyFree
+  -- Can create indentations only at any n * amount.
+  | IndentPolicyMultiple
   deriving (Eq, Show, Generic, Data)
 
-data AltChooser = AltChooserSimpleQuick -- always choose last alternative.
-                                        -- leads to tons of sparsely filled
-                                        -- lines.
-                | AltChooserShallowBest -- choose the first matching alternative
-                                        -- using the simplest spacing
-                                        -- information for the children.
-                | AltChooserBoundedSearch Int
-                                        -- choose the first matching alternative
-                                        -- using a bounded list of recursive
-                                        -- options having sufficient space.
+data AltChooser
+  -- Always choose last alternative. leads to tons of sparsely filled
+  -- lines.
+  = AltChooserSimpleQuick
+  -- Choose the first matching alternative using the simplest spacing
+  -- information for the children.
+  | AltChooserShallowBest
+  -- Choose the first matching alternative using a bounded list of
+  -- recursive options having sufficient space.
+  | AltChooserBoundedSearch !Int
   deriving (Show, Generic, Data)
 
 data ColumnAlignMode
@@ -293,23 +308,22 @@ data ColumnAlignMode
   | ColumnAlignModeAnimously
     -- ^ Decide on a case-by-case basis if alignment would cause overflow.
     -- If it does, cancel all alignments for this (nested) column description.
-  -- ColumnAlignModeAnimouslySome -- potentially to implement
+    -- ColumnAlignModeAnimouslySome -- potentially to implement
   | ColumnAlignModeAlways
     -- ^ Always respect column alignments, even if it makes stuff overflow.
   deriving (Show, Generic, Data)
 
-data CPPMode = CPPModeAbort  -- abort program on seeing -XCPP
-             | CPPModeWarn   -- warn about CPP and non-roundtripping in its
-                             -- presence.
-             | CPPModeNowarn -- silently allow CPP, if possible (i.e. input is
-                             -- file.)
+data CPPMode
+  = CPPModeAbort  -- Abort program on seeing -XCPP
+  | CPPModeWarn   -- Warn about CPP and non-roundtripping in its presence.
+  | CPPModeNowarn -- Silently allow CPP, if possible (i.e. input is file.)
   deriving (Show, Generic, Data)
 
 data ExactPrintFallbackMode
-  = ExactPrintFallbackModeNever  -- never fall back on exactprinting
-  | ExactPrintFallbackModeInline -- fall back only if there are no newlines in
+  = ExactPrintFallbackModeNever  -- Never fall back on exactprinting
+  | ExactPrintFallbackModeInline -- Fall back only if there are no newlines in
                                  -- the exactprint'ed output.
-  | ExactPrintFallbackModeRisky  -- fall back even in the presence of newlines.
+  | ExactPrintFallbackModeRisky  -- Fall back even in the presence of newlines.
                                  -- THIS MAY THEORETICALLY CHANGE SEMANTICS OF
                                  -- A PROGRAM BY TRANSFORMING IT.
   deriving (Show, Generic, Data)

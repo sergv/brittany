@@ -1,11 +1,8 @@
-{-# LANGUAGE NoImplicitPrelude #-}
-
 {-# OPTIONS_GHC -Wno-orphans #-}
 
-module GHC.Parser.Annotation.Ext where
+module GHC.Parser.Annotation.Ext () where
 
 import Data.Bifunctor
--- import GHC.Parser.Annotation
 import GHC.Types.SrcLoc
 
 instance Bifunctor GenLocated where

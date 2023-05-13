@@ -5,7 +5,26 @@
 {-# LANGUAGE NoImplicitPrelude   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Language.Haskell.Brittany.Internal.Backend where
+module Language.Haskell.Brittany.Internal.Backend
+  ( ColIndex
+  , ColumnSpacing(..)
+  , ColumnBlock
+  , ColumnBlocks
+  , ColMap1
+  , ColMap2
+  , ColInfo(..)
+  , ColBuildState(..)
+  , LayoutConstraints
+  , layoutBriDocM
+  , briDocLineLength
+  , briDocIsMultiLine
+  , alignColsLines
+  , briDocToColInfo
+  , getTrueSpacings
+  , withAlloc
+  , processInfo
+  , processInfoIgnore
+  ) where
 
 import qualified Control.Monad.Trans.State.Strict as StateS
 import Data.Foldable as Foldable
@@ -16,6 +35,7 @@ import qualified Data.Sequence as Seq
 import qualified Data.Text as T
 import qualified Data.Text.Lazy.Builder as TLB
 
+import Data.Functor
 import Data.Traversable
 import qualified GHC.OldList as List
 import GHC.Parser.Annotation
@@ -23,7 +43,6 @@ import GHC.Types.SrcLoc
 import Language.Haskell.Brittany.Internal.BackendUtils
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.Prelude
-import Language.Haskell.Brittany.Internal.PreludeUtils
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.Brittany.Internal.Utils
 import Language.Haskell.GHC.ExactPrint.Types
@@ -59,8 +78,8 @@ instance Show ColInfo where
     "ColInfo " ++ show ind ++ " " ++ show sig ++ " " ++ show list
 
 data ColBuildState = ColBuildState
-  { _cbs_map :: ColMap1
-  , _cbs_index :: ColIndex
+  { _cbs_map   :: !ColMap1
+  , _cbs_index :: !ColIndex
   }
 
 type LayoutConstraints m
@@ -70,31 +89,32 @@ type LayoutConstraints m
     , MonadMultiState LayoutState m
     )
 
-layoutBriDocM :: forall m . LayoutConstraints m => BriDoc -> m ()
+doIndent :: LayoutConstraints m => BrIndent -> m () -> m ()
+doIndent = \case
+  BrIndentNone      -> id
+  BrIndentRegular   -> layoutWithAddBaseCol
+  BrIndentSpecial i -> layoutWithAddBaseColN i
+
+layoutBriDocM :: forall m. LayoutConstraints m => BriDoc -> m ()
 layoutBriDocM = \case
-  BDEmpty -> do
+  BDEmpty ->
     return () -- can it be that simple
   BDLit t -> do
     layoutIndentRestorePostComment
     layoutRemoveIndentLevelLinger
     layoutWriteAppend t
-  BDSeq list -> do
+  BDSeq list ->
     traverse_ layoutBriDocM list
   -- in this situation, there is nothing to do about cols.
   -- i think this one does not happen anymore with the current simplifications.
   -- BDCols cSig list | BDPar sameLine lines <- List.last list ->
   --   alignColsPar $ BDCols cSig (List.init list ++ [sameLine]) : lines
-  BDCols _ list -> do
+  BDCols _ list ->
     traverse_ layoutBriDocM list
-  BDSeparator -> do
+  BDSeparator ->
     layoutAddSepSpace
-  BDAddBaseY indent bd -> do
-    let
-      indentF = case indent of
-        BrIndentNone -> id
-        BrIndentRegular -> layoutWithAddBaseCol
-        BrIndentSpecial i -> layoutWithAddBaseColN i
-    indentF $ layoutBriDocM bd
+  BDAddBaseY indent bd ->
+    doIndent indent $ layoutBriDocM bd
   BDBaseYPushCur bd -> do
     layoutBaseYPushCur
     layoutBriDocM bd
@@ -107,23 +127,13 @@ layoutBriDocM = \case
   BDIndentLevelPop bd -> do
     layoutBriDocM bd
     layoutIndentLevelPop
-  BDEnsureIndent indent bd -> do
-    let
-      indentF = case indent of
-        BrIndentNone -> id
-        BrIndentRegular -> layoutWithAddBaseCol
-        BrIndentSpecial i -> layoutWithAddBaseColN i
-    indentF $ do
+  BDEnsureIndent indent bd ->
+    doIndent indent $ do
       layoutWriteEnsureBlock
       layoutBriDocM bd
   BDPar indent sameLine indented -> do
     layoutBriDocM sameLine
-    let
-      indentF = case indent of
-        BrIndentNone -> id
-        BrIndentRegular -> layoutWithAddBaseCol
-        BrIndentSpecial i -> layoutWithAddBaseColN i
-    indentF $ do
+    doIndent indent $ do
       layoutWriteNewlineBlock
       layoutBriDocM indented
   BDLines lines                 -> alignColsLines lines
@@ -133,9 +143,8 @@ layoutBriDocM = \case
   BDForceSingleline bd          -> layoutBriDocM bd
   BDForwardLineMode bd          -> layoutBriDocM bd
   BDExternal shouldAddComment t -> do
-    let
-      tlines = T.lines $ t <> T.singleton '\n'
-      tlineCount = length tlines
+    let tlines     = T.lines $ t <> T.singleton '\n'
+        tlineCount = length tlines
     when shouldAddComment $ do
       layoutWriteAppend
         $ T.pack
@@ -168,7 +177,8 @@ layoutBriDocM = \case
     --       } deriving (Show,Eq,Ord,Data)
 
     state <- mGet
-    let moveToExactLocation = case _lstate_curYOrAddNewline state of
+    let moveToExactLocation :: m ()
+        moveToExactLocation = case _lstate_curYOrAddNewline state of
           Cols{}           -> pure ()
           InsertNewlines{} -> moveToExactAnn a
 
@@ -176,10 +186,10 @@ layoutBriDocM = \case
       [] -> moveToExactLocation
       ps -> do
         -- layoutResetSepSpace
-        for_ ps $ \comment@(L pos EpaComment{ac_tok}) -> do
+        for_ ps $ \commentAnn@(L pos EpaComment{}) -> do
           ppmMoveToExactLocAnchor pos
           -- mTell $ TLB.fromString $ commentContents $ tokComment comment
-          layoutWriteAppend $ T.pack $ commentContents $ tokComment comment
+          layoutWriteAppend $ T.pack $ commentContents $ tokComment commentAnn
         moveToExactLocation
 
           -- let comment = T.pack $ ExactPrint.Types.commentContents $ tokComment lcomment
@@ -200,12 +210,12 @@ layoutBriDocM = \case
   BDAnnotationKW _keyword bd -> do
     layoutBriDocM bd
     let comments = []
-    for_ comments $ \(ExactPrint.Types.Comment comment _ _ _, delta) ->
-      when (comment /= "(" && comment /= ")") $ do
-        let commentLines = T.lines $ T.pack comment
+    for_ comments $ \(ExactPrint.Types.Comment commentStr _ _ _, delta) ->
+      when (commentStr /= "(" && commentStr /= ")") $ do
+        let commentLines = T.lines $ T.pack commentStr
             (x, y)       = unpackDeltaPos delta
         -- evil hack for CPP:
-        case comment of
+        case commentStr of
           '#' : _ -> layoutMoveToCommentPos y (-999) (length commentLines)
           _       -> layoutMoveToCommentPos y x (length commentLines)
         -- fixedX <- fixMoveToLineByIsNewline x
@@ -220,10 +230,10 @@ layoutBriDocM = \case
       [] -> pure ()
       ps -> do
         -- layoutResetSepSpace
-        for_ ps $ \comment@(L pos EpaComment{ac_tok}) -> do
+        for_ ps $ \commentAnn@(L pos EpaComment{}) -> do
           ppmMoveToExactLocAnchor pos
           -- mTell $ TLB.fromString $ commentContents $ tokComment comment
-          layoutWriteAppend $ T.pack $ commentContents $ tokComment comment
+          layoutWriteAppend $ T.pack $ commentContents $ tokComment commentAnn
   BDMoveToKWDP _keyword _shouldRestoreIndent bd -> do
     -- mDP <- do
     --   state <- mGet
@@ -413,10 +423,9 @@ alignColsLines bridocs = do -- colInfos `forM_` \colInfo -> do
     pure $ fromMaybe 0 (_lstate_addSepSpace state) + case _lstate_curYOrAddNewline state of
       Cols x           -> x
       InsertNewlines{} -> 0
-  colMax     <- mAsk <&> _conf_layout .> _lconfig_cols .> confUnpack
-  alignMax   <- mAsk <&> _conf_layout .> _lconfig_alignmentLimit .> confUnpack
-  alignBreak <-
-    mAsk <&> _conf_layout .> _lconfig_alignmentBreakOnMultiline .> confUnpack
+  colMax     <- mAsk <&> (_conf_layout >>> _lconfig_cols >>> confUnpack)
+  alignMax   <- mAsk <&> (_conf_layout >>> _lconfig_alignmentLimit >>> confUnpack)
+  alignBreak <- mAsk <&> (_conf_layout >>> _lconfig_alignmentBreakOnMultiline >>> confUnpack)
   case () of
     _ -> do
       sequence_
@@ -460,6 +469,7 @@ alignColsLines bridocs = do -- colInfos `forM_` \colInfo -> do
                 if List.last posXs + List.last l <= colMax
                 then count + 1
                 else count
+              ratio :: Float
               ratio =
                 fromIntegral (foldl' counter (0 :: Int) colss) / fromIntegral (length colss)
           in (ratio, maxCols, colss)
@@ -543,13 +553,15 @@ alignColsLines bridocs = do -- colInfos `forM_` \colInfo -> do
               do -- update map
                 s <- StateS.get
                 let m = _cbs_map s
-                let (Just (_, spaces)) = IntMapS.lookup infoInd m
-                StateS.put s
-                  { _cbs_map = IntMapS.insert
-                    infoInd
-                    (lastFlag, spaces Seq.|> trueSpacings)
-                    m
-                  }
+                case IntMapS.lookup infoInd m of
+                  Nothing          -> error $ "No column info for index " ++ show infoInd
+                  Just (_, spaces) ->
+                    StateS.put s
+                      { _cbs_map = IntMapS.insert
+                        infoInd
+                        (lastFlag, spaces Seq.|> trueSpacings)
+                        m
+                      }
               return $ ColInfo infoInd colSig (zip curLengths infos)
             | otherwise -> briDocToColInfo lastFlag brdc
           brdc -> return $ ColInfoNo brdc
@@ -585,13 +597,13 @@ withAlloc lastFlag f = do
     $ c { _cbs_map = IntMapS.insert ind (lastFlag, space) $ _cbs_map c }
   return info
 
-processInfo :: LayoutConstraints m => Int -> ColMap2 -> ColInfo -> m ()
+processInfo :: forall m. LayoutConstraints m => Int -> ColMap2 -> ColInfo -> m ()
 processInfo maxSpace m = \case
   ColInfoStart       -> error "should not happen (TM)"
   ColInfoNo doc      -> layoutBriDocM doc
   ColInfo ind _ list -> do
-    colMaxConf <- mAsk <&> _conf_layout .> _lconfig_cols .> confUnpack
-    alignMode  <- mAsk <&> _conf_layout .> _lconfig_columnAlignMode .> confUnpack
+    colMaxConf <- mAsk <&> (_conf_layout >>> _lconfig_cols >>> confUnpack)
+    alignMode  <- mAsk <&> (_conf_layout >>> _lconfig_columnAlignMode >>> confUnpack)
     curX <- do
       state <- mGet
       -- tellDebugMess ("processInfo: " ++ show (_lstate_curYOrAddNewline state) ++ " - " ++ show ((_lstate_addSepSpace state)))
@@ -602,10 +614,14 @@ processInfo maxSpace m = \case
           Just c  -> c
         InsertNewlines{} -> spaceAdd
     let colMax = min colMaxConf (curX + maxSpace)
-        Just (ratio, maxCols1, _colss) = IntMapS.lookup ind m
-        maxCols2 = list <&> \case
-          (_, ColInfo i _ _) ->
-            let Just (_, ms, _) = IntMapS.lookup i m in sum ms
+    (ratio, maxCols1, _colss) <- case IntMapS.lookup ind m of
+      Nothing    -> error $ "No column info for index " ++ show ind
+      Just entry -> pure entry
+
+    let maxCols2 = list <&> \case
+          (_, ColInfo i _ _) -> case IntMapS.lookup i m of
+            Nothing -> error $ "No column info for index " ++ show i
+            Just (_, ms, _) -> sum ms
           (l, _) -> l
     let maxCols = zipWith max maxCols1 maxCols2
     let (maxX, posXs) = mapAccumL (\acc x -> (acc + x, acc)) curX maxCols
@@ -619,28 +635,34 @@ processInfo maxSpace m = \case
     -- forced to occupy the full vertical space, not reduced by any factor.
     let fixedPosXs = case alignMode of
           ColumnAlignModeAnimouslyScale i | maxX > colMax -> fixed <&> (+ curX)
-           where
-            factor :: Float =
-              -- 0.0001 as an offering to the floating point gods.
-                              min
-              1.0001
-              (fromIntegral (i + colMax - curX) / fromIntegral (maxX - curX))
-            offsets = (subtract curX) <$> posXs
-            fixed = offsets <&> fromIntegral .> (* factor) .> truncate
+            where
+              factor :: Float
+              factor  =
+                -- 0.0001 as an offering to the floating point gods.
+                min
+                  1.0001
+                  (fromIntegral (i + colMax - curX) / fromIntegral (maxX - curX))
+              offsets = subtract curX <$> posXs
+              fixed :: [Int]
+              fixed   = offsets <&> (fromIntegral >>> (* factor) >>> truncate)
           _ -> posXs
-    let
-      spacings =
-        zipWith (-) (List.tail fixedPosXs ++ [min maxX colMax]) fixedPosXs
-    let
-      alignAct = zip3 fixedPosXs spacings list `forM_` \(destX, s, x) -> do
-        layoutWriteEnsureAbsoluteN destX
-        processInfo s m (snd x)
-      noAlignAct = list `forM_` (snd .> processInfoIgnore)
-      animousAct = -- trace ("animousAct fixedPosXs=" ++ show fixedPosXs ++ ", list=" ++ show list ++ ", maxSpace=" ++ show maxSpace ++ ", colMax="++show colMax) $
-                   if List.last fixedPosXs + fst (List.last list) > colMax
-                                                                                                                                                                   -- per-item check if there is overflowing.
-        then noAlignAct
-        else alignAct
+
+        spacings = zipWith (-) (List.tail fixedPosXs ++ [min maxX colMax]) fixedPosXs
+
+        alignAct :: m ()
+        alignAct = zip3 fixedPosXs spacings list `forM_` \(destX, s, x) -> do
+          layoutWriteEnsureAbsoluteN destX
+          processInfo s m (snd x)
+
+        noAlignAct :: m ()
+        noAlignAct = list `forM_` (snd >>> processInfoIgnore)
+
+        animousAct =
+          -- trace ("animousAct fixedPosXs=" ++ show fixedPosXs ++ ", list=" ++ show list ++ ", maxSpace=" ++ show maxSpace ++ ", colMax="++show colMax) $
+          if List.last fixedPosXs + fst (List.last list) > colMax
+             -- per-item check if there is overflowing.
+          then noAlignAct
+          else alignAct
     case alignMode of
       ColumnAlignModeDisabled -> noAlignAct
       ColumnAlignModeUnanimously | maxX <= colMax -> alignAct
@@ -653,6 +675,6 @@ processInfo maxSpace m = \case
 
 processInfoIgnore :: LayoutConstraints m => ColInfo -> m ()
 processInfoIgnore = \case
-  ColInfoStart -> error "should not happen (TM)"
-  ColInfoNo doc -> layoutBriDocM doc
-  ColInfo _ _ list -> list `forM_` (snd .> processInfoIgnore)
+  ColInfoStart     -> error "should not happen (TM)"
+  ColInfoNo doc    -> layoutBriDocM doc
+  ColInfo _ _ list -> traverse_ (processInfoIgnore . snd) list

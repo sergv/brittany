@@ -1,14 +1,12 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
-module Language.Haskell.Brittany.Internal.Transformations.Columns where
+module Language.Haskell.Brittany.Internal.Transformations.Columns (transformSimplifyColumns) where
 
 import qualified Data.Generics.Uniplate.Direct as Uniplate
 import qualified GHC.OldList as List
 import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.Types
-
-
 
 transformSimplifyColumns :: BriDoc -> BriDoc
 transformSimplifyColumns = Uniplate.rewrite $ \case

@@ -1,6 +1,5 @@
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE NamedFieldPuns      #-}
-{-# LANGUAGE NoImplicitPrelude   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Language.Haskell.Brittany.Internal
@@ -8,38 +7,30 @@ module Language.Haskell.Brittany.Internal
   , pPrintModuleAndCheck
   ) where
 
-import qualified Debug.Trace
-import Prettyprinter.Combinators
-import Prettyprinter.Data
-
+import Control.Category hiding (id, (.))
+import Control.Monad.Trans.MultiRWS.Strict (mAsk, mTell, mSet, mGet)
 import qualified Control.Monad.Trans.MultiRWS.Strict as MultiRWSS
 import Data.Foldable
-import Data.HList.HList
+import Data.Functor.Identity
 import qualified Data.List as L
-import qualified Data.Map as Map
 import Data.Maybe
 import qualified Data.Semigroup as Semigroup
+import Data.Sequence (Seq)
+import Data.Text (Text)
 import qualified Data.Text as T
-import qualified Data.Text as Text
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TLB
 
-import GHC (GenLocated(L))
 import qualified GHC hiding (parseModule)
 import GHC.Hs
-import qualified GHC.OldList as List
-import GHC.Parser.Annotation (AnnKeywordId(..))
 import GHC.Types.SrcLoc
 import Language.Haskell.Brittany.Internal.Backend
 import Language.Haskell.Brittany.Internal.BackendUtils
 import Language.Haskell.Brittany.Internal.Config.Types
-import Language.Haskell.Brittany.Internal.ExactPrintUtils
 import Language.Haskell.Brittany.Internal.LayouterBasics
 import Language.Haskell.Brittany.Internal.Layouters.Decl
 import Language.Haskell.Brittany.Internal.Layouters.Module
 import Language.Haskell.Brittany.Internal.ParseModule
-import Language.Haskell.Brittany.Internal.Prelude
-import Language.Haskell.Brittany.Internal.PreludeUtils
 import Language.Haskell.Brittany.Internal.Transformations.Alt
 import Language.Haskell.Brittany.Internal.Transformations.Columns
 import Language.Haskell.Brittany.Internal.Transformations.Floating
@@ -47,7 +38,6 @@ import Language.Haskell.Brittany.Internal.Transformations.Indent
 import Language.Haskell.Brittany.Internal.Transformations.Par
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.Brittany.Internal.Utils
-import qualified Language.Haskell.GHC.ExactPrint as ExactPrint
 import qualified Language.Haskell.GHC.ExactPrint.Types as ExactPrint
 import Language.Haskell.GHC.ExactPrint.Utils (tokComment)
 
@@ -90,8 +80,8 @@ pPrintModuleAndCheck conf parsedModule = do
         Right{}  -> []
   pure (output, errs', logs)
 
-ppModule :: HsModule -> PPM ()
-ppModule m@HsModule{hsmodAnn, hsmodDecls} = do
+ppModule :: HsModule GhcPs -> PPM ()
+ppModule m@HsModule{} = do
   (config :: CConfig Identity) <- mAsk
 
   let config' :: CConfig Identity
@@ -122,12 +112,12 @@ ppModule m@HsModule{hsmodAnn, hsmodDecls} = do
           then pure r
           else briDocMToPPM $ prependComments $ briDocByExactNoComment decl
 
-  for_ annsAfter $ \comment@(L pos EpaComment{ac_tok}) -> do
+  for_ annsAfter $ \commentAnn@(L pos EpaComment{ac_tok}) -> do
     ppmMoveToExactLocAnchor pos
     case ac_tok of
       EpaEofComment -> pure ()
       _             ->
-        mTell $ TLB.fromString $ ExactPrint.commentContents $ tokComment comment
+        mTell $ TLB.fromString $ ExactPrint.commentContents $ tokComment commentAnn
 
   pure ()
 
@@ -137,22 +127,25 @@ commentLoc = anchor . getLoc
 declLoc :: LHsDecl GhcPs -> RealSrcSpan
 declLoc = anchor . entry . ann . getLoc
 
-setModComments :: [LEpaComment] -> HsModule -> HsModule
-setModComments comments m@HsModule{hsmodAnn} = m
-  { hsmodAnn = case hsmodAnn of
-    EpAnn entry as cs -> EpAnn entry as (cs { priorComments = comments })
-    EpAnnNotUsed      -> EpAnnNotUsed
+setModComments :: [LEpaComment] -> HsModule GhcPs -> HsModule GhcPs
+setModComments comments m@HsModule{ hsmodExt = ext@XModulePs{hsmodAnn} } = m
+  { hsmodExt = ext
+    { hsmodAnn =
+        case hsmodAnn of
+          EpAnn entry as cs -> EpAnn entry as (cs { priorComments = comments })
+          EpAnnNotUsed      -> EpAnnNotUsed
+    }
   }
 
-splitAnnots' :: HsModule -> ([LEpaComment], [([LEpaComment], LHsDecl GhcPs)], [LEpaComment])
-splitAnnots' m@HsModule{hsmodAnn, hsmodDecls} =
+splitAnnots' :: HsModule GhcPs -> ([LEpaComment], [([LEpaComment], LHsDecl GhcPs)], [LEpaComment])
+splitAnnots' HsModule{hsmodExt, hsmodDecls} =
   case hsmodDecls of
     []    -> (allComments, [], [])
     decls -> (commentsBefore, decls', commentsAfter)
       where
         whereLoc :: Maybe RealSrcSpan
         whereLoc =
-          case mapMaybe extractWhereLoc $ am_main $ anns hsmodAnn of
+          case mapMaybe extractWhereLoc $ am_main $ anns $ hsmodAnn hsmodExt of
             s1 : s2 : _ -> error $
               "Module has more than one 'where' keyword: " ++ show s1 ++ " and " ++ show s2
             []          -> Nothing
@@ -175,22 +168,23 @@ splitAnnots' m@HsModule{hsmodAnn, hsmodDecls} =
             (declComments, cs') = L.span (\x -> commentLoc x <= declLoc d) cs
   where
     allComments :: [LEpaComment]
-    allComments = priorComments $ epAnnComments hsmodAnn
+    allComments = priorComments $ epAnnComments $ hsmodAnn hsmodExt
 
     extractWhereLoc :: AddEpAnn -> Maybe RealSrcSpan
     extractWhereLoc = \case
-      AddEpAnn AnnWhere (EpaSpan loc)  -> Just loc
-      AddEpAnn AnnWhere (EpaDelta _ _) -> error "Unexpected EpaDelta"
-      _                                -> Nothing
+      AddEpAnn AnnWhere (EpaSpan loc _) -> Just loc
+      AddEpAnn AnnWhere (EpaDelta _ _)  -> error "Unexpected EpaDelta"
+      _                                 -> Nothing
 
 -- | Prints the information associated with the module annotation,
 -- including the imports.
 ppPreamble
-  :: HsModule
+  :: HsModule GhcPs
   -> PPM ()
-ppPreamble m@HsModule{hsmodAnn, hsmodDecls} = do
+ppPreamble m@HsModule{} = do
   config <- mAsk
-  let shouldReformatPreamble =
+  let shouldReformatPreamble :: Bool
+      shouldReformatPreamble =
         confUnpack (_lconfig_reformatModulePreamble (_conf_layout config))
   if shouldReformatPreamble
     then
@@ -213,33 +207,32 @@ layoutBriDoc briDoc = do
     -- bridoc transformation: remove alts
     transformAlts briDoc >>= mSet
     mGet
-      >>= briDocToDoc
-      .> traceIfDumpConf "bridoc post-alt" _dconf_dump_bridoc_simpl_alt
+      >>= (briDocToDoc >>> traceIfDumpConf "bridoc post-alt" _dconf_dump_bridoc_simpl_alt)
     -- bridoc transformation: float stuff in
-    mGet >>= transformSimplifyFloating .> mSet
+    mGet >>= (transformSimplifyFloating >>> mSet)
     mGet
-      >>= briDocToDoc
-      .> traceIfDumpConf
-           "bridoc post-floating"
-           _dconf_dump_bridoc_simpl_floating
+      >>= (briDocToDoc
+      >>> traceIfDumpConf
+            "bridoc post-floating"
+            _dconf_dump_bridoc_simpl_floating)
     -- bridoc transformation: par removal
-    mGet >>= transformSimplifyPar .> mSet
+    mGet >>= (transformSimplifyPar >>> mSet)
     mGet
-      >>= briDocToDoc
-      .> traceIfDumpConf "bridoc post-par" _dconf_dump_bridoc_simpl_par
+      >>= (briDocToDoc
+      >>> traceIfDumpConf "bridoc post-par" _dconf_dump_bridoc_simpl_par)
     -- bridoc transformation: float stuff in
-    mGet >>= transformSimplifyColumns .> mSet
+    mGet >>= (transformSimplifyColumns >>> mSet)
     mGet
-      >>= briDocToDoc
-      .> traceIfDumpConf "bridoc post-columns" _dconf_dump_bridoc_simpl_columns
+      >>= (briDocToDoc
+      >>> traceIfDumpConf "bridoc post-columns" _dconf_dump_bridoc_simpl_columns)
     -- bridoc transformation: indent
-    mGet >>= transformSimplifyIndent .> mSet
+    mGet >>= (transformSimplifyIndent >>> mSet)
     mGet
-      >>= briDocToDoc
-      .> traceIfDumpConf "bridoc post-indent" _dconf_dump_bridoc_simpl_indent
+      >>= (briDocToDoc
+      >>> traceIfDumpConf "bridoc post-indent" _dconf_dump_bridoc_simpl_indent)
     mGet
-      >>= briDocToDoc
-      .> traceIfDumpConf "bridoc final" _dconf_dump_bridoc_final
+      >>= (briDocToDoc
+      >>> traceIfDumpConf "bridoc final" _dconf_dump_bridoc_final)
     -- -- convert to Simple type
     -- simpl <- mGet <&> transformToSimple
     -- return simpl

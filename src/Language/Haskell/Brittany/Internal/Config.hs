@@ -1,7 +1,18 @@
 {-# LANGUAGE MonadComprehensions #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
-module Language.Haskell.Brittany.Internal.Config where
+module Language.Haskell.Brittany.Internal.Config
+  ( staticDefaultConfig
+  , forwardOptionsSyntaxExtsEnabled
+  , cmdlineConfigParser
+  , readConfig
+  , userConfigPath
+  , findLocalConfigPath
+  , readConfigs
+  , readConfigsWithUserConfig
+  , writeDefaultConfig
+  , showConfigYaml
+  ) where
 
 import qualified Data.Bool as Bool
 import qualified Data.ByteString as ByteString

@@ -321,7 +321,9 @@ coreIO config suppressOutput checkMode inputPathM outputPathM =
             ErrorOutputCheck{} -> True
             LayoutWarning{}    -> False
             ErrorUnknownNode{} -> False
+        outputOnErrs :: Bool
         outputOnErrs = confUnpack (_econf_produceOutputOnErrors (_conf_errorHandling config))
+        shouldOutput :: Bool
         shouldOutput = not suppressOutput && not checkMode && (not hasErrors || outputOnErrs)
 
     when shouldOutput

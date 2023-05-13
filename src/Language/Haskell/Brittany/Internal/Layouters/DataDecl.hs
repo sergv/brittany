@@ -1,29 +1,25 @@
-{-# LANGUAGE FlexibleContexts  #-}
-{-# LANGUAGE LambdaCase        #-}
-{-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE NoImplicitPrelude   #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
-module Language.Haskell.Brittany.Internal.Layouters.DataDecl where
+module Language.Haskell.Brittany.Internal.Layouters.DataDecl (layoutDataDecl) where
 
-import Data.Data (Data)
-import Data.Occurrences
+import Data.Functor
 import qualified Data.Semigroup as Semigroup
 import qualified GHC
-import GHC (GenLocated(L), Located)
+import GHC (GenLocated(L))
 import GHC.Hs
 import qualified GHC.OldList as List
-import GHC.Types.SrcLoc (unLoc)
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.LayouterBasics
 import Language.Haskell.Brittany.Internal.Layouters.Type
 import Language.Haskell.Brittany.Internal.Prelude
-import Language.Haskell.Brittany.Internal.PreludeUtils
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.GHC.ExactPrint (ExactPrint)
 
 layoutDataDecl
-  :: ( ExactPrint (LocatedAn ann (TyClDecl GhcPs))
-     , Occurrences AnnKeywordId ann
-     )
+  :: ExactPrint (LocatedAn ann (TyClDecl GhcPs))
   => LocatedAn ann (TyClDecl GhcPs)
   -> LocatedN RdrName
   -> LHsQTyVars GhcPs
@@ -31,7 +27,7 @@ layoutDataDecl
   -> ToBriDocM BriDocNumbered
 layoutDataDecl ltycl name (HsQTvs _ bndrs) defn = case defn of
   -- newtype MyType a b = MyType ..
-  HsDataDefn _ext NewType Nothing _ctype Nothing [cons] mDerivs ->
+  HsDataDefn _ext Nothing _ctype Nothing (NewTypeCon cons) mDerivs ->
     case cons of
       L _ (ConDeclH98 _ext consName False _qvars (Just (L _ [])) details _conDoc)
         -> docWrapNodeAround ltycl $ do
@@ -57,12 +53,13 @@ layoutDataDecl ltycl name (HsQTvs _ bndrs) defn = case defn of
 
   -- data MyData a b
   -- (zero constructors)
-  HsDataDefn _ext DataType (Just (L _ lhsContext)) _ctype Nothing [] mDerivs ->
+  HsDataDefn _ext (Just (L _ lhsContext)) _ctype Nothing (DataTypeCons isType []) mDerivs ->
     docWrapNodeAround ltycl $ do
       let nameStr = lrdrNameToTextAnn name
       lhsContextDoc <- docSharedWrapper createContextDoc lhsContext
       tyVarLine <- return <$> createBndrDoc bndrs
-      createDerivingPar mDerivs $ docSeq
+      createDerivingPar mDerivs $ docSeq $
+        [appSep $ docLitS "type" | isType] ++
         [ appSep $ docLitS "data"
         , lhsContextDoc
         , appSep $ docLit nameStr
@@ -71,7 +68,7 @@ layoutDataDecl ltycl name (HsQTvs _ bndrs) defn = case defn of
 
   -- data MyData = MyData ..
   -- data MyData = MyData { .. }
-  HsDataDefn _ext DataType (Just (L _ lhsContext)) _ctype Nothing [cons] mDerivs ->
+  HsDataDefn _ext (Just (L _ lhsContext)) _ctype Nothing (DataTypeCons isType [cons]) mDerivs ->
     case cons of
       L _ (ConDeclH98 _ext consName _hasForall qvars mRhsContext details _conDoc)
         -> docWrapNodeAround ltycl $ do
@@ -114,7 +111,8 @@ layoutDataDecl ltycl name (HsQTvs _ bndrs) defn = case defn of
           createDerivingPar mDerivs $ docAlt
             [ -- data D = forall a . Show a => D a
               docSeq
-              [ docNodeAnnKW ltycl (Just GHC.AnnData) $ docSeq
+              [ docNodeAnnKW ltycl (Just GHC.AnnData) $ docSeq $
+                [appSep $ docLitS "type" | isType] ++
                 [ appSep $ docLitS "data"
                 , docForceSingleline $ lhsContextDoc
                 , appSep $ docLit nameStr
@@ -140,7 +138,8 @@ layoutDataDecl ltycl name (HsQTvs _ bndrs) defn = case defn of
             , -- data D
               --   = forall a . Show a => D a
               docAddBaseY BrIndentRegular $ docPar
-              (docNodeAnnKW ltycl (Just GHC.AnnData) $ docSeq
+              (docNodeAnnKW ltycl (Just GHC.AnnData) $ docSeq $
+                [appSep $ docLitS "type" | isType] ++
                 [ appSep $ docLitS "data"
                 , docForceSingleline lhsContextDoc
                 , appSep $ docLit nameStr
@@ -170,7 +169,8 @@ layoutDataDecl ltycl name (HsQTvs _ bndrs) defn = case defn of
               --   . Show a =>
               --     D a
               docAddBaseY BrIndentRegular $ docPar
-              (docNodeAnnKW ltycl (Just GHC.AnnData) $ docSeq
+              (docNodeAnnKW ltycl (Just GHC.AnnData) $ docSeq $
+                [appSep $ docLitS "type" | isType] ++
                 [ appSep $ docLitS "data"
                 , docForceSingleline lhsContextDoc
                 , appSep $ docLit nameStr
@@ -190,7 +190,7 @@ layoutDataDecl ltycl name (HsQTvs _ bndrs) defn = case defn of
               -- above, so while not strictly necessary, this should not
               -- hurt.
               docAddBaseY BrIndentRegular $ docPar
-              (docLitS "data")
+              (if isType then docSeq [docLitS "type", docSeparator, docLitS "data"] else docLitS "data")
               (docLines
                 [ lhsContextDoc
                 , docNodeAnnKW ltycl (Just GHC.AnnData)
@@ -290,9 +290,12 @@ docDeriving = docLitS "deriving"
 
 createDetailsDoc
   :: Text -> HsConDeclH98Details GhcPs -> (ToBriDocM BriDocNumbered)
+-- createDetailsDoc consNameStr details = case details of
+--   RecCon (L _ ys) -> _ ys
+--   _ -> undefined
 createDetailsDoc consNameStr details = case details of
-  PrefixCon targs args -> do
-    indentPolicy <- mAsk <&> _conf_layout .> _lconfig_indentPolicy .> confUnpack
+  PrefixCon _targs args -> do
+    indentPolicy <- mAsk <&> (_conf_layout >>> _lconfig_indentPolicy >>> confUnpack)
     let
       singleLine = docSeq
         [ docLit consNameStr
@@ -323,9 +326,9 @@ createDetailsDoc consNameStr details = case details of
         docAlt [singleLine, multiAppended, multiIndented, leftIndented]
   RecCon (L _ []) ->
     docSeq [docLit consNameStr, docSeparator, docLitS "{}"]
-  RecCon lRec@(L _ fields@(_ : _)) -> do
-    let ((fName1, fType1) : fDocR) = mkFieldDocs fields
-    -- allowSingleline <- mAsk <&> _conf_layout .> _lconfig_allowSinglelineRecord .> confUnpack
+  RecCon lRec@(L _ (f : fs)) -> do
+    let ((fName1, fType1) :| fDocR) = mkFieldDocs (f :| fs)
+    -- allowSingleline <- mAsk <&> _conf_layout >>> _lconfig_allowSinglelineRecord >>> confUnpack
     let allowSingleline = False
     docAddBaseY BrIndentRegular $ runFilteredAlternative $ do
         -- single-line: { i :: Int, b :: Bool }
@@ -400,8 +403,9 @@ createDetailsDoc consNameStr details = case details of
     ]
   where
     mkFieldDocs
-      :: [LConDeclField GhcPs]
-      -> [(ToBriDocM BriDocNumbered, ToBriDocM BriDocNumbered)]
+      :: Functor f
+      => f (LConDeclField GhcPs)
+      -> f (ToBriDocM BriDocNumbered, ToBriDocM BriDocNumbered)
     mkFieldDocs = fmap $ \lField -> case lField of
       L _ (ConDeclField _ext names t _) -> createNamesAndTypeDoc lField names t
 
@@ -412,8 +416,7 @@ createForallDoc lhsTyVarBndrs =
   Just $ docSeq [docLitS "forall ", createBndrDoc lhsTyVarBndrs]
 
 createNamesAndTypeDoc
-  :: Data ast
-  => LocatedAn ann ast
+  :: LocatedAn ann ast
   -> [GenLocated t (FieldOcc GhcPs)]
   -> LHsType GhcPs
   -> (ToBriDocM BriDocNumbered, ToBriDocM BriDocNumbered)

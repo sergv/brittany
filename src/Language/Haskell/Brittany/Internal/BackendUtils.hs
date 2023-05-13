@@ -3,10 +3,40 @@
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
-module Language.Haskell.Brittany.Internal.BackendUtils where
+module Language.Haskell.Brittany.Internal.BackendUtils
+  ( layoutWriteAppend
+  , layoutWriteAppendSpaces
+  , layoutWriteAppendMultiline
+  , layoutWriteNewlineBlock
+  , layoutSetCommentCol
+  , layoutMoveToCommentPos
+  , layoutWriteNewline
+  , layoutWriteEnsureNewlineBlock
+  , layoutWriteEnsureAbsoluteN
+  , layoutBaseYPushInternal
+  , layoutBaseYPopInternal
+  , layoutIndentLevelPushInternal
+  , layoutIndentLevelPopInternal
+  , layoutRemoveIndentLevelLinger
+  , layoutWithAddBaseCol
+  , layoutWithAddBaseColBlock
+  , layoutWithAddBaseColNBlock
+  , layoutWriteEnsureBlock
+  , layoutWithAddBaseColN
+  , layoutBaseYPushCur
+  , layoutBaseYPop
+  , layoutIndentLevelPushCur
+  , layoutIndentLevelPop
+  , layoutAddSepSpace
+  , moveToExactAnn
+  , moveNextLine
+  , unpackDeltaPos
+  , ppmMoveToExactLocAnchor
+  , layoutIndentRestorePostComment
+  ) where
 
 import Data.Foldable
-import qualified Data.Map as Map
+import Data.Functor
 import qualified Data.Maybe
 import qualified Data.Semigroup as Semigroup
 import qualified Data.Text as Text
@@ -15,10 +45,8 @@ import qualified GHC.OldList as List
 import GHC.Parser.Annotation
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.Prelude
-import Language.Haskell.Brittany.Internal.PreludeUtils
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.Brittany.Internal.Utils
-import qualified Language.Haskell.GHC.ExactPrint.Types as ExactPrint
 
 traceLocal :: MonadMultiState LayoutState m => a -> m ()
 traceLocal _ = pure ()
@@ -214,7 +242,7 @@ layoutWithAddBaseCol
   => m ()
   -> m ()
 layoutWithAddBaseCol m = do
-  amount <- mAsk <&> _conf_layout .> _lconfig_indentAmount .> confUnpack
+  amount <- mAsk <&> (_conf_layout >>> _lconfig_indentAmount >>> confUnpack)
   state <- mGet
   layoutBaseYPushInternal $ lstate_baseY state + amount
   m
@@ -228,7 +256,7 @@ layoutWithAddBaseColBlock
   => m ()
   -> m ()
 layoutWithAddBaseColBlock m = do
-  amount <- mAsk <&> _conf_layout .> _lconfig_indentAmount .> confUnpack
+  amount <- mAsk <&> (_conf_layout >>> _lconfig_indentAmount >>> confUnpack)
   state <- mGet
   layoutBaseYPushInternal $ lstate_baseY state + amount
   layoutWriteEnsureBlock
@@ -323,9 +351,7 @@ layoutAddSepSpace = do
 -- TODO: when refactoring is complete, the other version of this method
 -- can probably be removed.
 moveToExactAnn
-  :: ( MonadMultiWriter Text.Builder.Builder m
-     , MonadMultiState LayoutState m
-     )
+  :: MonadMultiState LayoutState m
   => EpAnn ann
   -> m ()
 moveToExactAnn a = moveNextLine $

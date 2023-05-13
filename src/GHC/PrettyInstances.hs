@@ -35,7 +35,7 @@ deriving instance Generic Anchor
 deriving instance Generic (EpAnn ann)
 deriving instance Generic EpaComment
 deriving instance Generic ParsedSource
-deriving instance Generic HsModule
+deriving instance Generic (HsModule GhcPs)
 deriving instance Generic (GenLocated a b)
 deriving instance Generic EpAnnComments
 deriving instance Generic (SrcSpanAnn' a)
@@ -72,7 +72,6 @@ deriving instance Generic AnnKeywordId
 deriving instance Generic EpaLocation
 deriving instance Generic DeltaPos
 deriving instance Generic AnnListItem
-deriving instance Generic NoExtCon
 deriving instance Generic Specificity
 
 
@@ -119,7 +118,7 @@ instance Pretty Anchor where
   --   [ "anchor_op" --> anchor_op x
   --   ]
 
-instance Pretty HsModule where
+instance Pretty (HsModule GhcPs) where
   pretty = ppGeneric
 
 instance Pretty (HsDecl GhcPs) where
@@ -207,9 +206,6 @@ instance Pretty DeltaPos where
   pretty = ppGeneric
 
 instance Pretty AnnListItem where
-  pretty = ppGeneric
-
-instance Pretty NoExtCon where
   pretty = ppGeneric
 
 instance Pretty Specificity where

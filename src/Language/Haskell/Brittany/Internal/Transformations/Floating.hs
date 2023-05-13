@@ -1,16 +1,13 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
-module Language.Haskell.Brittany.Internal.Transformations.Floating where
+module Language.Haskell.Brittany.Internal.Transformations.Floating (transformSimplifyFloating) where
 
 import qualified Data.Generics.Uniplate.Direct as Uniplate
 import qualified GHC.OldList as List
 import Language.Haskell.Brittany.Internal.Prelude
-import Language.Haskell.Brittany.Internal.PreludeUtils
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.Brittany.Internal.Utils
-
-
 
 -- note that this is not total, and cannot be with that exact signature.
 mergeIndents :: BrIndent -> BrIndent -> BrIndent
@@ -20,9 +17,8 @@ mergeIndents (BrIndentSpecial i) (BrIndentSpecial j) =
   BrIndentSpecial (max i j)
 mergeIndents _ _ = error "mergeIndents"
 
-
 transformSimplifyFloating :: BriDoc -> BriDoc
-transformSimplifyFloating = stepBO .> stepFull
+transformSimplifyFloating = stepBO >>> stepFull
   -- note that semantically, stepFull is completely sufficient.
   -- but the bottom-up switch-to-top-down-on-match transformation has much
   -- better complexity.
@@ -145,8 +141,7 @@ transformSimplifyFloating = stepBO .> stepFull
       Just $ BDEnsureIndent (mergeIndents ind ind2) x
     _ -> Nothing
   stepBO :: BriDoc -> BriDoc
-  stepBO = -- traceFunctionWith "stepBO" (show . briDocToDocWithAnns) (show . briDocToDocWithAnns) $
-           transformUp f
+  stepBO = transformUp f
    where
     f = \case
       x@BDAnnotationBefore{}   -> descendPrior x
@@ -158,8 +153,7 @@ transformSimplifyFloating = stepBO .> stepFull
       x@BDIndentLevelPushCur{} -> descendILPush x
       x@BDIndentLevelPop{}     -> descendILPop x
       x                        -> x
-  stepFull = -- traceFunctionWith "stepFull" (show . briDocToDocWithAnns) (show . briDocToDocWithAnns) $
-             Uniplate.rewrite $ \case
+  stepFull = Uniplate.rewrite $ \case
     BDAddBaseY BrIndentNone x -> Just $ x
     -- AddIndent floats into Lines.
     BDAddBaseY indent (BDLines lines) ->

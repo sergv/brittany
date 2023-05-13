@@ -19,7 +19,7 @@ import Test.Tasty.HUnit
 
 import GHC.Hs
 import GHC.Types.SrcLoc
-import GHC.Unit.Module.Name
+-- import GHC.Unit.Module.Name
 
 import Language.Haskell.Brittany.Internal.Layouters.Module
 import Language.Haskell.Brittany.Internal.ParseModule

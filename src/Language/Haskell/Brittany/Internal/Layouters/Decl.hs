@@ -4,10 +4,17 @@
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Language.Haskell.Brittany.Internal.Layouters.Decl where
+module Language.Haskell.Brittany.Internal.Layouters.Decl
+  ( layoutDecl
+  , layoutLocalBinds
+  , layoutPatternBind
+  , layoutGrhs
+  , layoutPatternBindFinal
+  ) where
 
 import Data.Data (Data)
 import qualified Data.Foldable
+import Data.Functor
 import qualified Data.List as L
 import qualified Data.Maybe
 import Data.Occurrences
@@ -15,7 +22,7 @@ import qualified Data.Semigroup as Semigroup
 import qualified Data.Text as T
 import qualified Data.Text as Text
 import Data.Traversable
-import GHC (AnnKeywordId(..), GenLocated(L))
+import GHC (GenLocated(L))
 import GHC.Data.Bag (bagToList, emptyBag)
 import qualified GHC.Data.FastString as FastString
 import GHC.Hs
@@ -26,9 +33,8 @@ import GHC.Types.Basic
   , InlineSpec(..)
   , RuleMatchInfo(..)
   )
-import qualified GHC.Types.Basic
 import GHC.Types.Fixity (LexicalFixity(..))
-import GHC.Types.SrcLoc (Located, SrcSpan, getLoc, unLoc)
+import GHC.Types.SrcLoc (SrcSpan, getLoc, unLoc)
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.ExactPrintUtils
 import Language.Haskell.Brittany.Internal.LayouterBasics
@@ -38,11 +44,8 @@ import Language.Haskell.Brittany.Internal.Layouters.Pattern
 import {-# SOURCE #-} Language.Haskell.Brittany.Internal.Layouters.Stmt
 import Language.Haskell.Brittany.Internal.Layouters.Type
 import Language.Haskell.Brittany.Internal.Prelude
-import Language.Haskell.Brittany.Internal.PreludeUtils
 import Language.Haskell.Brittany.Internal.Types
 import qualified Language.Haskell.GHC.ExactPrint.Utils as ExactPrint
-
-
 
 layoutDecl :: LHsDecl GhcPs -> ToBriDocM BriDocNumbered
 layoutDecl d@(L loc decl) = case decl of
@@ -74,6 +77,7 @@ layoutSig lsig@(L _loc sig) = case sig of
             ActiveBefore _ i -> "[~" ++ show i ++ "] "
             ActiveAfter _ i  -> "[" ++ show i ++ "] "
             FinalActive      -> error "brittany internal error: FinalActive"
+          conlikeStr :: String
           conlikeStr = case conlike of
             FunLike -> ""
             ConLike -> "CONLIKE "
@@ -100,7 +104,7 @@ layoutSig lsig@(L _loc sig) = case sig of
           hasComments = hasAnyCommentsBelow lsig
       typeDoc <- docSharedWrapper layoutSigType typ
       shouldBeHanging <-
-        mAsk <&> _conf_layout .> _lconfig_hangingTypeSignature .> confUnpack
+        mAsk <&> (_conf_layout >>> _lconfig_hangingTypeSignature >>> confUnpack)
       if shouldBeHanging
         then
           docSeq
@@ -126,12 +130,13 @@ specStringCompat
   :: MonadMultiWriter [BrittanyError] m => LSig GhcPs -> InlineSpec -> m String
 specStringCompat ast = \case
   NoUserInlinePrag -> mTell [ErrorUnknownNode "NoUserInline" ast] $> ""
-  Inline           -> pure "INLINE "
-  Inlinable        -> pure "INLINABLE "
-  NoInline         -> pure "NOINLINE "
+  Inline    _      -> pure "INLINE "
+  Inlinable _      -> pure "INLINABLE "
+  NoInline  _      -> pure "NOINLINE "
+  Opaque    _      -> pure "OPAQUE "
 
-layoutGuardLStmt :: LStmt GhcPs (LHsExpr GhcPs) -> ToBriDocM BriDocNumbered
-layoutGuardLStmt lgstmt@(L _ stmtLR) = docWrapNodeAround lgstmt $ case stmtLR of
+_layoutGuardLStmt :: LStmt GhcPs (LHsExpr GhcPs) -> ToBriDocM BriDocNumbered
+_layoutGuardLStmt lgstmt@(L _ stmtLR) = docWrapNodeAround lgstmt $ case stmtLR of
   BodyStmt _ body _ _ -> layoutExpr body
   BindStmt _ lPat expr -> do
     patDoc <- docSharedWrapper layoutPat lPat
@@ -143,7 +148,6 @@ layoutGuardLStmt lgstmt@(L _ stmtLR) = docWrapNodeAround lgstmt $ case stmtLR of
       ]
   _ -> unknownNodeError "" lgstmt -- TODO
 
-
 --------------------------------------------------------------------------------
 -- HsBind
 --------------------------------------------------------------------------------
@@ -151,7 +155,7 @@ layoutGuardLStmt lgstmt@(L _ stmtLR) = docWrapNodeAround lgstmt $ case stmtLR of
 layoutBind
   :: LHsBindLR GhcPs GhcPs -> ToBriDocM (Either [BriDocNumbered] BriDocNumbered)
 layoutBind lbind@(L _ bind) = case bind of
-  FunBind _ fId (MG _ lmatches@(L _ matches) _) [] -> do
+  FunBind _ fId (MG _ lmatches@(L _ matches)) -> do
     let idStr = lrdrNameToTextAnn fId
     binderDoc   <- docLitS "="
     funcPatDocs <-
@@ -160,7 +164,7 @@ layoutBind lbind@(L _ bind) = case bind of
       $ layoutPatternBind (Just idStr) binderDoc
       `mapM` matches
     return $ Left $ funcPatDocs
-  PatBind _ pat (GRHSs _ grhss whereBinds) ([], []) -> do
+  PatBind _ pat (GRHSs _ grhss whereBinds) -> do
     patDocs     <- colsWrapPat =<< layoutPat pat
     clauseDocs  <- traverse layoutGrhs grhss
     mWhereDocs  <- layoutLocalBinds whereBinds
@@ -179,8 +183,7 @@ layoutBind lbind@(L _ bind) = case bind of
 
 layoutIPBind :: LIPBind GhcPs -> ToBriDocM BriDocNumbered
 layoutIPBind lipbind@(L _ bind) = case bind of
-  IPBind _ (Right _)                    _    -> error "brittany internal error: IPBind Right"
-  IPBind _ (Left (L _ (HsIPName name))) expr -> do
+  IPBind _ (L _ (HsIPName name)) expr -> do
     ipName      <- docLitS $ '?' : FastString.unpackFS name
     binderDoc   <- docLitS "="
     exprDoc     <- layoutExpr expr
@@ -227,7 +230,7 @@ layoutLocalBinds binds = case binds of
 layoutGrhs
   :: LGRHS GhcPs (LHsExpr GhcPs)
   -> ToBriDocM ([BriDocNumbered], BriDocNumbered, LHsExpr GhcPs)
-layoutGrhs (L ann (GRHS _ guards body)) = do
+layoutGrhs (L _ (GRHS _ guards body)) = do
   guardDocs <- traverse layoutStmt guards
   bodyDoc   <- layoutExpr body
   pure (guardDocs, bodyDoc, body)
@@ -322,9 +325,9 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
         Just patDoc -> docPar (return patDoc)
   whereIndent <- do
     shouldSpecial <-
-      mAsk <&> _conf_layout .> _lconfig_indentWhereSpecial .> confUnpack
+      mAsk <&> (_conf_layout >>> _lconfig_indentWhereSpecial >>> confUnpack)
     regularIndentAmount <-
-      mAsk <&> _conf_layout .> _lconfig_indentAmount .> confUnpack
+      mAsk <&> (_conf_layout >>> _lconfig_indentAmount >>> confUnpack)
     pure $ if shouldSpecial
       then BrIndentSpecial (max 1 (regularIndentAmount `div` 2))
       else BrIndentRegular
@@ -383,7 +386,7 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
         ]
       _        -> Nothing
 
-  indentPolicy <- mAsk <&> _conf_layout .> _lconfig_indentPolicy .> confUnpack
+  indentPolicy <- mAsk <&> (_conf_layout >>> _lconfig_indentPolicy >>> confUnpack)
 
   runFilteredAlternative $ do
 
@@ -666,7 +669,7 @@ layoutLPatSyn
   -> HsPatSynDetails GhcPs
   -> ToBriDocM BriDocNumbered
 layoutLPatSyn name = \case
-  PrefixCon targs vars -> do
+  PrefixCon _ vars -> do
     let docName = lrdrNameToTextAnn name
         names   = map lrdrNameToTextAnn vars
     docSeq . fmap appSep $ docLit docName : fmap docLit names
@@ -677,7 +680,7 @@ layoutLPatSyn name = \case
     docSeq . fmap (appSep . docLit) $ [leftDoc, docName, rightDoc]
   RecCon recArgs -> do
     let docName = lrdrNameToTextAnn name
-        args    = map (lrdrNameToTextAnn . rdrNameFieldOcc . recordPatSynField) recArgs
+        args    = map (lrdrNameToTextAnn . foLabel . recordPatSynField) recArgs
     docSeq . fmap docLit $ [docName, " { "] <> intersperse ", " args <> [" }"]
 
 -- | Helper method to get the where clause from of explicitly bidirectional
@@ -685,7 +688,7 @@ layoutLPatSyn name = \case
 layoutPatSynWhere
   :: HsPatSynDir GhcPs -> ToBriDocM (Maybe [ToBriDocM BriDocNumbered])
 layoutPatSynWhere hs = case hs of
-  ExplicitBidirectional (MG _ (L _ lbinds) _) -> do
+  ExplicitBidirectional (MG _ (L _ lbinds)) -> do
     binderDoc <- docLitS "="
     Just
       <$> mapM (docSharedWrapper $ layoutPatternBind Nothing binderDoc) lbinds
@@ -702,7 +705,8 @@ layoutTyCl ltycl@(L _loc tycl) = case tycl of
     -- let parenWrapper = if hasTrailingParen
     --       then appSep . docWrapNodeAfter ltycl
     --       else id
-    let wrapNodeRest = docWrapNodeAfter ltycl
+    let wrapNodeRest :: ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
+        wrapNodeRest = docWrapNodeAfter ltycl
     docWrapNodeBefore ltycl
       $ layoutSynDecl fixity wrapNodeRest name (hsq_explicit vars) typ
   DataDecl _ext name tyVars _ dataDefn ->
@@ -719,22 +723,24 @@ layoutSynDecl
 layoutSynDecl fixity wrapNodeRest name vars typ = do
   let nameStr = lrdrNameToTextAnn name
       lhs = appSep . wrapNodeRest $ case fixity of
-        Infix -> do
-          let (a : b : rest) = vars
-          let hasOwnParens = hasAnnKeywordComment a AnnOpenP
-          -- This isn't quite right, but does give syntactically valid results
-          let needsParens = not (null rest) || hasOwnParens
-          docSeq
-            $ [docLitS "type", docSeparator]
-            ++ [ docParenL | needsParens ]
-            ++ [ layoutTyVarBndr False a
-               , docSeparator
-               , docLit nameStr
-               , docSeparator
-               , layoutTyVarBndr False b
-               ]
-            ++ [ docParenR | needsParens ]
-            ++ fmap (layoutTyVarBndr True) rest
+        Infix ->
+          case vars of
+            a : b : rest -> do
+              let hasOwnParens = hasAnnKeywordComment a AnnOpenP
+              -- This isn't quite right, but does give syntactically valid results
+              let needsParens = not (null rest) || hasOwnParens
+              docSeq
+                $ [docLitS "type", docSeparator]
+                ++ [ docParenL | needsParens ]
+                ++ [ layoutTyVarBndr False a
+                   , docSeparator
+                   , docLit nameStr
+                   , docSeparator
+                   , layoutTyVarBndr False b
+                   ]
+                ++ [ docParenR | needsParens ]
+                ++ fmap (layoutTyVarBndr True) rest
+            _ -> error "Not enough for infix case"
         Prefix ->
           docSeq
           $ [ docLitS "type"
@@ -885,7 +891,7 @@ layoutClsInst lcid@(L _ cid) = docLines
 
   layoutAndLocateDataFamInsts
     :: LDataFamInstDecl GhcPs -> ToBriDocM (LocatedAn AnnListItem BriDocNumbered)
-  layoutAndLocateDataFamInsts ldfid@(L loc _) =
+  layoutAndLocateDataFamInsts _ldfid@(L _loc _) =
     -- TODO: must support them natively in brittany - exact print doesn't allow
     -- printing these
     error "Not supported yet"

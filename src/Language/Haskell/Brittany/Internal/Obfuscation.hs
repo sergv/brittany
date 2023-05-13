@@ -2,15 +2,15 @@
 
 module Language.Haskell.Brittany.Internal.Obfuscation (obfuscate) where
 
-import Data.Vector (Vector)
-import qualified Data.Vector as V
 import Data.Char
+import Data.Functor
+import qualified Data.List as L
 import qualified Data.Map as M
 import qualified Data.Set as S
 import qualified Data.Text as T
-import qualified Data.List as L
+import Data.Vector (Vector)
+import qualified Data.Vector as V
 import Language.Haskell.Brittany.Internal.Prelude
-import Language.Haskell.Brittany.Internal.PreludeUtils
 import System.Random
 
 obfuscate :: Text -> IO Text

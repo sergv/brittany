@@ -16,7 +16,6 @@ module Language.Haskell.Brittany.Internal.Formatting
 import qualified Data.Semigroup as Semigroup
 import qualified Data.Sequence as Seq
 import qualified Data.Text as T
-import DataTreePrint
 import qualified GHC.Driver.Session as GHC
 import qualified GHC.LanguageExtensions.Type as GHC
 import Language.Haskell.Brittany.Internal
@@ -78,7 +77,8 @@ format config fname input = do
     Right (parsedSource, (hasCPP, cppWarns)) -> do
       -- TODO: collect module config here and merge with values from global config
       let moduleConf = config
-      let disableFormatting = confUnpack (_conf_disable_formatting moduleConf)
+      let disableFormatting :: Bool
+          disableFormatting = confUnpack (_conf_disable_formatting moduleConf)
 
       let astLog =
             if confUnpack (_dconf_dump_ast_full (_conf_debug config))
@@ -93,7 +93,8 @@ format config fname input = do
             let r = T.pack $ ExactPrint.exactPrint parsedSource
             pure (r, [], Seq.empty, r /= input)
           | otherwise -> do
-            let omitCheck = confUnpack (_econf_omit_output_valid_check (_conf_errorHandling moduleConf))
+            let omitCheck :: Bool
+                omitCheck = confUnpack (_econf_omit_output_valid_check (_conf_errorHandling moduleConf))
             (outRaw, ews, logs) <-
               if hasCPP || omitCheck
               then pure $ pPrintModule moduleConf parsedSource
@@ -124,7 +125,9 @@ format config fname input = do
     exactprintOnly :: Bool
     exactprintOnly = viaGlobal || viaDebug
       where
+        viaGlobal :: Bool
         viaGlobal = confUnpack (_conf_roundtrip_exactprint_only config)
+        viaDebug :: Bool
         viaDebug  = confUnpack (_dconf_roundtrip_exactprint_only (_conf_debug config))
 
       -- putStrErrLn

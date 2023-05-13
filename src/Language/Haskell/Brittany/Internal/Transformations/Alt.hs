@@ -1,36 +1,34 @@
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE BangPatterns        #-}
+{-# LANGUAGE DataKinds           #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE MonadComprehensions #-}
-{-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE NoImplicitPrelude   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE TypeOperators       #-}
 
-module Language.Haskell.Brittany.Internal.Transformations.Alt where
+module Language.Haskell.Brittany.Internal.Transformations.Alt (transformAlts) where
 
 import qualified Control.Monad.Memo as Memo
 import qualified Control.Monad.Trans.MultiRWS.Strict as MultiRWSS
+import Data.Functor
 import Data.HList.ContainsType
 import qualified Data.List.Extra
+import qualified Data.List.NonEmpty as NE
 import qualified Data.Semigroup as Semigroup
 import qualified Data.Text as Text
 import qualified GHC.OldList as List
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.Prelude
-import Language.Haskell.Brittany.Internal.PreludeUtils
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.Brittany.Internal.Utils
 
-
-
 data AltCurPos = AltCurPos
-  { _acp_line :: Int -- chars in the current line
-  , _acp_indent :: Int -- current indentation level
-  , _acp_indentPrep :: Int -- indentChange affecting the next Par
+  { _acp_line        :: !Int -- chars in the current line
+  , _acp_indent      :: !Int -- current indentation level
+  , _acp_indentPrep  :: !Int -- indentChange affecting the next Par
   , _acp_forceMLFlag :: AltLineModeState
-  }
-  deriving Show
+  } deriving Show
 
 data AltLineModeState
   = AltLineModeStateNone
@@ -159,7 +157,7 @@ transformAlts =
         reWrap . BDFIndentLevelPop <$> rec bd
       BDFPar indent sameLine indented -> do
         indAmount <-
-          mAsk <&> _conf_layout .> _lconfig_indentAmount .> confUnpack
+          mAsk <&> (_conf_layout >>> _lconfig_indentAmount >>> confUnpack)
         let
           indAdd = case indent of
             BrIndentNone -> 0
@@ -177,7 +175,7 @@ transformAlts =
                                       -- fail-early approach; BDEmpty does not
                                       -- make sense semantically for Alt[].
       BDFAlt alts -> do
-        altChooser <- mAsk <&> _conf_layout .> _lconfig_altChooser .> confUnpack
+        altChooser <- mAsk <&> (_conf_layout >>> _lconfig_altChooser >>> confUnpack)
         case altChooser of
           AltChooserSimpleQuick -> do
             rec $ head alts
@@ -360,7 +358,8 @@ getSpacing !bridoc = rec bridoc
   rec :: BriDocNumbered -> m (LineModeValidity VerticalSpacing)
   rec (brDcId, brDc) = do
     config <- mAsk
-    let colMax = config & _conf_layout & _lconfig_cols & confUnpack
+    let colMax :: Int
+        !colMax = config & _conf_layout & _lconfig_cols & confUnpack
     result <- case brDc of
       BDFEmpty ->
         return $ LineModeValid $ VerticalSpacing 0 VerticalSpacingParNone False
@@ -442,14 +441,14 @@ getSpacing !bridoc = rec bridoc
       BDFAlt (alt : _) -> rec alt
       BDFForceMultiline bd -> do
         mVs <- rec bd
-        return $ mVs >>= _vs_paragraph .> \case
+        return $ mVs >>= (_vs_paragraph >>> \case
           VerticalSpacingParNone -> LineModeInvalid
-          _ -> mVs
+          _ -> mVs)
       BDFForceSingleline bd -> do
         mVs <- rec bd
-        return $ mVs >>= _vs_paragraph .> \case
+        return $ mVs >>= (_vs_paragraph >>> \case
           VerticalSpacingParNone -> mVs
-          _ -> LineModeInvalid
+          _ -> LineModeInvalid)
       BDFForwardLineMode bd -> rec bd
       BDFExternal _ txt -> return $ LineModeValid $ case Text.lines txt of
         [t] -> VerticalSpacing (Text.length t) VerticalSpacingParNone False
@@ -463,13 +462,13 @@ getSpacing !bridoc = rec bridoc
       BDFMoveToKWDP _kw _b bd  -> rec bd
       BDFLines [] ->
         return $ LineModeValid $ VerticalSpacing 0 VerticalSpacingParNone False
-      BDFLines ls@(_ : _) -> do
-        lSps <- rec `mapM` ls
-        let (mVs : _) = lSps -- separated into let to avoid MonadFail
+      BDFLines (l : ls) -> do
+        lSps <- (:|) <$> rec l <*> traverse rec ls
+        let mVs = NE.head lSps
         return
           $ [ VerticalSpacing lsp (VerticalSpacingParSome $ lineMax) False
             | VerticalSpacing lsp _ _ <- mVs
-            , lineMax <- getMaxVS $ maxVs $ lSps
+            , lineMax <- getMaxVS $ maxVs $ NE.toList lSps
             ]
       BDFEnsureIndent indent bd -> do
         mVs <- rec bd
@@ -590,7 +589,8 @@ getSpacings limit bridoc = preFilterLimit <$> rec bridoc
   rec :: BriDocNumbered -> Memo.MemoT Int [VerticalSpacing] m [VerticalSpacing]
   rec (brDcId, brdc) = memoWithKey brDcId $ do
     config <- mAsk
-    let colMax = config & _conf_layout & _lconfig_cols & confUnpack
+    let colMax :: Int
+        !colMax = config & _conf_layout & _lconfig_cols & confUnpack
     let
       hasOkColCount (VerticalSpacing lsp psp _) = lsp <= colMax && case psp of
         VerticalSpacingParNone -> True
@@ -607,6 +607,7 @@ getSpacings limit bridoc = preFilterLimit <$> rec bridoc
             (p1, p2) -> if p1 == p2 then Smaller else Unequal
           else Unequal
     let
+      allowHangingQuasiQuotes :: Bool
       allowHangingQuasiQuotes =
         config & _conf_layout & _lconfig_allowHangingQuasiQuotes & confUnpack
     let -- this is like List.nub, with one difference: if two elements
@@ -933,7 +934,7 @@ getSpacings limit bridoc = preFilterLimit <$> rec bridoc
 fixIndentationForMultiple
   :: (MonadMultiReader (CConfig Identity) m) => AltCurPos -> BrIndent -> m Int
 fixIndentationForMultiple acp indent = do
-  indAmount <- mAsk <&> _conf_layout .> _lconfig_indentAmount .> confUnpack
+  indAmount <- mAsk <&> (_conf_layout >>> _lconfig_indentAmount >>> confUnpack)
   let
     indAddRaw = case indent of
       BrIndentNone -> 0
@@ -942,7 +943,7 @@ fixIndentationForMultiple acp indent = do
   -- for IndentPolicyMultiple, we restrict the amount of added
   -- indentation in such a manner that we end up on a multiple of the
   -- base indentation.
-  indPolicy <- mAsk <&> _conf_layout .> _lconfig_indentPolicy .> confUnpack
+  indPolicy <- mAsk <&> (_conf_layout >>> _lconfig_indentPolicy >>> confUnpack)
   pure $ if indPolicy == IndentPolicyMultiple
     then
       let

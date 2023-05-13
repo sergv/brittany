@@ -2,17 +2,17 @@
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
-module Language.Haskell.Brittany.Internal.Layouters.IE where
+module Language.Haskell.Brittany.Internal.Layouters.IE
+  ( layoutLLIEs
+  , layoutAnnAndSepLLIEs
+  , SortItemsFlag(..)
+  ) where
 
 import Data.Data (Data)
 import qualified Data.List.Extra
 import qualified Data.Text as Text
 import GHC
-  ( AnnKeywordId(..)
-  , GenLocated(L)
-  , Located
-  , ModuleName
-  , moduleNameString
+  ( GenLocated(L)
   , unLoc
   )
 import GHC.Hs
@@ -24,7 +24,7 @@ import Language.Haskell.Brittany.Internal.Utils
 
 layoutIE :: LIE GhcPs -> ToBriDocM BriDocNumbered
 layoutIE lie@(L _ ie) = docWrapNodeAround lie $ case ie of
-  IEVar _ x -> layoutWrapped lie x
+  IEVar      _ x -> layoutWrapped lie x
   IEThingAbs _ x -> layoutWrapped lie x
   IEThingAll _ x -> docSeq [layoutWrapped lie x, docLitS "(..)"]
   IEThingWith _ x (IEWildcard _) _ ->
@@ -43,36 +43,38 @@ layoutIE lie@(L _ ie) = docWrapNodeAround lie $ case ie of
         $ docWrapNodeAfter lie
         $ docAddBaseY BrIndentRegular
         $ docPar (layoutWrapped lie x) (layoutItems (splitFirstLast sortedNs))
-   where
-    nameDoc = docLit . lrdrNameToTextAnn . ieLWrappedName
-    layoutItem n = docSeq [docCommaSep, docWrapNodeAround n $ nameDoc n]
-    layoutItems FirstLastEmpty = docSetBaseY $ docLines
-      [ docSeq [docParenLSep, docNodeAnnKW lie (Just AnnOpenP) docEmpty]
-      , docParenR
-      ]
-    layoutItems (FirstLastSingleton n) = docSetBaseY $ docLines
-      [ docSeq [docParenLSep, docNodeAnnKW lie (Just AnnOpenP) $ nameDoc n]
-      , docParenR
-      ]
-    layoutItems (FirstLast n1 nMs nN) =
-      docSetBaseY
-        $ docLines
-        $ [docSeq [docParenLSep, docWrapNodeAround n1 $ nameDoc n1]]
-        ++ map layoutItem nMs
-        ++ [ docSeq [docCommaSep, docNodeAnnKW lie (Just AnnOpenP) $ nameDoc nN]
-           , docParenR
-           ]
+     where
+       nameDoc :: LIEWrappedName GhcPs -> ToBriDocM BriDocNumbered
+       nameDoc = docLit . lrdrNameToTextAnn . ieLWrappedName
+       layoutItem n = docSeq [docCommaSep, docWrapNodeAround n $ nameDoc n]
+       layoutItems FirstLastEmpty = docSetBaseY $ docLines
+         [ docSeq [docParenLSep, docNodeAnnKW lie (Just AnnOpenP) docEmpty]
+         , docParenR
+         ]
+       layoutItems (FirstLastSingleton n) = docSetBaseY $ docLines
+         [ docSeq [docParenLSep, docNodeAnnKW lie (Just AnnOpenP) $ nameDoc n]
+         , docParenR
+         ]
+       layoutItems (FirstLast n1 nMs nN) =
+         docSetBaseY
+           $ docLines
+           $ [docSeq [docParenLSep, docWrapNodeAround n1 $ nameDoc n1]]
+           ++ map layoutItem nMs
+           ++ [ docSeq [docCommaSep, docNodeAnnKW lie (Just AnnOpenP) $ nameDoc nN]
+              , docParenR
+              ]
   IEModuleContents _ n -> docSeq
     [ docLitS "module"
     , docSeparator
     , docLitS . moduleNameString $ unLoc n
     ]
   _ -> docEmpty
- where
-  layoutWrapped _ = \case
-    L _ (IEName n)         -> docLit (lrdrNameToTextAnn n)
-    L _ (IEPattern _loc n) -> docLit $ Text.pack "pattern " <> lrdrNameToTextAnn n
-    L _ (IEType loc n)     -> docLit $ Text.pack "type " <> lrdrNameToTextAnn n
+  where
+    layoutWrapped :: LIE GhcPs -> LIEWrappedName GhcPs -> ToBriDocM BriDocNumbered
+    layoutWrapped _ = \case
+      L _ (IEName    _ n) -> docLit $ lrdrNameToTextAnn n
+      L _ (IEPattern _ n) -> docLit $ Text.pack "pattern " <> lrdrNameToTextAnn n
+      L _ (IEType    _ n) -> docLit $ Text.pack "type " <> lrdrNameToTextAnn n
 
 data SortItemsFlag = ShouldSortItems | KeepItemsUnsorted
 -- Helper function to deal with Located lists of LIEs.
@@ -178,28 +180,28 @@ layoutLLIEs enableSingleline shouldSort llies = do
 -- | Returns a "fingerprint string", not a full text representation, nor even
 -- a source code representation of this syntax node.
 -- Used for sorting, not for printing the formatter's output source code.
-wrappedNameToText :: LIEWrappedName RdrName -> Text
+wrappedNameToText :: LIEWrappedName GhcPs -> Text
 wrappedNameToText = \case
-  L _ (IEName n)         -> lrdrNameToText n
-  L _ (IEPattern _loc n) -> lrdrNameToText n
-  L _ (IEType _loc n)    -> lrdrNameToText n
+  L _ (IEName    _ n) -> lrdrNameToText n
+  L _ (IEPattern _ n) -> lrdrNameToText n
+  L _ (IEType    _ n) -> lrdrNameToText n
 
 -- | Returns a "fingerprint string", not a full text representation, nor even
 -- a source code representation of this syntax node.
 -- Used for sorting, not for printing the formatter's output source code.
 lieToText :: LIE GhcPs -> Text
 lieToText = \case
-  L _ (IEVar _ wn) -> wrappedNameToText wn
-  L _ (IEThingAbs _ wn) -> wrappedNameToText wn
-  L _ (IEThingAll _ wn) -> wrappedNameToText wn
+  L _ (IEVar       _ wn)     -> wrappedNameToText wn
+  L _ (IEThingAbs  _ wn)     -> wrappedNameToText wn
+  L _ (IEThingAll  _ wn)     -> wrappedNameToText wn
   L _ (IEThingWith _ wn _ _) -> wrappedNameToText wn
   -- TODO: These _may_ appear in exports!
   -- Need to check, and either put them at the top (for module) or do some
   -- other clever thing.
   L _ (IEModuleContents _ n) -> moduleNameToText n
-  L _ IEGroup{} -> Text.pack "@IEGroup"
-  L _ IEDoc{} -> Text.pack "@IEDoc"
-  L _ IEDocNamed{} -> Text.pack "@IEDocNamed"
+  L _ IEGroup{}              -> Text.pack "@IEGroup"
+  L _ IEDoc{}                -> Text.pack "@IEDoc"
+  L _ IEDocNamed{}           -> Text.pack "@IEDocNamed"
  where
   moduleNameToText :: LocatedAn ann ModuleName -> Text
   moduleNameToText (L _ name) =

@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveFunctor       #-}
 {-# LANGUAGE DeriveGeneric       #-}
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE NamedFieldPuns      #-}
@@ -15,26 +16,22 @@ module Language.Haskell.Brittany.Internal.Layouters.Module
 
 import Data.Bifunctor
 import Data.Foldable
-import Data.List (concatMap, concat)
+import Data.Functor
 import qualified Data.List as L
 import Data.List.Reversed (RList)
 import qualified Data.List.Reversed as RL
 import qualified Data.Maybe
 import qualified Data.Semigroup as Semigroup
 import qualified Data.Text as Text
-import Data.Traversable
-import GHC (AnnKeywordId(..), GenLocated(L), moduleNameString, unLoc)
-import GHC.Generics (Generic)
+import GHC (GenLocated(L), unLoc)
 import GHC.Hs
 import qualified GHC.OldList as List
-import GHC.Parser.Annotation (DeltaPos(..))
-import GHC.Unit.Module.Name
+-- import GHC.Unit.Module.Name
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.LayouterBasics
 import Language.Haskell.Brittany.Internal.Layouters.IE
 import Language.Haskell.Brittany.Internal.Layouters.Import
 import Language.Haskell.Brittany.Internal.Prelude
-import Language.Haskell.Brittany.Internal.PreludeUtils
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.GHC.ExactPrint as ExactPrint
 import Language.Haskell.GHC.ExactPrint.Types (commentContents)
@@ -42,7 +39,7 @@ import Language.Haskell.GHC.ExactPrint.Utils
 import Prettyprinter.Combinators
 import Prettyprinter.Generics
 
-layoutModule :: HsModule -> ToBriDocM BriDocNumbered
+layoutModule :: HsModule GhcPs -> ToBriDocM BriDocNumbered
 layoutModule mod' = case mod' of
     -- Implicit module Main
   HsModule{hsmodName = Nothing, hsmodImports} -> do
@@ -52,7 +49,7 @@ layoutModule mod' = case mod' of
     let commentedImports = transformToCommentedImport hsmodImports
     let tn = Text.pack $ moduleNameString $ unLoc n
     allowSingleLineExportList <-
-      mAsk <&> _conf_layout .> _lconfig_allowSingleLineExportList .> confUnpack
+      mAsk <&> (_conf_layout >>> _lconfig_allowSingleLineExportList >>> confUnpack)
     -- the config should not prevent single-line layout when there is no
     -- export list
     let allowSingleLine = allowSingleLineExportList || Data.Maybe.isNothing hsmodExports
@@ -87,7 +84,7 @@ data CommentedImport f a b
   = EmptyLine
   | IndependentComment a
   | ImportStatement (ImportStatementData f a b)
-  deriving (Eq, Generic)
+  deriving (Eq, Generic, Functor)
 
 instance Functor f => Bifunctor (CommentedImport f) where
   bimap f g = \case
@@ -105,7 +102,7 @@ data ImportStatementData f a b = ImportStatementData
   { isdCommentsBefore :: f a
   , isdCommentsAfter  :: f a
   , isdImport         :: b
-  } deriving (Eq, Show, Generic)
+  } deriving (Eq, Show, Generic, Functor)
 
 instance (Pretty (f a), Pretty a, Pretty b) => Pretty (CommentedImport f a b) where
   pretty = ppGeneric
@@ -151,7 +148,7 @@ lineDelta = \case
 annLineDelta :: EpAnn ann -> Maybe Int
 annLineDelta x = case anchor_op (entry x) of
   UnchangedAnchor -> Nothing
-  MovedAnchor x   -> Just (lineDelta x)
+  MovedAnchor y   -> Just (lineDelta y)
 
 transformToCommentedImport
   :: [LImportDecl GhcPs] -> [CommentedImport']
@@ -176,20 +173,20 @@ transformToCommentedImport =
       where
         acc' = L.foldl' go' acc commentsBefore
 
-        comments :: Maybe EpAnnComments
-        comments = case ann a of
+        annComments :: Maybe EpAnnComments
+        annComments = case ann a of
           EpAnn{comments} -> Just comments
           EpAnnNotUsed    -> Nothing
 
         commentsBefore :: [LEpaComment]
-        commentsBefore = case comments of
+        commentsBefore = case annComments of
           Just EpaComments{priorComments} -> priorComments
           Just EpaCommentsBalanced{}      -> error $
             "Unexpected EpaCommentsBalanced that shold never be created by parser:\n" ++ show (locA a)
           Nothing                         -> []
 
     go' :: RList CommentedImportRL -> LEpaComment -> RList CommentedImportRL
-    go' acc comment@(L a' _) =
+    go' acc annComment@(L a' _) =
       case anchor_op a' of
         UnchangedAnchor                      ->
           error $ "Unexpected UnchangedAnchor:\n" ++ show (anchor a')
@@ -198,14 +195,14 @@ transformToCommentedImport =
           case acc of
             RL.Snoc prefix (ImportStatement info@ImportStatementData{isdCommentsAfter}) ->
               prefix `RL.snoc`
-              ImportStatement info { isdCommentsAfter = isdCommentsAfter `RL.snoc` tokComment comment }
+              ImportStatement info { isdCommentsAfter = isdCommentsAfter `RL.snoc` tokComment annComment }
             other ->
-              other `RL.snoc` IndependentComment (tokComment comment)
+              other `RL.snoc` IndependentComment (tokComment annComment)
 
         MovedAnchor DifferentLine{deltaLine} ->
           acc <>
           RL.fromList (replicate (deltaLine - 1) EmptyLine) `RL.snoc`
-          IndependentComment (tokComment comment)
+          IndependentComment (tokComment annComment)
 
 sortCommentedImports
   :: forall a.

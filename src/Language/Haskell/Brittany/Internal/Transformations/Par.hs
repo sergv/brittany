@@ -1,13 +1,11 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
-module Language.Haskell.Brittany.Internal.Transformations.Par where
+module Language.Haskell.Brittany.Internal.Transformations.Par (transformSimplifyPar) where
 
 import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.Brittany.Internal.Utils
-
-
 
 transformSimplifyPar :: BriDoc -> BriDoc
 transformSimplifyPar = transformUp $ \case

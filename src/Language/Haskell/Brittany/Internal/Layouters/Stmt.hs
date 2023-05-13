@@ -1,11 +1,10 @@
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE NoImplicitPrelude   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-{-# LANGUAGE PackageImports #-}
+module Language.Haskell.Brittany.Internal.Layouters.Stmt (layoutStmt) where
 
-module Language.Haskell.Brittany.Internal.Layouters.Stmt where
-
+import Data.Functor
 import qualified Data.Semigroup as Semigroup
 import GHC (GenLocated(L))
 import GHC.Hs
@@ -15,14 +14,13 @@ import Language.Haskell.Brittany.Internal.Layouters.Decl
 import {-# SOURCE #-} Language.Haskell.Brittany.Internal.Layouters.Expr
 import Language.Haskell.Brittany.Internal.Layouters.Pattern
 import Language.Haskell.Brittany.Internal.Prelude
-import Language.Haskell.Brittany.Internal.PreludeUtils
 import Language.Haskell.Brittany.Internal.Types
 
 layoutStmt :: LStmt GhcPs (LHsExpr GhcPs) -> ToBriDocM BriDocNumbered
 layoutStmt lstmt@(L _ stmt) = do
-  indentPolicy <- mAsk <&> _conf_layout .> _lconfig_indentPolicy .> confUnpack
+  indentPolicy <- mAsk <&> (_conf_layout >>> _lconfig_indentPolicy >>> confUnpack)
   indentAmount :: Int <-
-    mAsk <&> _conf_layout .> _lconfig_indentAmount .> confUnpack
+    mAsk <&> (_conf_layout >>> _lconfig_indentAmount >>> confUnpack)
   docWrapNodeAround lstmt $ case stmt of
     LastStmt _ body Nothing _ -> do
       layoutExpr body

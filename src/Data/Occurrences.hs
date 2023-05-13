@@ -23,11 +23,16 @@ module Data.Occurrences
   ( Occurrences(..)
   ) where
 
+import qualified Data.ByteString as BS
 import Data.Kind
+import Data.List.NonEmpty (NonEmpty(..))
 import GHC.Generics
 
+import qualified GHC.Data.Strict
 import GHC.Parser.Annotation
 import GHC.Types.SrcLoc
+
+import GHC.Hs.DocString
 
 -- | This class is responsible for locating all occurrences of type 'a' within type 'b',
 -- passing them to the provided function and collecting all its results via 'mappend'.
@@ -82,16 +87,23 @@ deriving instance Generic AnnList
 deriving instance Generic AnnListItem
 deriving instance Generic AnnParen
 deriving instance Generic AnnPragma
+deriving instance Generic BufPos
+deriving instance Generic BufSpan
 deriving instance Generic DeltaPos
 deriving instance Generic EpAnnComments
 deriving instance Generic EpaComment
 deriving instance Generic EpaCommentTok
 deriving instance Generic EpaLocation
+deriving instance Generic HsDocStringChunk
+deriving instance Generic HsDocStringDecorator
+deriving instance Generic HsDocString
 deriving instance Generic IsUnicodeSyntax
 deriving instance Generic NameAdornment
 deriving instance Generic NameAnn
 deriving instance Generic ParenType
 deriving instance Generic TrailingAnn
+
+deriving instance Generic (GHC.Data.Strict.Maybe a)
 
 instance {-# OVERLAPS #-} Occurrences a a where
   {-# INLINE foldAllOccurrences #-}
@@ -122,6 +134,10 @@ instance {-# OVERLAPPABLE #-} Occurrences a Int where
   {-# INLINE foldAllOccurrences #-}
   foldAllOccurrences _ = mempty
 
+instance {-# OVERLAPPABLE #-} Occurrences a BS.ByteString where
+  {-# INLINE foldAllOccurrences #-}
+  foldAllOccurrences _ = mempty
+
 instance Occurrences a b => Occurrences a (EpAnn b)
 instance Occurrences a b => Occurrences a (SrcSpanAnn' b)
 instance (Occurrences a ann, Occurrences a b) => Occurrences a (GenLocated ann b)
@@ -135,6 +151,8 @@ instance Occurrences a AnnList
 instance Occurrences a AnnListItem
 instance Occurrences a AnnParen
 instance Occurrences a AnnPragma
+instance Occurrences a BufPos
+instance Occurrences a BufSpan
 instance Occurrences a EpAnnComments
 instance Occurrences a EpaComment
 instance Occurrences a EpaCommentTok
@@ -145,7 +163,14 @@ instance Occurrences a NameAnn
 instance Occurrences a ParenType
 instance Occurrences a TrailingAnn
 
+instance Occurrences a b => Occurrences a (GHC.Data.Strict.Maybe b)
+
+instance Occurrences a HsDocStringChunk
+instance Occurrences a HsDocStringDecorator
+instance Occurrences a HsDocString
+
 instance Occurrences a b => Occurrences a [b]
+instance Occurrences a b => Occurrences a (NonEmpty b)
 instance Occurrences a b => Occurrences a (Maybe b)
 
 instance (Occurrences a b, Occurrences a c) => Occurrences a (b, c)

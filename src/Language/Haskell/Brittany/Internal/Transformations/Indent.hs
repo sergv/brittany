@@ -1,14 +1,12 @@
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE NoImplicitPrelude #-}
 
-module Language.Haskell.Brittany.Internal.Transformations.Indent where
+module Language.Haskell.Brittany.Internal.Transformations.Indent (transformSimplifyIndent) where
+
+import Prelude hiding (lines)
 
 import qualified Data.Generics.Uniplate.Direct as Uniplate
 import qualified GHC.OldList as List
-import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.Types
-
-
 
 -- prepare layouting by translating BDPar's, replacing them with Indents and
 -- floating those in. This gives a more clear picture of what exactly is

@@ -1,22 +1,19 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 
-module Language.Haskell.Brittany.Internal.Layouters.Import where
+module Language.Haskell.Brittany.Internal.Layouters.Import (layoutImport) where
 
+import Data.Functor
 import qualified Data.Semigroup as Semigroup
 import qualified Data.Text as Text
-import GHC (GenLocated(L), moduleNameString, unLoc)
+import GHC (GenLocated(L), unLoc)
 import GHC.Hs
-import GHC.Types.Basic
+import GHC.Types.PkgQual
 import GHC.Types.SourceText
-import GHC.Unit.Types (IsBootInterface(..))
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.LayouterBasics
 import Language.Haskell.Brittany.Internal.Layouters.IE
 import Language.Haskell.Brittany.Internal.Prelude
-import Language.Haskell.Brittany.Internal.PreludeUtils
 import Language.Haskell.Brittany.Internal.Types
-
-
 
 prepPkg :: SourceText -> String
 prepPkg rawN = case rawN of
@@ -27,16 +24,20 @@ prepPkg rawN = case rawN of
 
 layoutImport :: ImportDecl GhcPs -> ToBriDocM BriDocNumbered
 layoutImport importD = case importD of
-  ImportDecl _ _ (L _ modName) pkg src safe q False mas mllies -> do
-    importCol <- mAsk <&> _conf_layout .> _lconfig_importColumn .> confUnpack
-    importAsCol <-
-      mAsk <&> _conf_layout .> _lconfig_importAsColumn .> confUnpack
-    indentPolicy <- mAsk <&> _conf_layout .> _lconfig_indentPolicy .> confUnpack
+  ImportDecl _ (L _ modName) pkg src safe q mas impList -> do
+    importCol    <- mAsk <&> (_conf_layout >>> _lconfig_importColumn >>> confUnpack)
+    importAsCol  <- mAsk <&> (_conf_layout >>> _lconfig_importAsColumn >>> confUnpack)
+    indentPolicy <- mAsk <&> (_conf_layout >>> _lconfig_indentPolicy >>> confUnpack)
     let compact     = indentPolicy /= IndentPolicyFree
         modNameT    = Text.pack $ moduleNameString modName
-        pkgNameT    = Text.pack . prepPkg . sl_st <$> pkg
+        pkgNameT :: Maybe Text
+        pkgNameT    = case pkg of
+          NoRawPkgQual -> Nothing
+          RawPkgQual s -> Just $ Text.pack $ prepPkg $ sl_st s
         masT        = Text.pack . moduleNameString . unLoc <$> mas
-        hiding      = maybe False fst mllies
+        hiding      = case impList of
+          Just (EverythingBut, _) -> True
+          _                       -> False
         minQLength  = length "import qualified "
         qLengthReal =
           let qualifiedPart = if q /= NotQualified then length "qualified " else 0
@@ -70,7 +71,7 @@ layoutImport importD = case importD of
         hidDoc        =
           if hiding then appSep $ docLitS "hiding" else docEmpty
         importHead    = docSeq [importQualifiers, modNameD]
-        bindingsD     = case mllies of
+        bindingsD     = case impList of
           Nothing -> docEmpty
           Just (_, llies) -> do
             let hasComments = hasAnyCommentsBelow llies
@@ -153,4 +154,3 @@ layoutImport importD = case importD of
           else docLines [importHead, bindingsD]
           where
             enoughRoom = nameCost < importCol - hidingParenCost
-  _ -> docEmpty
