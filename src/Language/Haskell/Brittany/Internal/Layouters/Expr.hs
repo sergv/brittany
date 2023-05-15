@@ -245,12 +245,12 @@ layoutExpr lexpr@(L _ expr) = do
           final -> (final, opExprList)
         (leftOperand, appList) = gather [] expLeft
       leftOperandDoc <- docSharedWrapper layoutExpr leftOperand
-      appListDocs <- appList `forM` \(x, y) ->
+      appListDocs    <- appList `forM` \(x, y) ->
         [ (xD, yD)
         | xD <- docSharedWrapper layoutExpr x
         , yD <- docSharedWrapper layoutExpr y
         ]
-      opLastDoc <- docSharedWrapper layoutExpr expOp
+      opLastDoc  <- docSharedWrapper layoutExpr expOp
       expLastDoc <- docSharedWrapper layoutExpr expRight
       allowSinglelinePar <- do
         let hasComLeft = hasAnyCommentsConnected expLeft

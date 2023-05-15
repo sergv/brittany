@@ -487,7 +487,6 @@ docBracketL = docLitS "["
 docBracketR :: ToBriDocM BriDocNumbered
 docBracketR = docLitS "]"
 
-
 docTick :: ToBriDocM BriDocNumbered
 docTick = docLitS "'"
 
@@ -642,7 +641,7 @@ docPar
   -> ToBriDocM BriDocNumbered
   -> ToBriDocM BriDocNumbered
 docPar lineM indentedM = do
-  line <- lineM
+  line     <- lineM
   indented <- indentedM
   allocateNode $ BDFPar BrIndentNone line indented
 

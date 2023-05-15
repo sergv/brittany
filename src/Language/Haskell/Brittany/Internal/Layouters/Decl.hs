@@ -27,12 +27,7 @@ import GHC.Data.Bag (bagToList, emptyBag)
 import qualified GHC.Data.FastString as FastString
 import GHC.Hs
 import qualified GHC.OldList as List
-import GHC.Types.Basic
-  ( Activation(..)
-  , InlinePragma(..)
-  , InlineSpec(..)
-  , RuleMatchInfo(..)
-  )
+import GHC.Types.Basic (Activation(..), InlinePragma(..), InlineSpec(..), RuleMatchInfo(..))
 import GHC.Types.Fixity (LexicalFixity(..))
 import GHC.Types.SrcLoc (SrcSpan, getLoc, unLoc)
 import Language.Haskell.Brittany.Internal.Config.Types
@@ -48,17 +43,18 @@ import Language.Haskell.Brittany.Internal.Types
 import qualified Language.Haskell.GHC.ExactPrint.Utils as ExactPrint
 
 layoutDecl :: LHsDecl GhcPs -> ToBriDocM BriDocNumbered
-layoutDecl d@(L loc decl) = case decl of
-  SigD _ sig -> withTransformedAnns d $ layoutSig (L loc sig)
-  ValD _ bind -> withTransformedAnns d $ layoutBind (L loc bind) >>= \case
-    Left ns -> docLines $ return <$> ns
-    Right n -> return n
-  TyClD _ tycl -> withTransformedAnns d $ layoutTyCl (L loc tycl)
-  InstD _ (TyFamInstD _ tfid) ->
-    withTransformedAnns d $ layoutTyFamInstDecl False d tfid
-  InstD _ (ClsInstD _ inst) ->
-    withTransformedAnns d $ layoutClsInst (L loc inst)
-  _ -> briDocByExactNoComment d
+layoutDecl d@(L loc decl) = do
+  case decl of
+    SigD NoExtField sig -> withTransformedAnns d $ layoutSig (L loc sig)
+    ValD NoExtField bind -> withTransformedAnns d $ layoutBind (L loc bind) >>= \case
+      Left ns -> docLines $ return <$> ns
+      Right n -> return n
+    TyClD NoExtField tycl -> withTransformedAnns d $ layoutTyCl (L loc tycl)
+    InstD NoExtField (TyFamInstD _ tfid) ->
+      withTransformedAnns d $ layoutTyFamInstDecl False d tfid
+    InstD NoExtField (ClsInstD _ inst) ->
+      withTransformedAnns d $ layoutClsInst (L loc inst)
+    _ -> briDocByExactNoComment d
 
 --------------------------------------------------------------------------------
 -- Sig
@@ -103,28 +99,27 @@ layoutSig lsig@(L _loc sig) = case sig of
           nameStr     = Text.intercalate ", " $ nameStrs
           hasComments = hasAnyCommentsBelow lsig
       typeDoc <- docSharedWrapper layoutSigType typ
-      shouldBeHanging <-
-        mAsk <&> (_conf_layout >>> _lconfig_hangingTypeSignature >>> confUnpack)
+      shouldBeHanging <- mAsk <&> (_conf_layout >>> _lconfig_hangingTypeSignature >>> confUnpack)
       if shouldBeHanging
-        then
-          docSeq
-            [ appSep
-            $ docSeq
-            $ keyDoc
-            <> [docLit nameStr]
-            , docSetBaseY $ docLines
-              [ docCols
-                  ColTyOpPrefix
-                  [ docLitS ":: "
-                  , docAddBaseY (BrIndentSpecial 3) typeDoc
-                  ]
-              ]
+      then
+        docSeq
+          [ appSep
+          $ docSeq
+          $ keyDoc
+          <> [docLit nameStr]
+          , docSetBaseY $ docLines
+            [ docCols
+                ColTyOpPrefix
+                [ docLitS ":: "
+                , docAddBaseY (BrIndentSpecial 3) typeDoc
+                ]
             ]
-        else layoutLhsAndType
-          hasComments
-          (appSep . docSeq $ keyDoc <> [docLit nameStr])
-          "::"
-          typeDoc
+          ]
+      else layoutLhsAndType
+        hasComments
+        (appSep . docSeq $ keyDoc <> [docLit nameStr])
+        "::"
+        typeDoc
 
 specStringCompat
   :: MonadMultiWriter [BrittanyError] m => LSig GhcPs -> InlineSpec -> m String
@@ -158,11 +153,9 @@ layoutBind lbind@(L _ bind) = case bind of
   FunBind _ fId (MG _ lmatches@(L _ matches)) -> do
     let idStr = lrdrNameToTextAnn fId
     binderDoc   <- docLitS "="
-    funcPatDocs <-
-      docWrapNodeAround lbind
+    funcPatDocs <- docWrapNodeAround lbind
       $ docWrapNodeAround lmatches
-      $ layoutPatternBind (Just idStr) binderDoc
-      `mapM` matches
+      $ traverse (layoutPatternBind (Just idStr) binderDoc) matches
     return $ Left $ funcPatDocs
   PatBind _ pat (GRHSs _ grhss whereBinds) -> do
     patDocs     <- colsWrapPat =<< layoutPat pat

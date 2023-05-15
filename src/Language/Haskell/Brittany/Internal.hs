@@ -109,8 +109,8 @@ ppModule m@HsModule{} = do
         mTell debugs
         mTell errs
         if null errs
-          then pure r
-          else briDocMToPPM $ prependComments $ briDocByExactNoComment decl
+        then pure r
+        else briDocMToPPM $ prependComments $ briDocByExactNoComment decl
 
   for_ annsAfter $ \commentAnn@(L pos EpaComment{ac_tok}) -> do
     ppmMoveToExactLocAnchor pos

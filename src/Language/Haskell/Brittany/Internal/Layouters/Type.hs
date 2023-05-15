@@ -22,7 +22,7 @@ import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.Brittany.Internal.Utils (FirstLastView(..), splitFirstLast)
 
-forgetTyVarBndrFlag :: LHsTyVarBndr a (NoGhcTc GhcPs) -> LHsTyVarBndr () (NoGhcTc GhcPs)
+forgetTyVarBndrFlag :: LHsTyVarBndr a GhcPs -> LHsTyVarBndr () GhcPs
 forgetTyVarBndrFlag (L a bndr) = L a $ case bndr of
   UserTyVar   ext _ x   -> UserTyVar ext () x
   KindedTyVar ext _ x y -> KindedTyVar ext () x y
@@ -63,10 +63,11 @@ layoutForallType bndrs ltype = do
       let maybeForceML = case hst_body of
             L _ HsFunTy{} -> docForceMultiline
             _             -> id
+          tyVarDocLineList :: [ToBriDocM BriDocNumbered]
           tyVarDocLineList = processTyVarBndrsSingleline tyVarDocs
           forallHeader     = runFilteredAlternative $ do
             addAlternative $
-              docSeq $ [forallDoc] ++ tyVarDocLineList
+              docSeq $ forallDoc : tyVarDocLineList
             addAlternative $
               docPar
                 forallDoc
@@ -163,7 +164,7 @@ layoutType ltype@(L _typAnn typ) = docWrapNodeAround ltype $ case typ of
       IsPromoted  -> docSeq [docSeparator, docTick, docWrapNodeAround name $ docLit t]
       NotPromoted -> docWrapNodeAround name $ docLit t
 
-  HsForAllTy _ hsf subtyp -> do
+  HsForAllTy NoExtField hsf subtyp -> do
     let bndrs = getBinders hsf
     layoutForallType bndrs subtyp
 
