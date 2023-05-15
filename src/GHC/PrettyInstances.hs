@@ -113,10 +113,10 @@ instance Pretty EpaComment where
   pretty = ppGeneric
 
 instance Pretty Anchor where
-  pretty = ppGeneric
-  -- pretty x = ppDictHeader "Anchor"
-  --   [ "anchor_op" --> anchor_op x
-  --   ]
+  -- pretty = ppGeneric
+  pretty x = ppDictHeader "Anchor"
+    [ "anchor_op" --> anchor_op x
+    ]
 
 instance Pretty (HsModule GhcPs) where
   pretty = ppGeneric
