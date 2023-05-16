@@ -347,13 +347,13 @@ allocateNode
   :: MonadMultiState NodeAllocIndex m => BriDocFInt -> m BriDocNumbered
 allocateNode bd = do
   i <- allocNodeIndex
-  return (i, bd)
+  pure (i, bd)
 
 allocNodeIndex :: MonadMultiState NodeAllocIndex m => m Int
 allocNodeIndex = do
   NodeAllocIndex i <- mGet
   mSet $ NodeAllocIndex (i + 1)
-  return i
+  pure i
 
 docEmpty :: ToBriDocM BriDocNumbered
 docEmpty = allocateNode BDFEmpty
@@ -409,14 +409,14 @@ docSetBaseY bdm = do
   -- properly over at `transformAlts`.
   n1 <- allocateNode $ BDFBaseYPushCur bd
   n2 <- allocateNode $ BDFBaseYPop n1
-  return n2
+  pure n2
 
 docSetIndentLevel :: ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
 docSetIndentLevel bdm = do
   bd <- bdm
   n1 <- allocateNode $ BDFIndentLevelPushCur bd
   n2 <- allocateNode $ BDFIndentLevelPop n1
-  return n2
+  pure n2
 
 docSetBaseAndIndent :: ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
 docSetBaseAndIndent = docSetBaseY . docSetIndentLevel
@@ -590,49 +590,49 @@ instance DocWrapable (ToBriDocM a) => DocWrapable (ToBriDocM (Seq a)) where
   docWrapNodeAround ast bdsm = do
     bds <- bdsm
     case Seq.viewl bds of
-      Seq.EmptyL -> return Seq.empty -- TODO: this might be bad. maybe. then again, not really. well.
+      Seq.EmptyL -> pure Seq.empty -- TODO: this might be bad. maybe. then again, not really. well.
       bd1 Seq.:< rest -> case Seq.viewr rest of
         Seq.EmptyR -> do
-          bd1' <- docWrapNodeAround ast (return bd1)
-          return $ Seq.singleton bd1'
+          bd1' <- docWrapNodeAround ast (pure bd1)
+          pure $ Seq.singleton bd1'
         bdM Seq.:> bdN -> do
-          bd1' <- docWrapNodeBefore ast (return bd1)
-          bdN' <- docWrapNodeAfter ast (return bdN)
-          return $ (bd1' Seq.<| bdM) Seq.|> bdN'
+          bd1' <- docWrapNodeBefore ast (pure bd1)
+          bdN' <- docWrapNodeAfter ast (pure bdN)
+          pure $ (bd1' Seq.<| bdM) Seq.|> bdN'
   docWrapNodeBefore ast bdsm = do
     bds <- bdsm
     case Seq.viewl bds of
-      Seq.EmptyL -> return Seq.empty
+      Seq.EmptyL -> pure Seq.empty
       bd1 Seq.:< bdR -> do
-        bd1' <- docWrapNodeBefore ast (return bd1)
-        return $ bd1' Seq.<| bdR
+        bd1' <- docWrapNodeBefore ast (pure bd1)
+        pure $ bd1' Seq.<| bdR
   docWrapNodeAfter ast bdsm = do
     bds <- bdsm
     case Seq.viewr bds of
-      Seq.EmptyR -> return Seq.empty
+      Seq.EmptyR -> pure Seq.empty
       bdR Seq.:> bdN -> do
-        bdN' <- docWrapNodeAfter ast (return bdN)
-        return $ bdR Seq.|> bdN'
+        bdN' <- docWrapNodeAfter ast (pure bdN)
+        pure $ bdR Seq.|> bdN'
 
 instance DocWrapable (ToBriDocM ([BriDocNumbered], BriDocNumbered, a)) where
   docWrapNodeAround ast stuffM = do
     (bds, bd, x) <- stuffM
     if null bds
       then do
-        bd' <- docWrapNodeAround ast (return bd)
-        return (bds, bd', x)
+        bd' <- docWrapNodeAround ast (pure bd)
+        pure (bds, bd', x)
       else do
-        bds' <- docWrapNodeBefore ast (return bds)
-        bd' <- docWrapNodeAfter ast (return bd)
-        return (bds', bd', x)
+        bds' <- docWrapNodeBefore ast (pure bds)
+        bd' <- docWrapNodeAfter ast (pure bd)
+        pure (bds', bd', x)
   docWrapNodeBefore ast stuffM = do
     (bds, bd, x) <- stuffM
-    bds' <- docWrapNodeBefore ast (return bds)
-    return (bds', bd, x)
+    bds' <- docWrapNodeBefore ast (pure bds)
+    pure (bds', bd, x)
   docWrapNodeAfter ast stuffM = do
     (bds, bd, x) <- stuffM
-    bd' <- docWrapNodeAfter ast (return bd)
-    return (bds, bd', x)
+    bd' <- docWrapNodeAfter ast (pure bd)
+    pure (bds, bd', x)
 
 
 
@@ -673,7 +673,7 @@ briDocMToPPM m = do
   (x, errs, debugs) <- briDocMToPPMInner m
   mTell debugs
   mTell errs
-  return x
+  pure x
 
 briDocMToPPMInner :: ToBriDocM a -> PPMLocal (a, [BrittanyError], Seq String)
 briDocMToPPMInner m = do

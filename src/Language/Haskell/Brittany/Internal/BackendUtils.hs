@@ -408,4 +408,4 @@ layoutIndentRestorePostComment = do
       layoutWriteEnsureAbsoluteN $ commentCol + fromMaybe
         0
         (_lstate_addSepSpace state)
-    _ -> return ()
+    _ -> pure ()

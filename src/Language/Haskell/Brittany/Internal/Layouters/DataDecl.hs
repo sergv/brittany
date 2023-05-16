@@ -34,12 +34,12 @@ layoutDataDecl ltycl name (HsQTvs _ bndrs) defn = case defn of
           let nameStr     = lrdrNameToTextAnn name
               consNameStr = lrdrNameToTextAnn consName
           tyVarLine   <- pure <$> createBndrDoc bndrs
-          -- headDoc     <- fmap return $ docSeq
+          -- headDoc     <- fmap pure $ docSeq
           --   [ appSep $ docLitS "newtype")
           --   , appSep $ docLit nameStr
           --   , appSep tyVarLine
           --   ]
-          rhsDoc <- return <$> createDetailsDoc consNameStr details
+          rhsDoc <- pure <$> createDetailsDoc consNameStr details
           createDerivingPar mDerivs $ docSeq
             [ appSep $ docLitS "newtype"
             , appSep $ docLit nameStr
@@ -57,7 +57,7 @@ layoutDataDecl ltycl name (HsQTvs _ bndrs) defn = case defn of
     docWrapNodeAround ltycl $ do
       let nameStr = lrdrNameToTextAnn name
       lhsContextDoc <- docSharedWrapper createContextDoc lhsContext
-      tyVarLine <- return <$> createBndrDoc bndrs
+      tyVarLine <- pure <$> createBndrDoc bndrs
       createDerivingPar mDerivs $ docSeq $
         [appSep $ docLitS "type" | isType] ++
         [ appSep $ docLitS "data"
@@ -82,7 +82,7 @@ layoutDataDecl ltycl name (HsQTvs _ bndrs) defn = case defn of
           rhsContextDocMay <- case mRhsContext of
             Nothing         -> pure Nothing
             Just (L _ ctxt) -> Just . pure <$> createContextDoc ctxt
-          rhsDoc           <- return <$> createDetailsDoc consNameStr details
+          rhsDoc           <- pure <$> createDetailsDoc consNameStr details
           consDoc          <-
             fmap pure
             $ docNonBottomSpacing
@@ -229,10 +229,10 @@ createContextDoc (t1 : tR) = do
 createBndrDoc :: [LHsTyVarBndr flag GhcPs] -> ToBriDocM BriDocNumbered
 createBndrDoc bs = do
   tyVarDocs <- bs `forM` \case
-    L _ (UserTyVar _ _ext vname) -> return $ (lrdrNameToText vname, Nothing)
+    L _ (UserTyVar _ _ext vname) -> pure $ (lrdrNameToText vname, Nothing)
     L _ (KindedTyVar _ _ext lrdrName kind) -> do
       d <- docSharedWrapper layoutType kind
-      return $ (lrdrNameToText lrdrName, Just $ d)
+      pure $ (lrdrNameToText lrdrName, Just $ d)
   docSeq $ List.intersperse docSeparator $ tyVarDocs <&> \(vname, mKind) ->
     case mKind of
       Nothing -> docLit vname

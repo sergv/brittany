@@ -25,7 +25,7 @@ layoutStmt lstmt@(L _ stmt) = do
     LastStmt _ body Nothing _ -> do
       layoutExpr body
     BindStmt _ lPat expr -> do
-      patDoc <- fmap return $ colsWrapPat =<< layoutPat lPat
+      patDoc <- fmap pure $ colsWrapPat =<< layoutPat lPat
       expDoc <- docSharedWrapper layoutExpr expr
       docAlt
         [ docCols
@@ -62,13 +62,13 @@ layoutStmt lstmt@(L _ stmt) = do
                   IndentPolicyMultiple
                     | indentFourPlus -> docSetBaseAndIndent
                     | otherwise -> docForceSingleline
-              in f $ return bindDoc
+              in f $ pure bindDoc
             ]
           , -- let
               --   bind = expr
             docAddBaseY BrIndentRegular $ docPar
             (docLitS "let")
-            (docSetBaseAndIndent $ return bindDoc)
+            (docSetBaseAndIndent $ pure bindDoc)
           ]
         Just bindDocs -> runFilteredAlternative $ do
           -- let aaa = expra
@@ -80,7 +80,7 @@ layoutStmt lstmt@(L _ stmt) = do
                 f = if indentFourPlus
                   then docEnsureIndent BrIndentRegular
                   else docSetBaseAndIndent
-              in f $ docLines $ return <$> bindDocs
+              in f $ docLines $ pure <$> bindDocs
             ]
           -- let
           --   aaa = expra
@@ -90,7 +90,7 @@ layoutStmt lstmt@(L _ stmt) = do
             $ docAddBaseY BrIndentRegular
             $ docPar
                 (docLitS "let")
-                (docSetBaseAndIndent $ docLines $ return <$> bindDocs)
+                (docSetBaseAndIndent $ docLines $ pure <$> bindDocs)
     RecStmt _ (L _ stmts) _ _ _ _ _ -> runFilteredAlternative $ do
       -- rec stmt1
       --     stmt2

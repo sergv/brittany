@@ -366,7 +366,7 @@ layoutType ltype@(L typAnn typ) = docWrapNodeAround ltype $ case typ of
   --         let len1 = _lColumns_min l1
   --         let len2 = _lColumns_min l2
   --         let len = 2 + opLen + len1 + len2
-  --         return $ LayoutColumns
+  --         pure $ LayoutColumns
   --           { _lColumns_key = ColumnKeyUnique
   --           , _lColumns_lengths = [len]
   --           , _lColumns_min = len
@@ -377,13 +377,13 @@ layoutType ltype@(L typAnn typ) = docWrapNodeAround ltype $ case typ of
   --         let (minR, maxR) = case descToBlockMinMax desc1 of
   --               Nothing -> (min2, max2)
   --               Just (min1, max1) -> (max min1 min2, max max1 max2)
-  --         return $ BlockDesc
+  --         pure $ BlockDesc
   --           { _bdesc_blockStart = rol1
   --           , _bdesc_min = minR
   --           , _bdesc_max = maxR
   --           , _bdesc_opIndentFloatUp = Just (1+opLen)
   --           }
-  --   return $ Layouter
+  --   pure $ Layouter
   --     { _layouter_desc = LayoutDesc
   --       { _ldesc_line = line
   --       , _ldesc_block = block
@@ -492,7 +492,7 @@ layoutType ltype@(L typAnn typ) = docWrapNodeAround ltype $ case typ of
   --   let line = do -- Maybe
   --         l <- _ldesc_line desc
   --         let len = bangLen + _lColumns_min l
-  --         return $ LayoutColumns
+  --         pure $ LayoutColumns
   --           { _lColumns_key = ColumnKeyUnique
   --           , _lColumns_lengths = [len]
   --           , _lColumns_min = len
@@ -500,13 +500,13 @@ layoutType ltype@(L typAnn typ) = docWrapNodeAround ltype $ case typ of
   --   let block = do -- Maybe
   --         rol <- descToBlockStart desc
   --         (minR,maxR) <- descToBlockMinMax desc
-  --         return $ BlockDesc
+  --         pure $ BlockDesc
   --           { _bdesc_blockStart = rol
   --           , _bdesc_min = minR
   --           , _bdesc_max = maxR
   --           , _bdesc_opIndentFloatUp = Nothing
   --           }
-  --   return $ Layouter
+  --   pure $ Layouter
   --     { _layouter_desc = LayoutDesc
   --       { _ldesc_line = line
   --       , _ldesc_block = block
@@ -615,10 +615,10 @@ layoutTyVarBndrs
   :: [LHsTyVarBndr () GhcPs]
   -> ToBriDocM [(Text, Maybe (ToBriDocM BriDocNumbered))]
 layoutTyVarBndrs = mapM $ \case
-  (L _ (UserTyVar _ _ name)) -> return $ (lrdrNameToText name, Nothing)
+  (L _ (UserTyVar _ _ name)) -> pure $ (lrdrNameToText name, Nothing)
   (L _ (KindedTyVar _ _ lrdrName kind)) -> do
     d <- docSharedWrapper layoutType kind
-    return $ (lrdrNameToText lrdrName, Just $ d)
+    pure $ (lrdrNameToText lrdrName, Just $ d)
 
 -- there is no specific reason this returns a list instead of a single
 -- BriDoc node.

@@ -216,7 +216,7 @@ traceIfDumpConf
   -> m ()
 traceIfDumpConf s accessor val = do
   whenM (mAsk <&> (_conf_debug >>> accessor >>> confUnpack)) $ do
-    trace ("---- " ++ s ++ " ----\n" ++ show val) $ return ()
+    trace ("---- " ++ s ++ " ----\n" ++ show val) $ pure ()
 
 tellDebugMess :: MonadMultiWriter (Seq String) m => String -> m ()
 tellDebugMess s = mTell $ Seq.singleton s

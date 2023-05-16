@@ -47,8 +47,8 @@ layoutDecl d@(L loc decl) = do
   case decl of
     SigD NoExtField sig -> withTransformedAnns d $ layoutSig (L loc sig)
     ValD NoExtField bind -> withTransformedAnns d $ layoutBind (L loc bind) >>= \case
-      Left ns -> docLines $ return <$> ns
-      Right n -> return n
+      Left ns -> docLines $ pure <$> ns
+      Right n -> pure n
     TyClD NoExtField tycl -> withTransformedAnns d $ layoutTyCl (L loc tycl)
     InstD NoExtField (TyFamInstD _ tfid) ->
       withTransformedAnns d $ layoutTyFamInstDecl False d tfid
@@ -156,7 +156,7 @@ layoutBind lbind@(L _ bind) = case bind of
     funcPatDocs <- docWrapNodeAround lbind
       $ docWrapNodeAround lmatches
       $ traverse (layoutPatternBind (Just idStr) binderDoc) matches
-    return $ Left $ funcPatDocs
+    pure $ Left $ funcPatDocs
   PatBind _ pat (GRHSs _ grhss whereBinds) -> do
     patDocs     <- colsWrapPat =<< layoutPat pat
     clauseDocs  <- traverse layoutGrhs grhss
@@ -201,7 +201,7 @@ layoutLocalBinds
   :: HsLocalBindsLR GhcPs GhcPs -> ToBriDocM (Maybe [BriDocNumbered])
 layoutLocalBinds binds = case binds of
   -- HsValBinds (ValBindsIn lhsBindsLR []) ->
-  --   Just . (>>= either id return) . Data.Foldable.toList <$> mapBagM layoutBind lhsBindsLR -- TODO: fix ordering
+  --   Just . (>>= either id pure) . Data.Foldable.toList <$> mapBagM layoutBind lhsBindsLR -- TODO: fix ordering
   -- x@(HsValBinds (ValBindsIn{})) ->
   --   Just . (:[]) <$> unknownNodeError "HsValBinds (ValBindsIn _ (_:_))" x
   HsValBinds _ (ValBinds _ bindlrs sigs) -> do
@@ -210,13 +210,13 @@ layoutLocalBinds binds = case binds of
           ++ [ BagSig s | s <- sigs ]
         ordered = List.sortOn (ExactPrint.rs . bindOrSigtoSrcSpan) unordered
     docs <- for ordered $ \case
-      BagBind b -> either id return <$> layoutBind b
-      BagSig  s -> return <$> layoutSig s
+      BagBind b -> either id pure <$> layoutBind b
+      BagSig  s -> pure <$> layoutSig s
     pure $ Just $ L.concat docs
 --  x@(HsValBinds (ValBindsOut _binds _lsigs)) ->
   HsValBinds _ XValBindsLR{} -> error "brittany internal error: XValBindsLR"
   HsIPBinds _ (IPBinds _ bb) -> Just <$> mapM layoutIPBind bb
-  EmptyLocalBinds{} -> return $ Nothing
+  EmptyLocalBinds{} -> pure $ Nothing
 
 -- TODO: we don't need the `LHsExpr GhcPs` anymore, now that there is
 -- parSpacing stuff.B
@@ -236,7 +236,7 @@ layoutPatternBind
 layoutPatternBind funId binderDoc lmatch@(L _ match) = do
   let pats = m_pats match
   let (GRHSs _ grhss whereBinds) = m_grhss match
-  patDocs <- pats `forM` \p -> fmap return $ colsWrapPat =<< layoutPat p
+  patDocs <- pats `forM` \p -> fmap pure $ colsWrapPat =<< layoutPat p
   let isInfix = isInfixMatch match
   mIdStr <- case match of
     Match _ (FunRhs matchId _ _) _ _ -> pure $ Just $ lrdrNameToTextAnn matchId
@@ -315,7 +315,7 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
         Just patDoc -> [appSep $ docForceSingleline $ pure patDoc]
       patPartParWrap = case mPatDoc of
         Nothing     -> id
-        Just patDoc -> docPar (return patDoc)
+        Just patDoc -> docPar (pure patDoc)
   whereIndent <- do
     shouldSpecial <-
       mAsk <&> (_conf_layout >>> _lconfig_indentWhereSpecial >>> confUnpack)
@@ -327,13 +327,13 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
   -- TODO: apart from this, there probably are more nodes below which could
   --       be shared between alternatives.
   wherePartMultiLine :: [ToBriDocM BriDocNumbered] <- case mWhereDocs of
-    Nothing -> return []
+    Nothing -> pure []
     Just [w] -> pure . pure <$> docAlt
       [ docEnsureIndent BrIndentRegular
         $ docSeq
             [ docLitS "where"
             , docSeparator
-            , docForceSingleline $ return w
+            , docForceSingleline $ pure w
             ]
       , docMoveToKWDP AnnWhere False
       $ docEnsureIndent whereIndent
@@ -342,7 +342,7 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
           , docEnsureIndent whereIndent
           $ docSetIndentLevel
           $ docNonBottomSpacing
-          $ return w
+          $ pure w
           ]
       ]
     Just ws ->
@@ -355,27 +355,27 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
             $ docSetIndentLevel
             $ docNonBottomSpacing
             $ docLines
-            $ return
+            $ pure
             <$> ws
             ]
   let
     singleLineGuardsDoc guards = appSep $ case guards of
       [] -> docEmpty
       [g] -> docSeq
-        [appSep $ docLitS "|", docForceSingleline $ return g]
+        [appSep $ docLitS "|", docForceSingleline $ pure g]
       gs ->
         docSeq
           $ [appSep $ docLitS "|"]
           ++ (List.intersperse
                docCommaSep
-               (docForceSingleline . return <$> gs)
+               (docForceSingleline . pure <$> gs)
              )
     wherePart = case mWhereDocs of
       Nothing  -> Just docEmpty
       Just [w] -> Just $ docSeq
         [ docSeparator
         , appSep $ docLitS "where"
-        , docSetIndentLevel $ docForceSingleline $ return w
+        , docSetIndentLevel $ docForceSingleline $ pure w
         ]
       _        -> Nothing
 
@@ -392,8 +392,8 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
             (ColBindingLine alignmentToken)
             [ docSeq (patPartInline ++ [guardPart])
             , docSeq
-              [ appSep $ return binderDoc
-              , docForceSingleline $ return body
+              [ appSep $ pure binderDoc
+              , docForceSingleline $ pure body
               , wherePart'
               ]
             ]
@@ -404,8 +404,8 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
                 (ColBindingLine alignmentToken)
                 [ docSeq (patPartInline ++ [guardPart])
                 , docSeq
-                  [ appSep $ return binderDoc
-                  , docForceParSpacing $ docAddBaseY BrIndentRegular $ return
+                  [ appSep $ pure binderDoc
+                  , docForceParSpacing $ docAddBaseY BrIndentRegular $ pure
                     body
                   ]
                 ]
@@ -415,8 +415,8 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
         addAlternative
           $ docLines
           $ [ docForceSingleline
-              $ docSeq (patPartInline ++ [guardPart, return binderDoc])
-            , docEnsureIndent BrIndentRegular $ docForceSingleline $ return
+              $ docSeq (patPartInline ++ [guardPart, pure binderDoc])
+            , docEnsureIndent BrIndentRegular $ docForceSingleline $ pure
               body
             ]
           ++ wherePartMultiLine
@@ -428,32 +428,32 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
                 (ColBindingLine alignmentToken)
                 [ docSeq (patPartInline ++ [guardPart])
                 , docSeq
-                  [ appSep $ return binderDoc
-                  , docForceParSpacing $ docAddBaseY BrIndentRegular $ return
+                  [ appSep $ pure binderDoc
+                  , docForceParSpacing $ docAddBaseY BrIndentRegular $ pure
                     body
                   ]
                 ]
             ]
            -- , lineMod $ docAlt
-           --   [ docSetBaseY $ return body
-           --   , docAddBaseY BrIndentRegular $ return body
+           --   [ docSetBaseY $ pure body
+           --   , docAddBaseY BrIndentRegular $ pure body
            --   ]
           ++ wherePartMultiLine
         -- pattern and exactly one clause in single line, body in new line.
         addAlternative
           $ docLines
-          $ [ docSeq (patPartInline ++ [guardPart, return binderDoc])
+          $ [ docSeq (patPartInline ++ [guardPart, pure binderDoc])
             , docNonBottomSpacing
             $ docEnsureIndent BrIndentRegular
             $ docAddBaseY BrIndentRegular
-            $ return body
+            $ pure body
             ]
           ++ wherePartMultiLine
 
-      _ -> return () -- no alternatives exclusively when `length clauseDocs /= 1`
+      _ -> pure () -- no alternatives exclusively when `length clauseDocs /= 1`
 
     case mPatDoc of
-      Nothing -> return ()
+      Nothing -> pure ()
       Just patDoc ->
         -- multiple clauses added in-paragraph, each in a single line
         -- example: foo | bar = baz
@@ -461,7 +461,7 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
         addAlternativeCond (indentPolicy == IndentPolicyFree)
           $ docLines
           $ [ docSeq
-                [ appSep $ docForceSingleline $ return patDoc
+                [ appSep $ docForceSingleline $ pure patDoc
                 , docSetBaseY
                 $ docLines
                 $ clauseDocs
@@ -473,11 +473,11 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
                         ColGuardedBody
                         [ guardPart
                         , docSeq
-                          [ appSep $ return binderDoc
-                          , docForceSingleline $ return bodyDoc
+                          [ appSep $ pure binderDoc
+                          , docForceSingleline $ pure bodyDoc
                           -- i am not sure if there is a benefit to using
                           -- docForceParSpacing additionally here:
-                          -- , docAddBaseY BrIndentRegular $ return bodyDoc
+                          -- , docAddBaseY BrIndentRegular $ pure bodyDoc
                           ]
                         ]
                 ]
@@ -499,11 +499,11 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
                   ColGuardedBody
                   [ guardPart
                   , docSeq
-                    [ appSep $ return binderDoc
-                    , docForceSingleline $ return bodyDoc
+                    [ appSep $ pure binderDoc
+                    , docForceSingleline $ pure bodyDoc
                     -- i am not sure if there is a benefit to using
                     -- docForceParSpacing additionally here:
-                    -- , docAddBaseY BrIndentRegular $ return bodyDoc
+                    -- , docAddBaseY BrIndentRegular $ pure bodyDoc
                     ]
                   ]
         ]
@@ -523,22 +523,22 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
                       [] -> []
                       [g] ->
                         [ docForceSingleline $ docSeq
-                            [appSep $ docLitS "|", return g]
+                            [appSep $ docLitS "|", pure g]
                         ]
                       gs ->
                         [ docForceSingleline
                             $ docSeq
                             $ [appSep $ docLitS "|"]
-                            ++ List.intersperse docCommaSep (return <$> gs)
+                            ++ List.intersperse docCommaSep (pure <$> gs)
                         ]
                     )
                   ++ [ docSeparator
                      , docCols
                        ColOpPrefix
-                       [ appSep $ return binderDoc
+                       [ appSep $ pure binderDoc
                        , docAddBaseY BrIndentRegular
                        $ docForceParSpacing
-                       $ return bodyDoc
+                       $ pure bodyDoc
                        ]
                      ]
         ]
@@ -557,21 +557,21 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
                     [] -> []
                     [g] ->
                       [ docForceSingleline
-                          $ docSeq [appSep $ docLitS "|", return g]
+                          $ docSeq [appSep $ docLitS "|", pure g]
                       ]
                     gs ->
                       [ docForceSingleline
                           $ docSeq
                           $ [appSep $ docLitS "|"]
-                          ++ List.intersperse docCommaSep (return <$> gs)
+                          ++ List.intersperse docCommaSep (pure <$> gs)
                       ]
                   )
                   ++ [ docCols
                          ColOpPrefix
-                         [ appSep $ return binderDoc
+                         [ appSep $ pure binderDoc
                          , docAddBaseY BrIndentRegular
                          $ docForceParSpacing
-                         $ return bodyDoc
+                         $ pure bodyDoc
                          ]
                      ]
         ]
@@ -587,18 +587,18 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
           >>= \(guardDocs, bodyDoc, _) ->
                 (case guardDocs of
                     [] -> []
-                    [g] -> [docSeq [appSep $ docLitS "|", return g]]
+                    [g] -> [docSeq [appSep $ docLitS "|", pure g]]
                     (g1 : gr) ->
-                      (docSeq [appSep $ docLitS "|", return g1]
+                      (docSeq [appSep $ docLitS "|", pure g1]
                       : (gr <&> \g ->
-                          docSeq [docCommaSep, return g]
+                          docSeq [docCommaSep, pure g]
                         )
                       )
                   )
                   ++ [ docCols
                          ColOpPrefix
-                         [ appSep $ return binderDoc
-                         , docAddBaseY BrIndentRegular $ return bodyDoc
+                         [ appSep $ pure binderDoc
+                         , docAddBaseY BrIndentRegular $ pure bodyDoc
                          ]
                      ]
         ]
@@ -874,8 +874,8 @@ layoutClsInst lcid@(L _ cid) = docLines
   joinBinds
     :: Either [BriDocNumbered] BriDocNumbered -> ToBriDocM BriDocNumbered
   joinBinds = \case
-    Left ns -> docLines $ return <$> ns
-    Right n -> return n
+    Left ns -> docLines $ pure <$> ns
+    Right n -> pure n
 
   layoutAndLocateTyFamInsts
     :: LTyFamInstDecl GhcPs -> ToBriDocM (LocatedAn AnnListItem BriDocNumbered)

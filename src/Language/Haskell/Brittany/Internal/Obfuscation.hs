@@ -67,7 +67,7 @@ keywords = S.fromList
   ]
 
 extraKWs :: Set String
-extraKWs = S.fromList ["return", "pure", "Int", "True", "False", "otherwise"]
+extraKWs = S.fromList ["pure", "pure", "Int", "True", "False", "otherwise"]
 
 createAlias :: String -> IO String
 createAlias xs = go NoHint xs

@@ -37,7 +37,7 @@ data WriteMode = Display | Inplace
 
 instance Read WriteMode where
   readPrec = val "display" Display <|> val "inplace" Inplace
-    where val iden v = ReadPrec.lift $ ReadP.string iden >> return v
+    where val iden v = ReadPrec.lift $ ReadP.string iden >> pure v
 
 instance Show WriteMode where
   show Display = "display"
@@ -217,10 +217,10 @@ mainCmdParser helpDesc = do
           )
         >>= \case
               Nothing -> System.Exit.exitWith (System.Exit.ExitFailure 53)
-              Just x -> return x
+              Just x -> pure x
     when (config & _conf_debug & _dconf_dump_config & confUnpack)
       $ trace (showConfigYaml config)
-      $ return ()
+      $ pure ()
 
     results <- zipWithM
       (coreIO config suppressOutput checkMode)

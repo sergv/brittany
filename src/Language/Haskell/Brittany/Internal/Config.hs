@@ -136,7 +136,7 @@ cmdlineConfigParser = do
   disableFormatting <- addSimpleBoolFlag "" ["disable-formatting"] (flagHelp $ parDoc "parse, but don't transform the input at all. Useful for inline config for specific modules.")
   obfuscate <- addSimpleBoolFlag "" ["obfuscate"] (flagHelp $ parDoc "apply obfuscator to the output.")
 
-  return $ Config
+  pure $ Config
     { _conf_version = mempty
     , _conf_debug = DebugConfig
       { _dconf_dump_config = wrapLast $ falseToNothing dumpConfig
@@ -211,11 +211,11 @@ readConfig path = do
             ++ ":"
           liftIO $ putStrErrLn (Data.Yaml.prettyPrintParseException e)
           mzero
-        Right x -> return x
-      return $ Just fileConf
-    else return $ Nothing
+        Right x -> pure x
+      pure $ Just fileConf
+    else pure $ Nothing
 
--- | Looks for a user-global config file and return its path.
+-- | Looks for a user-global config file and pure its path.
 -- If there is no global config in a system, one will be created.
 userConfigPath :: IO System.IO.FilePath
 userConfigPath = do
@@ -252,7 +252,7 @@ readConfigs cmdlineConfig configPaths = do
   let
     merged =
       Semigroup.sconcat $ NonEmpty.reverse (cmdlineConfig :| catMaybes configs)
-  return $ cZipWith fromOptionIdentity staticDefaultConfig merged
+  pure $ cZipWith fromOptionIdentity staticDefaultConfig merged
 
 -- | Reads provided configs
 -- but also applies the user default configuration (with lowest priority)

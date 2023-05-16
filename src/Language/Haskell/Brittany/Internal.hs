@@ -73,7 +73,7 @@ pPrintModuleAndCheck conf parsedModule = do
   parseResult <- parseModuleFromString
     ghcOptions
     "output"
-    (\_ -> return $ Right ())
+    (\_ -> pure $ Right ())
     (T.unpack output)
   let errs' = errs ++ case parseResult of
         Left msg -> [ErrorOutputCheck msg]
@@ -235,7 +235,7 @@ layoutBriDoc briDoc = do
       >>> traceIfDumpConf "bridoc final" _dconf_dump_bridoc_final)
     -- -- convert to Simple type
     -- simpl <- mGet <&> transformToSimple
-    -- return simpl
+    -- pure simpl
 
   let state = LayoutState
         { _lstate_baseYs           = [0]
@@ -251,4 +251,4 @@ layoutBriDoc briDoc = do
 
   _ <- MultiRWSS.withMultiStateS state $ layoutBriDocM briDoc'
 
-  return $ ()
+  pure $ ()

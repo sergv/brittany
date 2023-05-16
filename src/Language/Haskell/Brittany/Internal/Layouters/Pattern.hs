@@ -46,21 +46,21 @@ layoutPat lpat@(L _ pat) = docWrapNodeAround lpat $ case pat of
     left  <- docParenL
     right <- docParenR
     innerDocs <- colsWrapPat =<< layoutPat inner
-    return $ Seq.empty Seq.|> left Seq.|> innerDocs Seq.|> right
-    -- return $ (left Seq.<| innerDocs) Seq.|> right
+    pure $ Seq.empty Seq.|> left Seq.|> innerDocs Seq.|> right
+    -- pure $ (left Seq.<| innerDocs) Seq.|> right
     -- case Seq.viewl innerDocs of
-    --   Seq.EmptyL -> fmap return $ docLit $ Text.pack "()" -- this should never occur..
+    --   Seq.EmptyL -> fmap pure $ docLit $ Text.pack "()" -- this should never occur..
     --   x1 Seq.:< rest -> case Seq.viewr rest of
     --     Seq.EmptyR ->
-    --       fmap return $ docSeq
+    --       fmap pure $ docSeq
     --       [ docLit $ Text.pack "("
-    --       , return x1
+    --       , pure x1
     --       , docLit $ Text.pack ")"
     --       ]
     --     middle Seq.:> xN -> do
-    --       x1' <- docSeq [docLit $ Text.pack "(", return x1]
-    --       xN' <- docSeq [return xN, docLit $ Text.pack ")"]
-    --       return $ (x1' Seq.<| middle) Seq.|> xN'
+    --       x1' <- docSeq [docLit $ Text.pack "(", pure x1]
+    --       xN' <- docSeq [pure xN, docLit $ Text.pack ")"]
+    --       pure $ (x1' Seq.<| middle) Seq.|> xN'
   ConPat _ lname (PrefixCon (tyargs :: [HsConPatTyArg GhcPs]) args) -> do
     -- Abc @x @y @z a b c -> expr
     let nameDoc = lrdrNameToTextAnn lname
@@ -75,18 +75,18 @@ layoutPat lpat@(L _ pat) = docWrapNodeAround lpat $ case pat of
         pure $ x1 Seq.<| xR
 
     -- if null args'
-    --   then return <$> docLit nameDoc
+    --   then pure <$> docLit nameDoc
     --   else do
     --     x1 <- appSep (docLit nameDoc)
     --     xR <- fmap Seq.fromList $ sequence $ spacifyDocs $ fmap colsWrapPat args'
-    --     return $ x1 Seq.<| xR
+    --     pure $ x1 Seq.<| xR
   ConPat _ lname (InfixCon left right) -> do
     -- a :< b -> expr
     let nameDoc = lrdrNameToTextAnn lname
     leftDoc  <- appSep . colsWrapPat =<< layoutPat left
     rightDoc <- colsWrapPat =<< layoutPat right
     middle   <- appSep $ docLit nameDoc
-    return $ Seq.empty Seq.|> leftDoc Seq.|> middle Seq.|> rightDoc
+    pure $ Seq.empty Seq.|> leftDoc Seq.|> middle Seq.|> rightDoc
   ConPat _ lname (RecCon (HsRecFields [] Nothing)) -> do
     -- Abc{} -> expr
     let t = lrdrNameToText lname
@@ -98,9 +98,9 @@ layoutPat lpat@(L _ pat) = docWrapNodeAround lpat $ case pat of
     fds <- fs `forM` \(L _ (HsFieldBind _ann (L _ fieldOcc) fPat pun)) -> do
       let FieldOcc _ lnameF = fieldOcc
       fExpDoc <- if pun
-        then return Nothing
+        then pure Nothing
         else Just <$> docSharedWrapper layoutPat fPat
-      return (lrdrNameToText lnameF, fExpDoc)
+      pure (lrdrNameToText lnameF, fExpDoc)
     Seq.singleton <$> docSeq
       [ appSep $ docLit t
       , appSep $ docLitS "{"
@@ -125,9 +125,9 @@ layoutPat lpat@(L _ pat) = docWrapNodeAround lpat $ case pat of
       fds <- fs `forM` \(L _ (HsFieldBind _ann (L _ fieldOcc) fPat pun)) -> do
         let FieldOcc _ lnameF = fieldOcc
         fExpDoc <- if pun
-          then return Nothing
+          then pure Nothing
           else Just <$> docSharedWrapper layoutPat fPat
-        return (lrdrNameToText lnameF, fExpDoc)
+        pure (lrdrNameToText lnameF, fExpDoc)
       Seq.singleton <$> docSeq
         [ appSep $ docLit t
         , appSep $ docLitS "{"
@@ -165,11 +165,11 @@ layoutPat lpat@(L _ pat) = docWrapNodeAround lpat $ case pat of
                -- cases, we need the AddBaseY here.
                -- This can all change when patterns get multiline support.
                docAddBaseY BrIndentRegular $ docSeq
-          [ appSep $ return xN
+          [ appSep $ pure xN
           , appSep $ docLitS "::"
           , docForceSingleline tyDoc
           ]
-        return $ xR Seq.|> xN'
+        pure $ xR Seq.|> xN'
   ListPat _ elems ->
     -- [] -> expr1
     -- [nestedpat1, nestedpat2, nestedpat3] -> expr2
@@ -188,20 +188,20 @@ layoutPat lpat@(L _ pat) = docWrapNodeAround lpat $ case pat of
       Just{}  -> Seq.fromList [negDoc, litDoc]
       Nothing -> Seq.singleton litDoc
 
-  _ -> return <$> briDocByExactInlineOnly "some unknown pattern" lpat
+  _ -> pure <$> briDocByExactInlineOnly "some unknown pattern" lpat
 
 colsWrapPat :: Seq BriDocNumbered -> ToBriDocM BriDocNumbered
-colsWrapPat = docCols ColPatterns . fmap return . Foldable.toList
+colsWrapPat = docCols ColPatterns . fmap pure . Foldable.toList
 
 wrapPatPrepend
   :: LPat GhcPs -> ToBriDocM BriDocNumbered -> ToBriDocM (Seq BriDocNumbered)
 wrapPatPrepend pat prepElem = do
   patDocs <- layoutPat pat
   case Seq.viewl patDocs of
-    Seq.EmptyL -> return Seq.empty
+    Seq.EmptyL -> pure Seq.empty
     x1 Seq.:< xR -> do
-      x1' <- docSeq [prepElem, return x1]
-      return $ x1' Seq.<| xR
+      x1' <- docSeq [prepElem, pure x1]
+      pure $ x1' Seq.<| xR
 
 wrapPatListy
   :: [LPat GhcPs]
@@ -216,8 +216,8 @@ wrapPatListy elems both start end = do
     x1 Seq.:< rest -> do
       sDoc  <- start
       eDoc  <- end
-      rest' <- rest `forM` \bd -> docSeq [docCommaSep, return bd]
-      return $ (sDoc Seq.<| x1 Seq.<| rest') Seq.|> eDoc
+      rest' <- rest `forM` \bd -> docSeq [docCommaSep, pure bd]
+      pure $ (sDoc Seq.<| x1 Seq.<| rest') Seq.|> eDoc
 
 layoutHsConPatTyArg :: HsConPatTyArg GhcPs -> ToBriDocM (Seq BriDocNumbered)
 layoutHsConPatTyArg (HsConPatTyArg _atTok sigTy) = layoutHsPatSigType sigTy

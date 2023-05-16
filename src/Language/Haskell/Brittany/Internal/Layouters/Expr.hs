@@ -135,7 +135,7 @@ layoutExpr lexpr@(L _ expr) = do
         (docSetBaseAndIndent
         $ docNonBottomSpacing
         $ docLines
-        $ return
+        $ pure
         <$> funcPatDocs
         )
     HsLamCase _ LamCases _ -> do
@@ -461,7 +461,7 @@ layoutExpr lexpr@(L _ expr) = do
           (docSetBaseAndIndent
           $ docNonBottomSpacing
           $ docLines
-          $ return
+          $ pure
           <$> funcPatDocs
           )
         , docPar
@@ -473,7 +473,7 @@ layoutExpr lexpr@(L _ expr) = do
             (docSetBaseAndIndent
             $ docNonBottomSpacing
             $ docLines
-            $ return
+            $ pure
             <$> funcPatDocs
             )
           )

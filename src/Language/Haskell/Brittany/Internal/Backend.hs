@@ -98,7 +98,7 @@ doIndent = \case
 layoutBriDocM :: forall m. LayoutConstraints m => BriDoc -> m ()
 layoutBriDocM = \case
   BDEmpty ->
-    return () -- can it be that simple
+    pure () -- can it be that simple
   BDLit t -> do
     layoutIndentRestorePostComment
     layoutRemoveIndentLevelLinger
@@ -287,15 +287,15 @@ briDocLineLength briDoc = flip StateS.evalState False $ rec briDoc
       BDForceMultiline bd     -> rec bd
       BDForceSingleline bd    -> rec bd
       BDForwardLineMode bd    -> rec bd
-      BDExternal _ t          -> return $ T.length t
-      BDPlain t               -> return $ T.length t
+      BDExternal _ t          -> pure $ T.length t
+      BDPlain t               -> pure $ T.length t
       BDAnnotationBefore _ bd -> rec bd
       BDAnnotationKW _ bd     -> rec bd
       BDAnnotationAfter _ bd  -> rec bd
       BDMoveToKWDP _ _ bd     -> rec bd
       BDLines ls@(_ : _)      -> do
         x <- StateS.get
-        return $ maximum $ ls <&> \l -> StateS.evalState (rec l) x
+        pure $ maximum $ ls <&> \l -> StateS.evalState (rec l) x
       BDLines []              -> error "briDocLineLength BDLines []"
       BDEnsureIndent _ bd     -> rec bd
       BDSetParSpacing bd      -> rec bd
@@ -479,14 +479,14 @@ alignColsLines bridocs = do -- colInfos `forM_` \colInfo -> do
 
       mergeBriDocsW
         :: ColInfo -> [BriDoc] -> StateS.State ColBuildState [ColInfo]
-      mergeBriDocsW _ [] = return []
+      mergeBriDocsW _ [] = pure []
       mergeBriDocsW lastInfo (bd : bdr) = do
         info  <- mergeInfoBriDoc True lastInfo bd
         infor <- mergeBriDocsW
           -- (if alignBreak && briDocIsMultiLine bd then ColInfoStart else info)
           (if shouldBreakAfter bd then ColInfoStart else info)
           bdr
-        return $ info : infor
+        pure $ info : infor
 
       -- even with alignBreak config flag, we don't stop aligning for certain
       -- ColSigs - the ones with "False" below. The main reason is that
@@ -562,9 +562,9 @@ alignColsLines bridocs = do -- colInfos `forM_` \colInfo -> do
                         (lastFlag, spaces Seq.|> trueSpacings)
                         m
                       }
-              return $ ColInfo infoInd colSig (zip curLengths infos)
+              pure $ ColInfo infoInd colSig (zip curLengths infos)
             | otherwise -> briDocToColInfo lastFlag brdc
-          brdc -> return $ ColInfoNo brdc
+          brdc -> pure $ ColInfoNo brdc
 
 briDocToColInfo :: Bool -> BriDoc -> StateS.State ColBuildState ColInfo
 briDocToColInfo lastFlag = \case
@@ -595,7 +595,7 @@ withAlloc lastFlag f = do
   (space, info) <- f ind
   StateS.get >>= \c -> StateS.put
     $ c { _cbs_map = IntMapS.insert ind (lastFlag, space) $ _cbs_map c }
-  return info
+  pure info
 
 processInfo :: forall m. LayoutConstraints m => Int -> ColMap2 -> ColInfo -> m ()
 processInfo maxSpace m = \case
