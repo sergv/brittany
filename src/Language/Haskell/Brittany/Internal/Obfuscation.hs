@@ -4,12 +4,12 @@ module Language.Haskell.Brittany.Internal.Obfuscation (obfuscate) where
 
 import Data.Char
 import Data.Functor
-import qualified Data.List as L
-import qualified Data.Map as M
-import qualified Data.Set as S
-import qualified Data.Text as T
+import Data.List qualified as L
+import Data.Map qualified as M
+import Data.Set qualified as S
+import Data.Text qualified as T
 import Data.Vector (Vector)
-import qualified Data.Vector as V
+import Data.Vector qualified as V
 import Language.Haskell.Brittany.Internal.Prelude
 import System.Random
 

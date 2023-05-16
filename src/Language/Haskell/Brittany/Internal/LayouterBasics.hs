@@ -85,21 +85,21 @@ module Language.Haskell.Brittany.Internal.LayouterBasics
   , docSharedWrapper
   ) where
 
-import qualified Control.Monad.Trans.MultiRWS.Strict as MultiRWSS
-import qualified Control.Monad.Writer.Strict as Writer
-import qualified Data.Char as Char
+import Control.Monad.Trans.MultiRWS.Strict qualified as MultiRWSS
+import Control.Monad.Writer.Strict qualified as Writer
+import Data.Char qualified as Char
 import Data.Data (Data)
 import Data.Functor
-import qualified Data.Generics as SYB
+import Data.Generics qualified as SYB
 import Data.Maybe
 import Data.Monoid as Monoid
 import Data.Occurrences
-import qualified Data.Semigroup as Semigroup
-import qualified Data.Sequence as Seq
-import qualified Data.Text as Text
-import qualified Data.Text.Lazy.Builder as Text.Builder
+import Data.Semigroup qualified as Semigroup
+import Data.Sequence qualified as Seq
+import Data.Text qualified as Text
+import Data.Text.Lazy.Builder qualified as Text.Builder
 import GHC (GenLocated(L), moduleName, moduleNameString)
-import qualified GHC.OldList as List
+import GHC.OldList qualified as List
 import GHC.Parser.Annotation as GHC
 import GHC.Types.Name (getOccString)
 import GHC.Types.Name.Occurrence (occNameString)
@@ -109,13 +109,13 @@ import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.GHC.ExactPrint (ExactPrint(..), exactPrint)
-import qualified Language.Haskell.GHC.ExactPrint as ExactPrint
+import Language.Haskell.GHC.ExactPrint qualified as ExactPrint
 import Language.Haskell.GHC.ExactPrint.Types
-import qualified Language.Haskell.GHC.ExactPrint.Types as ExactPrint
-import qualified Language.Haskell.GHC.ExactPrint.Types as ExactPrint.Types
+import Language.Haskell.GHC.ExactPrint.Types qualified as ExactPrint
+import Language.Haskell.GHC.ExactPrint.Types qualified as ExactPrint.Types
 
 import Language.Haskell.GHC.ExactPrint.Utils (ss2posEnd, ss2pos)
-import qualified Language.Haskell.GHC.ExactPrint.Utils as ExactPrint.Utils
+import Language.Haskell.GHC.ExactPrint.Utils qualified as ExactPrint.Utils
 
 processDefault
   :: ( MonadMultiWriter Text.Builder.Builder m

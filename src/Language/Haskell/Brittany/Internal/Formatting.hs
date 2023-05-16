@@ -13,11 +13,11 @@ module Language.Haskell.Brittany.Internal.Formatting
   , ParseError(..)
   ) where
 
-import qualified Data.Semigroup as Semigroup
-import qualified Data.Sequence as Seq
-import qualified Data.Text as T
-import qualified GHC.Driver.Session as GHC
-import qualified GHC.LanguageExtensions.Type as GHC
+import Data.Semigroup qualified as Semigroup
+import Data.Sequence qualified as Seq
+import Data.Text qualified as T
+import GHC.Driver.Session qualified as GHC
+import GHC.LanguageExtensions.Type qualified as GHC
 import Language.Haskell.Brittany.Internal
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.Obfuscation
@@ -25,7 +25,7 @@ import Language.Haskell.Brittany.Internal.ParseModule
 import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.Brittany.Internal.Utils
-import qualified Language.Haskell.GHC.ExactPrint as ExactPrint
+import Language.Haskell.GHC.ExactPrint qualified as ExactPrint
 import System.FilePath
 
 newtype ParseError = ParseError { unParseError :: String }

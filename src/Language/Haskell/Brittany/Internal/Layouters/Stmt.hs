@@ -5,7 +5,7 @@
 module Language.Haskell.Brittany.Internal.Layouters.Stmt (layoutStmt) where
 
 import Data.Functor
-import qualified Data.Semigroup as Semigroup
+import Data.Semigroup qualified as Semigroup
 import GHC (GenLocated(L))
 import GHC.Hs
 import Language.Haskell.Brittany.Internal.Config.Types

@@ -37,11 +37,11 @@ module Language.Haskell.Brittany.Internal.BackendUtils
 
 import Data.Foldable
 import Data.Functor
-import qualified Data.Maybe
-import qualified Data.Semigroup as Semigroup
-import qualified Data.Text as Text
-import qualified Data.Text.Lazy.Builder as Text.Builder
-import qualified GHC.OldList as List
+import Data.Maybe qualified
+import Data.Semigroup qualified as Semigroup
+import Data.Text qualified as Text
+import Data.Text.Lazy.Builder qualified as Text.Builder
+import GHC.OldList qualified as List
 import GHC.Parser.Annotation
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.Prelude

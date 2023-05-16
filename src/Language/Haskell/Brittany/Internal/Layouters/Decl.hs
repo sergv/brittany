@@ -13,20 +13,20 @@ module Language.Haskell.Brittany.Internal.Layouters.Decl
   ) where
 
 import Data.Data (Data)
-import qualified Data.Foldable
+import Data.Foldable qualified
 import Data.Functor
-import qualified Data.List as L
-import qualified Data.Maybe
+import Data.List qualified as L
+import Data.Maybe qualified
 import Data.Occurrences
-import qualified Data.Semigroup as Semigroup
-import qualified Data.Text as T
-import qualified Data.Text as Text
+import Data.Semigroup qualified as Semigroup
+import Data.Text qualified as T
+import Data.Text qualified as Text
 import Data.Traversable
 import GHC (GenLocated(L))
 import GHC.Data.Bag (bagToList, emptyBag)
-import qualified GHC.Data.FastString as FastString
+import GHC.Data.FastString qualified as FastString
 import GHC.Hs
-import qualified GHC.OldList as List
+import GHC.OldList qualified as List
 import GHC.Types.Basic (Activation(..), InlinePragma(..), InlineSpec(..), RuleMatchInfo(..))
 import GHC.Types.Fixity (LexicalFixity(..))
 import GHC.Types.SrcLoc (SrcSpan, getLoc, unLoc)
@@ -40,7 +40,7 @@ import {-# SOURCE #-} Language.Haskell.Brittany.Internal.Layouters.Stmt
 import Language.Haskell.Brittany.Internal.Layouters.Type
 import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.Types
-import qualified Language.Haskell.GHC.ExactPrint.Utils as ExactPrint
+import Language.Haskell.GHC.ExactPrint.Utils qualified as ExactPrint
 
 layoutDecl :: LHsDecl GhcPs -> ToBriDocM BriDocNumbered
 layoutDecl d@(L loc decl) = do

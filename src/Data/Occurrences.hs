@@ -23,12 +23,12 @@ module Data.Occurrences
   ( Occurrences(..)
   ) where
 
-import qualified Data.ByteString as BS
+import Data.ByteString qualified as BS
 import Data.Kind
 import Data.List.NonEmpty (NonEmpty(..))
 import GHC.Generics
 
-import qualified GHC.Data.Strict
+import GHC.Data.Strict qualified
 import GHC.Parser.Annotation
 import GHC.Types.SrcLoc
 

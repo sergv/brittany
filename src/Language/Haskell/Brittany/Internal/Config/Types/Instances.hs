@@ -19,8 +19,8 @@
 
 module Language.Haskell.Brittany.Internal.Config.Types.Instances () where
 
-import qualified Data.Aeson.Key as Key
-import qualified Data.Aeson.Types as Aeson
+import Data.Aeson.Key qualified as Key
+import Data.Aeson.Types qualified as Aeson
 import Data.Yaml
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.Prelude

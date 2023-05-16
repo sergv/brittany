@@ -38,14 +38,14 @@ module Language.Haskell.Brittany.Internal.Types
   , pattern LineModeInvalid
   ) where
 
-import qualified Control.Monad.Trans.MultiRWS.Strict as MultiRWSS
+import Control.Monad.Trans.MultiRWS.Strict qualified as MultiRWSS
 import Data.Data (Data)
 import Data.Generics.Uniplate.Direct as Uniplate
-import qualified Data.Strict.Maybe as Strict
-import qualified Data.Text.Lazy.Builder as Text.Builder
+import Data.Strict.Maybe qualified as Strict
+import Data.Text.Lazy.Builder qualified as Text.Builder
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.Prelude
-import qualified Safe
+import Safe qualified
 import GHC.Parser.Annotation
 
 type PPM = MultiRWSS.MultiRWS

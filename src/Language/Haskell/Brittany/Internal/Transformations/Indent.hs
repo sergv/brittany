@@ -4,8 +4,8 @@ module Language.Haskell.Brittany.Internal.Transformations.Indent (transformSimpl
 
 import Prelude hiding (lines)
 
-import qualified Data.Generics.Uniplate.Direct as Uniplate
-import qualified GHC.OldList as List
+import Data.Generics.Uniplate.Direct qualified as Uniplate
+import GHC.OldList qualified as List
 import Language.Haskell.Brittany.Internal.Types
 
 -- prepare layouting by translating BDPar's, replacing them with Indents and

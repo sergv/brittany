@@ -9,19 +9,19 @@ module Language.Haskell.Brittany.Internal
 
 import Control.Category hiding (id, (.))
 import Control.Monad.Trans.MultiRWS.Strict (mAsk, mTell, mSet, mGet)
-import qualified Control.Monad.Trans.MultiRWS.Strict as MultiRWSS
+import Control.Monad.Trans.MultiRWS.Strict qualified as MultiRWSS
 import Data.Foldable
 import Data.Functor.Identity
-import qualified Data.List as L
+import Data.List qualified as L
 import Data.Maybe
-import qualified Data.Semigroup as Semigroup
+import Data.Semigroup qualified as Semigroup
 import Data.Sequence (Seq)
 import Data.Text (Text)
-import qualified Data.Text as T
-import qualified Data.Text.Lazy as TL
-import qualified Data.Text.Lazy.Builder as TLB
+import Data.Text qualified as T
+import Data.Text.Lazy qualified as TL
+import Data.Text.Lazy.Builder qualified as TLB
 
-import qualified GHC hiding (parseModule)
+import GHC qualified hiding (parseModule)
 import GHC.Hs
 import GHC.Types.SrcLoc
 import Language.Haskell.Brittany.Internal.Backend
@@ -38,7 +38,7 @@ import Language.Haskell.Brittany.Internal.Transformations.Indent
 import Language.Haskell.Brittany.Internal.Transformations.Par
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.Brittany.Internal.Utils
-import qualified Language.Haskell.GHC.ExactPrint.Types as ExactPrint
+import Language.Haskell.GHC.ExactPrint.Types qualified as ExactPrint
 import Language.Haskell.GHC.ExactPrint.Utils (tokComment)
 
 -- BrittanyErrors can be non-fatal warnings, thus both are returned instead

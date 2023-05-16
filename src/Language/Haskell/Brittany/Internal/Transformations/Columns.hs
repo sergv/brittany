@@ -3,8 +3,8 @@
 
 module Language.Haskell.Brittany.Internal.Transformations.Columns (transformSimplifyColumns) where
 
-import qualified Data.Generics.Uniplate.Direct as Uniplate
-import qualified GHC.OldList as List
+import Data.Generics.Uniplate.Direct qualified as Uniplate
+import GHC.OldList qualified as List
 import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.Types
 

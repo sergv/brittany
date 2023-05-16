@@ -31,25 +31,25 @@ module Language.Haskell.Brittany.Internal.Utils
   , transformDownMay
   ) where
 
-import qualified Data.ByteString as B
-import qualified Data.Coerce
+import Data.ByteString qualified as B
+import Data.Coerce qualified
 import Data.Data
 import Data.Functor
 import Data.Generics.Aliases
-import qualified Data.Generics.Uniplate.Direct as Uniplate
-import qualified Data.Semigroup as Semigroup
-import qualified Data.Sequence as Seq
+import Data.Generics.Uniplate.Direct qualified as Uniplate
+import Data.Semigroup qualified as Semigroup
+import Data.Sequence qualified as Seq
 import DataTreePrint
-import qualified GHC.Data.FastString as GHC
-import qualified GHC.Driver.Ppr as GHC
-import qualified GHC.OldList as List
+import GHC.Data.FastString qualified as GHC
+import GHC.Driver.Ppr qualified as GHC
+import GHC.OldList qualified as List
 import GHC.Types.Name.Occurrence as OccName (occNameString)
-import qualified GHC.Types.SrcLoc as GHC
-import qualified GHC.Utils.Outputable as GHC
+import GHC.Types.SrcLoc qualified as GHC
+import GHC.Utils.Outputable qualified as GHC
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.Types
-import qualified Text.PrettyPrint as PP
+import Text.PrettyPrint qualified as PP
 
 parDoc :: String -> PP.Doc
 parDoc = PP.fsep . fmap PP.text . List.words

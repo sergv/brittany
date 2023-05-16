@@ -9,15 +9,15 @@
 
 module Language.Haskell.Brittany.Internal.Transformations.Alt (transformAlts) where
 
-import qualified Control.Monad.Memo as Memo
-import qualified Control.Monad.Trans.MultiRWS.Strict as MultiRWSS
+import Control.Monad.Memo qualified as Memo
+import Control.Monad.Trans.MultiRWS.Strict qualified as MultiRWSS
 import Data.Functor
 import Data.HList.ContainsType
-import qualified Data.List.Extra
-import qualified Data.List.NonEmpty as NE
-import qualified Data.Semigroup as Semigroup
-import qualified Data.Text as Text
-import qualified GHC.OldList as List
+import Data.List.Extra qualified
+import Data.List.NonEmpty qualified as NE
+import Data.Semigroup qualified as Semigroup
+import Data.Text qualified as Text
+import GHC.OldList qualified as List
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.Types

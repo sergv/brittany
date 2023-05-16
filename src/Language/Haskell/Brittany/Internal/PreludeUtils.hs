@@ -4,7 +4,7 @@ module Language.Haskell.Brittany.Internal.PreludeUtils (putStrErrLn) where
 
 import Control.Applicative
 import Control.Monad.IO.Class
-import qualified Data.Strict.Maybe as Strict
+import Data.Strict.Maybe qualified as Strict
 import System.IO
 
 instance Applicative Strict.Maybe where

@@ -3,8 +3,8 @@
 module Language.Haskell.Brittany.Internal.Layouters.Import (layoutImport) where
 
 import Data.Functor
-import qualified Data.Semigroup as Semigroup
-import qualified Data.Text as Text
+import Data.Semigroup qualified as Semigroup
+import Data.Text qualified as Text
 import GHC (GenLocated(L), unLoc)
 import GHC.Hs
 import GHC.Types.PkgQual
@@ -38,7 +38,7 @@ layoutImport importD = case importD of
         hiding      = case impList of
           Just (EverythingBut, _) -> True
           _                       -> False
-        minQLength  = length "import qualified "
+        minQLength  = length "import qualified"
         qLengthReal =
           let qualifiedPart = if q /= NotQualified then length "qualified " else 0
               safePart = if safe then length "safe " else 0

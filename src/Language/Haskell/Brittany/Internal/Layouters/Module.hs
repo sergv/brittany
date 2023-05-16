@@ -17,15 +17,15 @@ module Language.Haskell.Brittany.Internal.Layouters.Module
 import Data.Bifunctor
 import Data.Foldable
 import Data.Functor
-import qualified Data.List as L
+import Data.List qualified as L
 import Data.List.Reversed (RList)
-import qualified Data.List.Reversed as RL
-import qualified Data.Maybe
-import qualified Data.Semigroup as Semigroup
-import qualified Data.Text as Text
+import Data.List.Reversed qualified as RL
+import Data.Maybe qualified
+import Data.Semigroup qualified as Semigroup
+import Data.Text qualified as Text
 import GHC (GenLocated(L), unLoc)
 import GHC.Hs
-import qualified GHC.OldList as List
+import GHC.OldList qualified as List
 -- import GHC.Unit.Module.Name
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.LayouterBasics

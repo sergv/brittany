@@ -11,9 +11,9 @@ module Language.Haskell.Brittany.Internal.Layouters.Type
   ) where
 
 import Data.Functor
-import qualified Data.Text as Text
+import Data.Text qualified as Text
 import GHC.Hs
-import qualified GHC.OldList as List
+import GHC.OldList qualified as List
 import GHC.Types.SourceText
 import GHC.Types.SrcLoc
 import GHC.Utils.Outputable (ftext, showSDocUnsafe)

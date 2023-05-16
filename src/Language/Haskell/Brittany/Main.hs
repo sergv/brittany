@@ -5,14 +5,14 @@
 module Language.Haskell.Brittany.Main (main, mainWith) where
 
 import Control.Monad (zipWithM)
-import qualified Control.Monad.Trans.Except as ExceptT
-import qualified Data.Either
+import Control.Monad.Trans.Except qualified as ExceptT
+import Data.Either qualified
 import Data.Foldable
-import qualified Data.Monoid
-import qualified Data.Semigroup as Semigroup
-import qualified Data.Text.IO as TIO
+import Data.Monoid qualified
+import Data.Semigroup qualified as Semigroup
+import Data.Text.IO qualified as TIO
 import GHC (GenLocated(L), SrcSpan)
-import qualified GHC.OldList as List
+import GHC.OldList qualified as List
 import GHC.Parser.Annotation (SrcSpanAnn'(locA))
 import GHC.Utils.Outputable (Outputable(..), showSDocUnsafe)
 import Language.Haskell.Brittany.Internal.Config
@@ -23,13 +23,13 @@ import Language.Haskell.Brittany.Internal.PreludeUtils
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.Brittany.Internal.Utils
 import Paths_brittany
-import qualified System.Directory as Directory
-import qualified System.Environment as Environment
-import qualified System.Exit
-import qualified System.FilePath.Posix as FilePath
-import qualified Text.ParserCombinators.ReadP as ReadP
-import qualified Text.ParserCombinators.ReadPrec as ReadPrec
-import qualified Text.PrettyPrint as PP
+import System.Directory qualified as Directory
+import System.Environment qualified as Environment
+import System.Exit qualified
+import System.FilePath.Posix qualified as FilePath
+import Text.ParserCombinators.ReadP qualified as ReadP
+import Text.ParserCombinators.ReadPrec qualified as ReadPrec
+import Text.PrettyPrint qualified as PP
 import Text.Read (Read(..))
 import UI.Butcher.Monadic
 

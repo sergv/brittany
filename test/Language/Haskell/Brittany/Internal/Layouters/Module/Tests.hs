@@ -23,7 +23,7 @@ import GHC.Types.SrcLoc
 
 import Language.Haskell.Brittany.Internal.Layouters.Module
 import Language.Haskell.Brittany.Internal.ParseModule
-import qualified Language.Haskell.GHC.ExactPrint.Types as ExactPrint
+import Language.Haskell.GHC.ExactPrint.Types qualified as ExactPrint
 
 transformToCommentedImportSimplified
   :: [LImportDecl GhcPs]

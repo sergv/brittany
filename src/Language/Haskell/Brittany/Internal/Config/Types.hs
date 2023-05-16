@@ -30,7 +30,7 @@ module Language.Haskell.Brittany.Internal.Config.Types
 import Data.CZipWith
 import Data.Coerce (Coercible, coerce)
 import Data.Data (Data)
-import qualified Data.Semigroup as Semigroup
+import Data.Semigroup qualified as Semigroup
 import Data.Semigroup (Last)
 import Data.Semigroup.Generic
 import GHC.Generics

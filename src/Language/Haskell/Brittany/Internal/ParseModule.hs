@@ -6,23 +6,23 @@ module Language.Haskell.Brittany.Internal.ParseModule
 
 import Control.Monad
 import Control.Monad.IO.Class
-import qualified Control.Monad.Trans.Except as Except
-import qualified GHC
-import qualified GHC.ByteOrder
-import qualified GHC.Data.StringBuffer
-import qualified GHC.Driver.Config.Parser
-import qualified GHC.Driver.Errors.Types
-import qualified GHC.Driver.Session
-import qualified GHC.Parser.Header
-import qualified GHC.Parser.Lexer
-import qualified GHC.Platform
-import qualified GHC.Settings
-import qualified GHC.Types.SafeHaskell as GHC.Driver.Session
-import qualified GHC.Types.SrcLoc
-import qualified GHC.Utils.Fingerprint
-import qualified GHC.Utils.Outputable
+import Control.Monad.Trans.Except qualified as Except
+import GHC qualified
+import GHC.ByteOrder qualified
+import GHC.Data.StringBuffer qualified
+import GHC.Driver.Config.Parser qualified
+import GHC.Driver.Errors.Types qualified
+import GHC.Driver.Session qualified
+import GHC.Parser.Header qualified
+import GHC.Parser.Lexer qualified
+import GHC.Platform qualified
+import GHC.Settings qualified
+import GHC.Types.SafeHaskell qualified as GHC.Driver.Session
+import GHC.Types.SrcLoc qualified
+import GHC.Utils.Fingerprint qualified
+import GHC.Utils.Outputable qualified
 import Language.Haskell.GHC.ExactPrint (makeDeltaAst)
-import qualified Language.Haskell.GHC.ExactPrint.Parsers as ExactPrint
+import Language.Haskell.GHC.ExactPrint.Parsers qualified as ExactPrint
 
 -- | Parses a Haskell module. Although this nominally requires IO, it is
 -- morally pure. It should have no observable effects.

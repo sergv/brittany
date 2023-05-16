@@ -14,25 +14,25 @@ module Language.Haskell.Brittany.Internal.Config
   , showConfigYaml
   ) where
 
-import qualified Data.Bool as Bool
-import qualified Data.ByteString as ByteString
-import qualified Data.ByteString.Char8
+import Data.Bool qualified as Bool
+import Data.ByteString qualified as ByteString
+import Data.ByteString.Char8 qualified
 import Data.CZipWith
 import Data.Coerce (coerce)
-import qualified Data.List.NonEmpty as NonEmpty
-import qualified Data.Semigroup as Semigroup
-import qualified Data.Yaml
-import qualified GHC.OldList as List
+import Data.List.NonEmpty qualified as NonEmpty
+import Data.Semigroup qualified as Semigroup
+import Data.Yaml qualified
+import GHC.OldList qualified as List
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.Config.Types.Instances ()
 import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.PreludeUtils
 import Language.Haskell.Brittany.Internal.Utils
-import qualified System.Console.CmdArgs.Explicit as CmdArgs
-import qualified System.Directory
-import qualified System.Directory as Directory
-import qualified System.FilePath.Posix as FilePath
-import qualified System.IO
+import System.Console.CmdArgs.Explicit qualified as CmdArgs
+import System.Directory qualified
+import System.Directory qualified as Directory
+import System.FilePath.Posix qualified as FilePath
+import System.IO qualified
 import UI.Butcher.Monadic
 
 -- brittany-next-binding { lconfig_indentPolicy: IndentPolicyLeft }

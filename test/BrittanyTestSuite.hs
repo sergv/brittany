@@ -11,11 +11,11 @@ import Data.Char
 import Data.Coerce
 import Data.Foldable
 import Data.Functor.Identity
-import qualified Data.List as L
+import Data.List qualified as L
 import Data.Maybe
 import Data.Semigroup
-import qualified Data.Text as T
-import qualified Data.Text.IO as TIO
+import Data.Text qualified as T
+import Data.Text.IO qualified as TIO
 import Data.Traversable
 import Options.Applicative
 import System.Directory
@@ -27,9 +27,9 @@ import Test.Tasty.HUnit
 import Text.Read
 
 import Language.Haskell.Brittany.Internal.Config.Types
-import qualified Language.Haskell.Brittany.Internal.Formatting as Brittany
+import Language.Haskell.Brittany.Internal.Formatting qualified as Brittany
 
-import qualified Language.Haskell.Brittany.Internal.Layouters.Module.Tests
+import Language.Haskell.Brittany.Internal.Layouters.Module.Tests qualified
 
 data TestsConfig = TestsConfig
   { tcfgInputDirs :: ![FilePath]

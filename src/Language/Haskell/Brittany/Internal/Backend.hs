@@ -26,18 +26,18 @@ module Language.Haskell.Brittany.Internal.Backend
   , processInfoIgnore
   ) where
 
-import qualified Control.Monad.Trans.State.Strict as StateS
+import Control.Monad.Trans.State.Strict qualified as StateS
 import Data.Foldable as Foldable
-import qualified Data.IntMap.Lazy as IntMapL
-import qualified Data.IntMap.Strict as IntMapS
-import qualified Data.Semigroup as Semigroup
-import qualified Data.Sequence as Seq
-import qualified Data.Text as T
-import qualified Data.Text.Lazy.Builder as TLB
+import Data.IntMap.Lazy qualified as IntMapL
+import Data.IntMap.Strict qualified as IntMapS
+import Data.Semigroup qualified as Semigroup
+import Data.Sequence qualified as Seq
+import Data.Text qualified as T
+import Data.Text.Lazy.Builder qualified as TLB
 
 import Data.Functor
 import Data.Traversable
-import qualified GHC.OldList as List
+import GHC.OldList qualified as List
 import GHC.Parser.Annotation
 import GHC.Types.SrcLoc
 import Language.Haskell.Brittany.Internal.BackendUtils
@@ -46,7 +46,7 @@ import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.Brittany.Internal.Utils
 import Language.Haskell.GHC.ExactPrint.Types
-import qualified Language.Haskell.GHC.ExactPrint.Types as ExactPrint.Types
+import Language.Haskell.GHC.ExactPrint.Types qualified as ExactPrint.Types
 import Language.Haskell.GHC.ExactPrint.Utils
 
 type ColIndex = Int

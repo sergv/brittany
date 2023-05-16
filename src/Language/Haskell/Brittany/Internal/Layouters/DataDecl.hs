@@ -6,11 +6,11 @@
 module Language.Haskell.Brittany.Internal.Layouters.DataDecl (layoutDataDecl) where
 
 import Data.Functor
-import qualified Data.Semigroup as Semigroup
-import qualified GHC
+import Data.Semigroup qualified as Semigroup
+import GHC qualified
 import GHC (GenLocated(L))
 import GHC.Hs
-import qualified GHC.OldList as List
+import GHC.OldList qualified as List
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.LayouterBasics
 import Language.Haskell.Brittany.Internal.Layouters.Type

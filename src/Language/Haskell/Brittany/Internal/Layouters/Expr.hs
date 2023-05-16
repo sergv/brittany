@@ -9,14 +9,14 @@ module Language.Haskell.Brittany.Internal.Layouters.Expr
   ) where
 
 import Data.Functor
-import qualified Data.Semigroup as Semigroup
-import qualified Data.Sequence as Seq
-import qualified Data.Text as Text
+import Data.Semigroup qualified as Semigroup
+import Data.Sequence qualified as Seq
+import Data.Text qualified as Text
 import Data.Traversable
 import GHC (GenLocated(L))
-import qualified GHC.Data.FastString as FastString
+import GHC.Data.FastString qualified as FastString
 import GHC.Hs
-import qualified GHC.OldList as List
+import GHC.OldList qualified as List
 import GHC.Types.Basic
 import GHC.Types.Name
 import GHC.Types.Name.Reader

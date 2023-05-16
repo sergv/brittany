@@ -9,14 +9,14 @@ module Language.Haskell.Brittany.Internal.Layouters.IE
   ) where
 
 import Data.Data (Data)
-import qualified Data.List.Extra
-import qualified Data.Text as Text
+import Data.List.Extra qualified
+import Data.Text qualified as Text
 import GHC
   ( GenLocated(L)
   , unLoc
   )
 import GHC.Hs
-import qualified GHC.OldList as List
+import GHC.OldList qualified as List
 import Language.Haskell.Brittany.Internal.LayouterBasics
 import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.Types

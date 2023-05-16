@@ -8,14 +8,14 @@ module Language.Haskell.Brittany.Internal.Layouters.Pattern
   , colsWrapPat
   ) where
 
-import qualified Data.Foldable as Foldable
+import Data.Foldable qualified as Foldable
 import Data.Functor
-import qualified Data.Sequence as Seq
-import qualified Data.Text as Text
+import Data.Sequence qualified as Seq
+import Data.Text qualified as Text
 import Data.Traversable
 import GHC (GenLocated(L), ol_val)
 import GHC.Hs
-import qualified GHC.OldList as List
+import GHC.OldList qualified as List
 import GHC.Types.Basic
 import Language.Haskell.Brittany.Internal.LayouterBasics
 import {-# SOURCE #-} Language.Haskell.Brittany.Internal.Layouters.Expr

@@ -11,7 +11,7 @@ module Language.Haskell.Brittany.Internal.ExactPrintUtils
   , realSrcSpan'
   ) where
 
-import qualified Control.Monad.Trans.MultiRWS.Strict as MultiRWSS
+import Control.Monad.Trans.MultiRWS.Strict qualified as MultiRWSS
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.Prelude
 import GHC.Types.SrcLoc
