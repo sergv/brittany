@@ -3,6 +3,8 @@ packages: .
 constraints:
   brittany +pedantic
 
+tests: True
+
 allow-newer:
   , multistate:base
   , multistate:transformers
