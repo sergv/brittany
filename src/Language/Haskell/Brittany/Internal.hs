@@ -37,7 +37,6 @@ import Language.Haskell.Brittany.Internal.Transformations.Floating
 import Language.Haskell.Brittany.Internal.Transformations.Indent
 import Language.Haskell.Brittany.Internal.Transformations.Par
 import Language.Haskell.Brittany.Internal.Types
-import Language.Haskell.Brittany.Internal.Utils
 import Language.Haskell.GHC.ExactPrint.Types qualified as ExactPrint
 import Language.Haskell.GHC.ExactPrint.Utils (tokComment)
 
@@ -200,42 +199,12 @@ layoutBriDoc briDoc = do
   briDoc' <- MultiRWSS.withMultiStateS BDEmpty $ do
     -- Note that briDoc is BriDocNumbered, but state type is BriDoc.
     -- That's why the alt-transform looks a bit special here.
-    traceIfDumpConf "bridoc raw" _dconf_dump_bridoc_raw
-      $ briDocToDoc
-      $ unwrapBriDocNumbered
-      $ briDoc
     -- bridoc transformation: remove alts
     transformAlts briDoc >>= mSet
-    mGet
-      >>= (briDocToDoc >>> traceIfDumpConf "bridoc post-alt" _dconf_dump_bridoc_simpl_alt)
-    -- bridoc transformation: float stuff in
     mGet >>= (transformSimplifyFloating >>> mSet)
-    mGet
-      >>= (briDocToDoc
-      >>> traceIfDumpConf
-            "bridoc post-floating"
-            _dconf_dump_bridoc_simpl_floating)
-    -- bridoc transformation: par removal
     mGet >>= (transformSimplifyPar >>> mSet)
-    mGet
-      >>= (briDocToDoc
-      >>> traceIfDumpConf "bridoc post-par" _dconf_dump_bridoc_simpl_par)
-    -- bridoc transformation: float stuff in
     mGet >>= (transformSimplifyColumns >>> mSet)
-    mGet
-      >>= (briDocToDoc
-      >>> traceIfDumpConf "bridoc post-columns" _dconf_dump_bridoc_simpl_columns)
-    -- bridoc transformation: indent
     mGet >>= (transformSimplifyIndent >>> mSet)
-    mGet
-      >>= (briDocToDoc
-      >>> traceIfDumpConf "bridoc post-indent" _dconf_dump_bridoc_simpl_indent)
-    mGet
-      >>= (briDocToDoc
-      >>> traceIfDumpConf "bridoc final" _dconf_dump_bridoc_final)
-    -- -- convert to Simple type
-    -- simpl <- mGet <&> transformToSimple
-    -- pure simpl
 
   let state = LayoutState
         { _lstate_baseYs           = [0]

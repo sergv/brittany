@@ -16,7 +16,6 @@ module Language.Haskell.Brittany.Internal.Utils
   , ShowIsId(..)
   , A(..)
   , customLayouterNoAnnsF
-  , traceIfDumpConf
   , tellDebugMess
   , tellDebugMessShow
   , mModify
@@ -37,7 +36,6 @@ import Data.Data
 import Data.Functor
 import Data.Generics.Aliases
 import Data.Generics.Uniplate.Direct qualified as Uniplate
-import Data.Semigroup qualified as Semigroup
 import Data.Sequence qualified as Seq
 import DataTreePrint
 import GHC.Data.FastString qualified as GHC
@@ -46,7 +44,6 @@ import GHC.OldList qualified as List
 import GHC.Types.Name.Occurrence as OccName (occNameString)
 import GHC.Types.SrcLoc qualified as GHC
 import GHC.Utils.Outputable qualified as GHC
-import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.Types
 import Text.PrettyPrint qualified as PP
@@ -207,16 +204,6 @@ customLayouterNoAnnsF layoutF =
 --   displayList (x:xr) = PP.cat $ PP.text "[" <+> displayBriDocSimpleTree x
 --                               : [PP.text "," <+> displayBriDocSimpleTree t | t<-xr]
 --                              ++ [PP.text "]"]
-
-traceIfDumpConf
-  :: (MonadMultiReader Config m, Show a)
-  => String
-  -> (DebugConfig -> Identity (Semigroup.Last Bool))
-  -> a
-  -> m ()
-traceIfDumpConf s accessor val = do
-  whenM (mAsk <&> (_conf_debug >>> accessor >>> confUnpack)) $ do
-    trace ("---- " ++ s ++ " ----\n" ++ show val) $ pure ()
 
 tellDebugMess :: MonadMultiWriter (Seq String) m => String -> m ()
 tellDebugMess s = mTell $ Seq.singleton s

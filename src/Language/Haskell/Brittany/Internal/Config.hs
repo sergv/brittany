@@ -39,20 +39,6 @@ import UI.Butcher.Monadic
 staticDefaultConfig :: Config
 staticDefaultConfig = Config
   { _conf_version = coerce (1 :: Int)
-  , _conf_debug = DebugConfig
-    { _dconf_dump_config = coerce False
-    , _dconf_dump_annotations = coerce False
-    , _dconf_dump_ast_unknown = coerce False
-    , _dconf_dump_ast_full = coerce False
-    , _dconf_dump_bridoc_raw = coerce False
-    , _dconf_dump_bridoc_simpl_alt = coerce False
-    , _dconf_dump_bridoc_simpl_floating = coerce False
-    , _dconf_dump_bridoc_simpl_par = coerce False
-    , _dconf_dump_bridoc_simpl_columns = coerce False
-    , _dconf_dump_bridoc_simpl_indent = coerce False
-    , _dconf_dump_bridoc_final = coerce False
-    , _dconf_roundtrip_exactprint_only = coerce False
-    }
   , _conf_layout = LayoutConfig
     { _lconfig_cols = coerce (80 :: Int)
     , _lconfig_indentPolicy = coerce IndentPolicyFree
@@ -114,18 +100,6 @@ cmdlineConfigParser = do
   importCol <- addFlagReadParams "" ["import-col"] "N" (flagHelpStr "column to align import lists at")
   importAsCol <- addFlagReadParams "" ["import-as-col"] "N" (flagHelpStr "column to qualified-as module names at")
 
-  dumpConfig <- addSimpleBoolFlag "" ["dump-config"] (flagHelp $ parDoc "dump the programs full config (merged commandline + file + defaults)")
-  dumpAnnotations <- addSimpleBoolFlag "" ["dump-annotations"] (flagHelp $ parDoc "dump the full annotations returned by ghc-exactprint")
-  dumpUnknownAST <- addSimpleBoolFlag "" ["dump-ast-unknown"] (flagHelp $ parDoc "dump the ast for any nodes not transformed, but copied as-is by brittany")
-  dumpCompleteAST <- addSimpleBoolFlag "" ["dump-ast-full"] (flagHelp $ parDoc "dump the full ast")
-  dumpBriDocRaw <- addSimpleBoolFlag "" ["dump-bridoc-raw"] (flagHelp $ parDoc "dump the pre-transformation bridoc")
-  dumpBriDocAlt <- addSimpleBoolFlag "" ["dump-bridoc-alt"] (flagHelp $ parDoc "dump the partially transformed bridoc: after transformation: alt")
-  dumpBriDocPar <- addSimpleBoolFlag "" ["dump-bridoc-par"] (flagHelp $ parDoc "dump the partially transformed bridoc: after transformation: par")
-  dumpBriDocFloating <- addSimpleBoolFlag "" ["dump-bridoc-floating"] (flagHelp $ parDoc "dump the partially transformed bridoc: after transformation: floating")
-  dumpBriDocColumns <- addSimpleBoolFlag "" ["dump-bridoc-columns"] (flagHelp $ parDoc "dump the partially transformed bridoc: after transformation: columns")
-  dumpBriDocIndent <- addSimpleBoolFlag "" ["dump-bridoc-indent"] (flagHelp $ parDoc "dump the partially transformed bridoc: after transformation: indent")
-  dumpBriDocFinal <- addSimpleBoolFlag "" ["dump-bridoc-final"] (flagHelp $ parDoc "dump the post-transformation bridoc")
-
   outputOnErrors <- addSimpleBoolFlag "" ["output-on-errors"] (flagHelp $ parDoc "even when there are errors, produce output (or try to to the degree possible)")
   wError <- addSimpleBoolFlag "" ["werror"] (flagHelp $ parDoc "treat warnings as errors")
   omitValidCheck <- addSimpleBoolFlag "" ["omit-output-check"] (flagHelp $ parDoc "omit checking if the output is syntactically valid (debugging)")
@@ -138,20 +112,6 @@ cmdlineConfigParser = do
 
   pure $ Config
     { _conf_version = mempty
-    , _conf_debug = DebugConfig
-      { _dconf_dump_config = wrapLast $ falseToNothing dumpConfig
-      , _dconf_dump_annotations = wrapLast $ falseToNothing dumpAnnotations
-      , _dconf_dump_ast_unknown = wrapLast $ falseToNothing dumpUnknownAST
-      , _dconf_dump_ast_full = wrapLast $ falseToNothing dumpCompleteAST
-      , _dconf_dump_bridoc_raw = wrapLast $ falseToNothing dumpBriDocRaw
-      , _dconf_dump_bridoc_simpl_alt = wrapLast $ falseToNothing dumpBriDocAlt
-      , _dconf_dump_bridoc_simpl_par = wrapLast $ falseToNothing dumpBriDocPar
-      , _dconf_dump_bridoc_simpl_floating = wrapLast $ falseToNothing dumpBriDocFloating
-      , _dconf_dump_bridoc_simpl_columns = wrapLast $ falseToNothing dumpBriDocColumns
-      , _dconf_dump_bridoc_simpl_indent = wrapLast $ falseToNothing dumpBriDocIndent
-      , _dconf_dump_bridoc_final = wrapLast $ falseToNothing dumpBriDocFinal
-      , _dconf_roundtrip_exactprint_only = mempty
-      }
     , _conf_layout = LayoutConfig
       { _lconfig_cols = optionConcat cols
       , _lconfig_indentPolicy = mempty

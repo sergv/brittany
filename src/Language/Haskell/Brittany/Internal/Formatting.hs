@@ -24,7 +24,6 @@ import Language.Haskell.Brittany.Internal.Obfuscation
 import Language.Haskell.Brittany.Internal.ParseModule
 import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.Types
-import Language.Haskell.Brittany.Internal.Utils
 import Language.Haskell.GHC.ExactPrint qualified as ExactPrint
 import System.FilePath
 
@@ -77,13 +76,8 @@ format config fname input = do
     Right (parsedSource, (hasCPP, cppWarns)) -> do
       -- TODO: collect module config here and merge with values from global config
       let moduleConf = config
-      let disableFormatting :: Bool
+          disableFormatting :: Bool
           disableFormatting = confUnpack (_conf_disable_formatting moduleConf)
-
-      let astLog =
-            if confUnpack (_dconf_dump_ast_full (_conf_debug config))
-            then Seq.singleton $ "---- ast ----\n" ++ show (astToDoc parsedSource)
-            else Seq.empty
 
       (formatted, errs, logs, hasChanges) <-
         if
@@ -107,7 +101,7 @@ format config fname input = do
               else pure out
             pure (out', ews, logs, out' /= input)
 
-      pure $ Right (formatted, maybeToList cppWarns, errs, astLog <> logs, hasChanges)
+      pure $ Right (formatted, maybeToList cppWarns, errs, logs, hasChanges)
   where
     input'
       | workAroundCPP && not exactprintOnly = commentOutPreprocessor input
@@ -123,12 +117,10 @@ format config fname input = do
     workAroundCPP = confUnpack (_ppconf_hackAroundIncludes (_conf_preprocessor config))
 
     exactprintOnly :: Bool
-    exactprintOnly = viaGlobal || viaDebug
+    exactprintOnly = viaGlobal
       where
         viaGlobal :: Bool
         viaGlobal = confUnpack (_conf_roundtrip_exactprint_only config)
-        viaDebug :: Bool
-        viaDebug  = confUnpack (_dconf_roundtrip_exactprint_only (_conf_debug config))
 
       -- putStrErrLn
       --   $ "Warning: Encountered -XCPP."

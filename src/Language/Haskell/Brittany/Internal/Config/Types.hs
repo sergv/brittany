@@ -7,7 +7,6 @@
 
 module Language.Haskell.Brittany.Internal.Config.Types
   ( confUnpack
-  , CDebugConfig(..)
   , CLayoutConfig(..)
   , CForwardOptions(..)
   , CErrorHandlingConfig(..)
@@ -20,7 +19,6 @@ module Language.Haskell.Brittany.Internal.Config.Types
   , CPPMode(..)
   , ExactPrintFallbackMode(..)
 
-  , DebugConfig
   , LayoutConfig
   , ForwardOptions
   , ErrorHandlingConfig
@@ -39,21 +37,6 @@ import Language.Haskell.Brittany.Internal.PreludeUtils ()
 
 confUnpack :: Coercible a b => Identity a -> b
 confUnpack (Identity x) = coerce x
-
-data CDebugConfig f = DebugConfig
-  { _dconf_dump_config :: f (Semigroup.Last Bool)
-  , _dconf_dump_annotations :: f (Semigroup.Last Bool)
-  , _dconf_dump_ast_unknown :: f (Semigroup.Last Bool)
-  , _dconf_dump_ast_full :: f (Semigroup.Last Bool)
-  , _dconf_dump_bridoc_raw :: f (Semigroup.Last Bool)
-  , _dconf_dump_bridoc_simpl_alt :: f (Semigroup.Last Bool)
-  , _dconf_dump_bridoc_simpl_floating :: f (Semigroup.Last Bool)
-  , _dconf_dump_bridoc_simpl_par :: f (Semigroup.Last Bool)
-  , _dconf_dump_bridoc_simpl_columns :: f (Semigroup.Last Bool)
-  , _dconf_dump_bridoc_simpl_indent :: f (Semigroup.Last Bool)
-  , _dconf_dump_bridoc_final :: f (Semigroup.Last Bool)
-  , _dconf_roundtrip_exactprint_only :: f (Semigroup.Last Bool)
-  } deriving Generic
 
 data CLayoutConfig f = LayoutConfig
   { _lconfig_cols :: f (Last Int) -- the thing that has default 80.
@@ -176,7 +159,6 @@ data CPreProcessorConfig f = PreProcessorConfig
 
 data CConfig f = Config
   { _conf_version                   :: f (Semigroup.Last Int)
-  , _conf_debug                     :: CDebugConfig f
   , _conf_layout                    :: CLayoutConfig f
   , _conf_errorHandling             :: CErrorHandlingConfig f
   , _conf_forward                   :: CForwardOptions f
@@ -195,43 +177,35 @@ data CConfig f = Config
   , _conf_obfuscate                 :: f (Semigroup.Last Bool)
   } deriving Generic
 
-type DebugConfig         = CDebugConfig Identity
 type LayoutConfig        = CLayoutConfig Identity
 type ForwardOptions      = CForwardOptions Identity
 type ErrorHandlingConfig = CErrorHandlingConfig Identity
 type Config              = CConfig Identity
 
--- i wonder if any Show1 stuff could be leveraged.
-deriving instance Show (CDebugConfig Identity)
 deriving instance Show (CLayoutConfig Identity)
 deriving instance Show (CErrorHandlingConfig Identity)
 deriving instance Show (CForwardOptions Identity)
 deriving instance Show (CPreProcessorConfig Identity)
 deriving instance Show (CConfig Identity)
 
-deriving instance Show (CDebugConfig Maybe)
 deriving instance Show (CLayoutConfig Maybe)
 deriving instance Show (CErrorHandlingConfig Maybe)
 deriving instance Show (CForwardOptions Maybe)
 deriving instance Show (CPreProcessorConfig Maybe)
 deriving instance Show (CConfig Maybe)
 
-deriving instance Data (CDebugConfig Identity)
 deriving instance Data (CLayoutConfig Identity)
 deriving instance Data (CErrorHandlingConfig Identity)
 deriving instance Data (CForwardOptions Identity)
 deriving instance Data (CPreProcessorConfig Identity)
 deriving instance Data (CConfig Identity)
 
-deriving instance Data (CDebugConfig Maybe)
 deriving instance Data (CLayoutConfig Maybe)
 deriving instance Data (CErrorHandlingConfig Maybe)
 deriving instance Data (CForwardOptions Maybe)
 deriving instance Data (CPreProcessorConfig Maybe)
 deriving instance Data (CConfig Maybe)
 
-instance Semigroup.Semigroup (CDebugConfig Maybe) where
-  (<>) = gmappend
 instance Semigroup.Semigroup (CLayoutConfig Maybe) where
   (<>) = gmappend
 instance Semigroup.Semigroup (CErrorHandlingConfig Maybe) where
@@ -243,8 +217,6 @@ instance Semigroup.Semigroup (CPreProcessorConfig Maybe) where
 instance Semigroup.Semigroup (CConfig Maybe) where
   (<>) = gmappend
 
-instance Semigroup.Semigroup (CDebugConfig Identity) where
-  (<>) = gmappend
 instance Semigroup.Semigroup (CLayoutConfig Identity) where
   (<>) = gmappend
 instance Semigroup.Semigroup (CErrorHandlingConfig Identity) where
@@ -256,8 +228,6 @@ instance Semigroup.Semigroup (CPreProcessorConfig Identity) where
 instance Semigroup.Semigroup (CConfig Identity) where
   (<>) = gmappend
 
-instance Monoid (CDebugConfig Maybe) where
-  mempty = gmempty
 instance Monoid (CLayoutConfig Maybe) where
   mempty = gmempty
 instance Monoid (CErrorHandlingConfig Maybe) where
@@ -328,14 +298,12 @@ data ExactPrintFallbackMode
                                  -- A PROGRAM BY TRANSFORMING IT.
   deriving (Show, Generic, Data)
 
-deriveCZipWith ''CDebugConfig
 deriveCZipWith ''CLayoutConfig
 deriveCZipWith ''CErrorHandlingConfig
 deriveCZipWith ''CForwardOptions
 deriveCZipWith ''CPreProcessorConfig
 deriveCZipWith ''CConfig
 
-instance CFunctor CDebugConfig
 instance CFunctor CLayoutConfig
 instance CFunctor CErrorHandlingConfig
 instance CFunctor CForwardOptions

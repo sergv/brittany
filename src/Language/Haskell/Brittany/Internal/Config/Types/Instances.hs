@@ -33,12 +33,6 @@ aesonDecodeOptionsBrittany = Aeson.defaultOptions
   , Aeson.fieldLabelModifier = dropWhile (== '_')
   }
 
-instance FromJSON (CDebugConfig Maybe) where
-  parseJSON = Aeson.genericParseJSON aesonDecodeOptionsBrittany
-
-instance ToJSON (CDebugConfig Maybe) where
-  toJSON = Aeson.genericToJSON aesonDecodeOptionsBrittany
-
 instance FromJSON IndentPolicy where
   parseJSON = Aeson.genericParseJSON aesonDecodeOptionsBrittany
 
@@ -109,8 +103,6 @@ instance FromJSON (CConfig Maybe) where
     Config
       <$> v
       .:? Key.fromString "conf_version"
-      <*> v
-      .:?= Key.fromString "conf_debug"
       <*> v
       .:?= Key.fromString "conf_layout"
       <*> v

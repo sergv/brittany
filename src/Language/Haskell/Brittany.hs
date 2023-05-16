@@ -1,5 +1,3 @@
-{-# LANGUAGE NoImplicitPrelude #-}
-
 module Language.Haskell.Brittany
   ( staticDefaultConfig
   , forwardOptionsSyntaxExtsEnabled
@@ -10,7 +8,6 @@ module Language.Haskell.Brittany
   , format
   , Config
   , CConfig(..)
-  , CDebugConfig(..)
   , CLayoutConfig(..)
   , CErrorHandlingConfig(..)
   , CForwardOptions(..)

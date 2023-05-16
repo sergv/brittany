@@ -218,9 +218,6 @@ mainCmdParser helpDesc = do
         >>= \case
               Nothing -> System.Exit.exitWith (System.Exit.ExitFailure 53)
               Just x -> pure x
-    when (config & _conf_debug & _dconf_dump_config & confUnpack)
-      $ trace (showConfigYaml config)
-      $ pure ()
 
     results <- zipWithM
       (coreIO config suppressOutput checkMode)
@@ -234,7 +231,6 @@ mainCmdParser helpDesc = do
         xs | all Data.Either.isRight xs -> pure ()
         [Left x] -> System.Exit.exitWith (System.Exit.ExitFailure x)
         _ -> System.Exit.exitWith (System.Exit.ExitFailure 1)
-
 
 data ChangeStatus = Changes | NoChanges
   deriving (Eq)
@@ -292,10 +288,8 @@ coreIO config suppressOutput checkMode inputPathM outputPathM =
 
       unless (null unknownNodes) $ do
         putStrErrLn "WARNING: encountered unknown syntactical constructs:"
-        for_ unknownNodes $ \(str, loc, astDoc) -> do
+        for_ unknownNodes $ \(str, loc, _astDoc) -> do
           putStrErrLn $ "  " <> str <> " at " <> showSDocUnsafe (ppr loc)
-          when (confUnpack (_dconf_dump_ast_unknown (_conf_debug config))) $
-            putStrErrLn $ "  " ++ show astDoc
         putStrErrLn
           "  -> falling back on exactprint for this element of the module"
 
@@ -326,16 +320,14 @@ coreIO config suppressOutput checkMode inputPathM outputPathM =
         shouldOutput :: Bool
         shouldOutput = not suppressOutput && not checkMode && (not hasErrors || outputOnErrs)
 
-    when shouldOutput
-      $ addTraceSep (_conf_debug config)
-      $ case outputPathM of
-          Nothing -> liftIO $ TIO.putStr formatted
-          Just p -> liftIO $ do
-            let
-              isIdentical = case inputPathM of
+    liftIO $ when shouldOutput $
+      case outputPathM of
+        Nothing -> TIO.putStr formatted
+        Just p  -> do
+          let isIdentical = case inputPathM of
                 Nothing -> False
-                Just _ -> not hasChanges
-            unless isIdentical $ TIO.writeFile p formatted
+                Just _  -> not hasChanges
+          unless isIdentical $ TIO.writeFile p formatted
 
     when (checkMode && hasChanges) $ case inputPathM of
       Nothing -> pure ()
@@ -343,18 +335,3 @@ coreIO config suppressOutput checkMode inputPathM outputPathM =
 
     when hasErrors $ ExceptT.throwE 70
     pure (if hasChanges then Changes else NoChanges)
-  where
-  addTraceSep conf =
-    if or
-        [ confUnpack $ _dconf_dump_annotations conf
-        , confUnpack $ _dconf_dump_ast_unknown conf
-        , confUnpack $ _dconf_dump_ast_full conf
-        , confUnpack $ _dconf_dump_bridoc_raw conf
-        , confUnpack $ _dconf_dump_bridoc_simpl_alt conf
-        , confUnpack $ _dconf_dump_bridoc_simpl_floating conf
-        , confUnpack $ _dconf_dump_bridoc_simpl_columns conf
-        , confUnpack $ _dconf_dump_bridoc_simpl_indent conf
-        , confUnpack $ _dconf_dump_bridoc_final conf
-        ]
-      then trace "----"
-      else id
