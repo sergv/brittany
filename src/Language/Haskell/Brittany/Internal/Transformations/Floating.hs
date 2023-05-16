@@ -1,13 +1,12 @@
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE NoImplicitPrelude #-}
 
 module Language.Haskell.Brittany.Internal.Transformations.Floating (transformSimplifyFloating) where
 
-import Data.Generics.Uniplate.Direct qualified as Uniplate
-import GHC.OldList qualified as List
-import Language.Haskell.Brittany.Internal.Prelude
+import Prelude hiding (lines)
+
+import Data.List qualified as L
+import Language.Haskell.Brittany.Internal.RecursionSchemes
 import Language.Haskell.Brittany.Internal.Types
-import Language.Haskell.Brittany.Internal.Utils
 
 -- note that this is not total, and cannot be with that exact signature.
 mergeIndents :: BrIndent -> BrIndent -> BrIndent
@@ -18,190 +17,213 @@ mergeIndents (BrIndentSpecial i) (BrIndentSpecial j) =
 mergeIndents _ _ = error "mergeIndents"
 
 transformSimplifyFloating :: BriDoc -> BriDoc
-transformSimplifyFloating = stepBO >>> stepFull
+transformSimplifyFloating = stepFull . stepBO
   -- note that semantically, stepFull is completely sufficient.
   -- but the bottom-up switch-to-top-down-on-match transformation has much
   -- better complexity.
   -- UPDATE: by now, stepBO does more than stepFull; for semantic equivalence
   --         the push/pop cases would need to be copied over
- where
-  descendPrior = transformDownMay $ \case
-    -- prior floating in
-    BDAnnotationBefore ann (BDPar ind line indented) ->
-      Just $ BDPar ind (BDAnnotationBefore ann line) indented
-    BDAnnotationBefore ann (BDSeq (l : lr)) ->
-      Just $ BDSeq (BDAnnotationBefore ann l : lr)
-    BDAnnotationBefore ann (BDLines (l : lr)) ->
-      Just $ BDLines (BDAnnotationBefore ann l : lr)
-    BDAnnotationBefore ann (BDCols sig (l : lr)) ->
-      Just $ BDCols sig (BDAnnotationBefore ann l : lr)
-    BDAnnotationBefore ann (BDAddBaseY indent x) ->
-      Just $ BDAddBaseY indent $ BDAnnotationBefore ann x
-    BDAnnotationBefore ann (BDDebug s x) ->
-      Just $ BDDebug s $ BDAnnotationBefore ann x
-    _ -> Nothing
-  descendRest = transformDownMay $ \case
-    -- post floating in
-    BDAnnotationAfter ann (BDPar ind line indented) ->
-      Just $ BDPar ind line $ BDAnnotationAfter ann indented
-    BDAnnotationAfter ann (BDSeq list) ->
-      Just
-        $ BDSeq
-        $ List.init list
-        ++ [BDAnnotationAfter ann $ List.last list]
-    BDAnnotationAfter ann (BDLines list) ->
-      Just
-        $ BDLines
-        $ List.init list
-        ++ [BDAnnotationAfter ann $ List.last list]
-    BDAnnotationAfter ann (BDCols sig cols) ->
-      Just
-        $ BDCols sig
-        $ List.init cols
-        ++ [BDAnnotationAfter ann $ List.last cols]
-    BDAnnotationAfter ann (BDAddBaseY indent x) ->
-      Just $ BDAddBaseY indent $ BDAnnotationAfter ann x
-    BDAnnotationAfter ann (BDDebug s x) ->
-      Just $ BDDebug s $ BDAnnotationAfter ann x
-    _ -> Nothing
-  descendKW = transformDownMay $ \case
-    -- post floating in
-    BDAnnotationKW kw (BDPar ind line indented) ->
-      Just $ BDPar ind line $ BDAnnotationKW kw indented
-    BDAnnotationKW kw (BDSeq list) ->
-      Just
-        $ BDSeq
-        $ List.init list
-        ++ [BDAnnotationKW kw $ List.last list]
-    BDAnnotationKW kw (BDLines list) ->
-      Just
-        $ BDLines
-        $ List.init list
-        ++ [BDAnnotationKW kw $ List.last list]
-    BDAnnotationKW kw (BDCols sig cols) ->
-      Just
-        $ BDCols sig
-        $ List.init cols
-        ++ [BDAnnotationKW kw $ List.last cols]
-    BDAnnotationKW kw (BDAddBaseY indent x) ->
-      Just $ BDAddBaseY indent $ BDAnnotationKW kw x
-    BDAnnotationKW kw (BDDebug s x) ->
-      Just $ BDDebug s $ BDAnnotationKW kw x
-    _ -> Nothing
-  descendBYPush = transformDownMay $ \case
-    BDBaseYPushCur (BDCols sig cols@(_ : _)) ->
-      Just $ BDCols sig (BDBaseYPushCur (List.head cols) : List.tail cols)
-    BDBaseYPushCur (BDDebug s x) -> Just $ BDDebug s (BDBaseYPushCur x)
-    _ -> Nothing
-  descendBYPop = transformDownMay $ \case
-    BDBaseYPop (BDCols sig cols@(_ : _)) ->
-      Just $ BDCols sig (List.init cols ++ [BDBaseYPop (List.last cols)])
-    BDBaseYPop (BDDebug s x) -> Just $ BDDebug s (BDBaseYPop x)
-    _ -> Nothing
-  descendILPush = transformDownMay $ \case
-    BDIndentLevelPushCur (BDCols sig cols@(_ : _)) ->
-      Just $ BDCols sig (BDIndentLevelPushCur (List.head cols) : List.tail cols)
-    BDIndentLevelPushCur (BDDebug s x) ->
-      Just $ BDDebug s (BDIndentLevelPushCur x)
-    _ -> Nothing
-  descendILPop = transformDownMay $ \case
-    BDIndentLevelPop (BDCols sig cols@(_ : _)) ->
-      Just $ BDCols sig (List.init cols ++ [BDIndentLevelPop (List.last cols)])
-    BDIndentLevelPop (BDDebug s x) -> Just $ BDDebug s (BDIndentLevelPop x)
-    _ -> Nothing
-  descendAddB = transformDownMay $ \case
-    BDAddBaseY BrIndentNone x -> Just x
-    -- AddIndent floats into Lines.
-    BDAddBaseY indent (BDLines lines) ->
-      Just $ BDLines $ BDAddBaseY indent <$> lines
-    -- AddIndent floats into last column
-    BDAddBaseY indent (BDCols sig cols) ->
-      Just $ BDCols sig $ List.init cols ++ [BDAddBaseY indent $ List.last cols]
-    -- merge AddIndent and Par
-    BDAddBaseY ind1 (BDPar ind2 line indented) ->
-      Just $ BDPar (mergeIndents ind1 ind2) line indented
-    BDAddBaseY ind (BDAnnotationBefore ann x) ->
-      Just $ BDAnnotationBefore ann (BDAddBaseY ind x)
-    BDAddBaseY ind (BDAnnotationAfter ann x) ->
-      Just $ BDAnnotationAfter ann (BDAddBaseY ind x)
-    BDAddBaseY ind (BDAnnotationKW kw x) ->
-      Just $ BDAnnotationKW kw (BDAddBaseY ind x)
-    BDAddBaseY ind (BDSeq list) ->
-      Just $ BDSeq $ List.init list ++ [BDAddBaseY ind (List.last list)]
-    BDAddBaseY _ lit@BDLit{} -> Just $ lit
-    BDAddBaseY ind (BDBaseYPushCur x) ->
-      Just $ BDBaseYPushCur (BDAddBaseY ind x)
-    BDAddBaseY ind (BDBaseYPop x) -> Just $ BDBaseYPop (BDAddBaseY ind x)
-    BDAddBaseY ind (BDDebug s x) -> Just $ BDDebug s (BDAddBaseY ind x)
-    BDAddBaseY ind (BDIndentLevelPop x) ->
-      Just $ BDIndentLevelPop (BDAddBaseY ind x)
-    BDAddBaseY ind (BDIndentLevelPushCur x) ->
-      Just $ BDIndentLevelPushCur (BDAddBaseY ind x)
-    BDAddBaseY ind (BDEnsureIndent ind2 x) ->
-      Just $ BDEnsureIndent (mergeIndents ind ind2) x
-    _ -> Nothing
-  stepBO :: BriDoc -> BriDoc
-  stepBO = transformUp f
-   where
-    f = \case
-      x@BDAnnotationBefore{}   -> descendPrior x
-      x@BDAnnotationKW{}       -> descendKW x
-      x@BDAnnotationAfter{}    -> descendRest x
-      x@BDAddBaseY{}           -> descendAddB x
-      x@BDBaseYPushCur{}       -> descendBYPush x
-      x@BDBaseYPop{}           -> descendBYPop x
-      x@BDIndentLevelPushCur{} -> descendILPush x
-      x@BDIndentLevelPop{}     -> descendILPop x
-      x                        -> x
-  stepFull = Uniplate.rewrite $ \case
-    BDAddBaseY BrIndentNone x -> Just $ x
-    -- AddIndent floats into Lines.
-    BDAddBaseY indent (BDLines lines) ->
-      Just $ BDLines $ BDAddBaseY indent <$> lines
-    -- AddIndent floats into last column
-    BDAddBaseY indent (BDCols sig cols) ->
-      Just $ BDCols sig $ List.init cols ++ [BDAddBaseY indent $ List.last cols]
-    BDAddBaseY ind (BDSeq list) ->
-      Just $ BDSeq $ List.init list ++ [BDAddBaseY ind (List.last list)]
-    -- merge AddIndent and Par
-    BDAddBaseY ind1 (BDPar ind2 line indented) ->
-      Just $ BDPar (mergeIndents ind1 ind2) line indented
-    BDAddBaseY _ lit@BDLit{} -> Just $ lit
-    BDAddBaseY ind (BDBaseYPushCur x) ->
-      Just $ BDBaseYPushCur (BDAddBaseY ind x)
-    BDAddBaseY ind (BDBaseYPop x) -> Just $ BDBaseYPop (BDAddBaseY ind x)
-    -- prior floating in
-    BDAnnotationBefore ann (BDPar ind line indented) ->
-      Just $ BDPar ind (BDAnnotationBefore ann line) indented
-    BDAnnotationBefore ann (BDSeq (l : lr)) ->
-      Just $ BDSeq ((BDAnnotationBefore ann l) : lr)
-    BDAnnotationBefore ann (BDLines (l : lr)) ->
-      Just $ BDLines ((BDAnnotationBefore ann l) : lr)
-    BDAnnotationBefore ann (BDCols sig (l : lr)) ->
-      Just $ BDCols sig ((BDAnnotationBefore ann l) : lr)
-    -- EnsureIndent float-in
-    -- BDEnsureIndent indent (BDCols sig (col:colr)) ->
-    --   Just $ BDCols sig (BDEnsureIndent indent col : (BDAddBaseY indent <$> colr))
-    -- not sure if the following rule is necessary; tests currently are
-    -- unaffected.
-    -- BDEnsureIndent indent (BDLines lines) ->
-    --   Just $ BDLines $ BDEnsureIndent indent <$> lines
-    -- post floating in
-    BDAnnotationAfter ann (BDPar ind line indented) ->
-      Just $ BDPar ind line $ BDAnnotationAfter ann indented
-    BDAnnotationAfter ann (BDSeq list) ->
-      Just
-        $ BDSeq
-        $ List.init list
-        ++ [BDAnnotationAfter ann $ List.last list]
-    BDAnnotationAfter ann (BDLines list) ->
-      Just
-        $ BDLines
-        $ List.init list
-        ++ [BDAnnotationAfter ann $ List.last list]
-    BDAnnotationAfter ann (BDCols sig cols) ->
-      Just
-        $ BDCols sig
-        $ List.init cols
-        ++ [BDAnnotationAfter ann $ List.last cols]
-    _ -> Nothing
+  where
+    stepBO :: BriDoc -> BriDoc
+    stepBO = cata alg
+      where
+        alg :: BriDocF BriDoc -> BriDoc
+        alg = \case
+          x@BDAnnotationBefore{}   -> descendPrior $ Fix x
+          x@BDAnnotationKW{}       -> descendKW $ Fix x
+          x@BDAnnotationAfter{}    -> descendRest $ Fix x
+          x@BDAddBaseY{}           -> descendAddB $ Fix x
+          x@BDBaseYPushCur{}       -> descendBYPush $ Fix x
+          x@BDBaseYPop{}           -> descendBYPop $ Fix x
+          x@BDIndentLevelPushCur{} -> descendILPush $ Fix x
+          x@BDIndentLevelPop{}     -> descendILPop $ Fix x
+          x                         -> Fix x
+
+    stepFull = cataRewrite alg
+      where
+        alg :: BriDocF BriDoc -> Maybe BriDoc
+        alg = \case
+          BDAddBaseY BrIndentNone x -> Just x
+          -- AddIndent floats into Lines.
+          BDAddBaseY indent (Fix (BDLines lines)) ->
+            Just $ Fix $ BDLines $ Fix . BDAddBaseY indent <$> lines
+          -- AddIndent floats into last column
+          BDAddBaseY indent (Fix (BDCols sig cols)) ->
+            Just $ Fix $ BDCols sig $ L.init cols ++ [Fix (BDAddBaseY indent (L.last cols))]
+          BDAddBaseY ind (Fix (BDSeq list)) ->
+            Just $ Fix $ BDSeq $ L.init list ++ [Fix (BDAddBaseY ind (L.last list))]
+          -- merge AddIndent and Par
+          BDAddBaseY ind1 (Fix (BDPar ind2 line indented)) ->
+            Just $ Fix $ BDPar (mergeIndents ind1 ind2) line indented
+          BDAddBaseY _ lit@(Fix BDLit{}) -> Just lit
+          BDAddBaseY ind (Fix (BDBaseYPushCur x)) ->
+            Just $ Fix $ BDBaseYPushCur $ Fix $ BDAddBaseY ind x
+          BDAddBaseY ind (Fix (BDBaseYPop x)) -> Just $ Fix $ BDBaseYPop $ Fix $ BDAddBaseY ind x
+          -- prior floating in
+          BDAnnotationBefore ann (Fix (BDPar ind line indented)) ->
+            Just $ Fix $ BDPar ind (Fix (BDAnnotationBefore ann line)) indented
+          BDAnnotationBefore ann (Fix (BDSeq (l : lr))) ->
+            Just $ Fix $ BDSeq (Fix (BDAnnotationBefore ann l) : lr)
+          BDAnnotationBefore ann (Fix (BDLines (l : lr))) ->
+            Just $ Fix $ BDLines (Fix (BDAnnotationBefore ann l) : lr)
+          BDAnnotationBefore ann (Fix (BDCols sig (l : lr))) ->
+            Just $ Fix $ BDCols sig (Fix (BDAnnotationBefore ann l) : lr)
+          -- EnsureIndent float-in
+          -- BDEnsureIndent indent (Fix (BDCols sig (col:colr))) ->
+          --   Just $ Fix $ BDCols sig (Fix (BDEnsureIndent indent col) : (Fix . BDAddBaseY indent <$> colr))
+          -- not sure if the following rule is necessary; tests currently are
+          -- unaffected.
+          -- BDEnsureIndent indent (Fix (BDLines lines)) ->
+          --   Just $ Fix $ BDLines $ Fix . BDEnsureIndent indent <$> lines
+          -- post floating in
+          BDAnnotationAfter ann (Fix (BDPar ind line indented)) ->
+            Just $ Fix $ BDPar ind line $ Fix $ BDAnnotationAfter ann indented
+          BDAnnotationAfter ann (Fix (BDSeq list)) ->
+            Just $ Fix $ BDSeq $ L.init list ++ [Fix (BDAnnotationAfter ann (L.last list))]
+          BDAnnotationAfter ann (Fix (BDLines list)) ->
+            Just $ Fix $ BDLines $ L.init list ++ [Fix (BDAnnotationAfter ann (L.last list))]
+          BDAnnotationAfter ann (Fix (BDCols sig cols)) ->
+            Just $ Fix $ BDCols sig $ L.init cols ++ [Fix (BDAnnotationAfter ann (L.last cols))]
+          _ -> Nothing
+
+    descendPrior :: BriDoc -> BriDoc
+    descendPrior = anaDescend (coalg . unFix)
+      where
+        coalg :: BriDocF BriDoc -> Maybe (BriDocF BriDoc)
+        coalg = \case
+          -- prior floating in
+          BDAnnotationBefore ann (Fix (BDPar ind line indented)) ->
+            Just $ BDPar ind (Fix (BDAnnotationBefore ann line)) indented
+          BDAnnotationBefore ann (Fix (BDSeq (l : lr))) ->
+            Just $ BDSeq (Fix (BDAnnotationBefore ann l) : lr)
+          BDAnnotationBefore ann (Fix (BDLines (l : lr))) ->
+            Just $ BDLines (Fix (BDAnnotationBefore ann l) : lr)
+          BDAnnotationBefore ann (Fix (BDCols sig (l : lr))) ->
+            Just $ BDCols sig (Fix (BDAnnotationBefore ann l) : lr)
+          BDAnnotationBefore ann (Fix (BDAddBaseY indent x)) ->
+            Just $ BDAddBaseY indent $ Fix $ BDAnnotationBefore ann x
+          BDAnnotationBefore ann (Fix (BDDebug s x)) ->
+            Just $ BDDebug s $ Fix $ BDAnnotationBefore ann x
+          _ -> Nothing
+
+    descendRest :: BriDoc -> BriDoc
+    descendRest = anaDescend (coalg . unFix)
+      where
+        coalg :: BriDocF BriDoc -> Maybe (BriDocF BriDoc)
+        coalg = \case
+          -- post floating in
+          BDAnnotationAfter ann (Fix (BDPar ind line indented)) ->
+            Just $ BDPar ind line $ Fix $ BDAnnotationAfter ann indented
+          BDAnnotationAfter ann (Fix (BDSeq list)) ->
+            Just $ BDSeq $ L.init list ++ [Fix (BDAnnotationAfter ann (L.last list))]
+          BDAnnotationAfter ann (Fix (BDLines list)) ->
+            Just $ BDLines $ L.init list ++ [Fix (BDAnnotationAfter ann (L.last list))]
+          BDAnnotationAfter ann (Fix (BDCols sig cols)) ->
+            Just $ BDCols sig $ L.init cols ++ [Fix (BDAnnotationAfter ann (L.last cols))]
+          BDAnnotationAfter ann (Fix (BDAddBaseY indent x)) ->
+            Just $ BDAddBaseY indent $ Fix $ BDAnnotationAfter ann x
+          BDAnnotationAfter ann (Fix (BDDebug s x)) ->
+            Just $ BDDebug s $ Fix $ BDAnnotationAfter ann x
+          _ -> Nothing
+
+    descendKW :: BriDoc -> BriDoc
+    descendKW = anaDescend (coalg . unFix)
+      where
+        coalg :: BriDocF BriDoc -> Maybe (BriDocF BriDoc)
+        coalg = \case
+          -- post floating in
+          BDAnnotationKW kw (Fix (BDPar ind line indented)) ->
+            Just $ BDPar ind line $ Fix $ BDAnnotationKW kw indented
+          BDAnnotationKW kw (Fix (BDSeq list)) ->
+            Just $ BDSeq $ L.init list ++ [Fix (BDAnnotationKW kw (L.last list))]
+          BDAnnotationKW kw (Fix (BDLines list)) ->
+            Just $ BDLines $ L.init list ++ [Fix (BDAnnotationKW kw (L.last list))]
+          BDAnnotationKW kw (Fix (BDCols sig cols)) ->
+            Just $ BDCols sig $ L.init cols ++ [Fix (BDAnnotationKW kw (L.last cols))]
+          BDAnnotationKW kw (Fix (BDAddBaseY indent x)) ->
+            Just $ BDAddBaseY indent $ Fix $ BDAnnotationKW kw x
+          BDAnnotationKW kw (Fix (BDDebug s x)) ->
+            Just $ BDDebug s $ Fix $ BDAnnotationKW kw x
+          _ -> Nothing
+
+    descendBYPush :: BriDoc -> BriDoc
+    descendBYPush = anaDescend (coalg . unFix)
+      where
+        coalg :: BriDocF BriDoc -> Maybe (BriDocF BriDoc)
+        coalg = \case
+          BDBaseYPushCur (Fix (BDCols sig cols@(_ : _))) ->
+            Just $ BDCols sig $ Fix (BDBaseYPushCur (L.head cols)) : L.tail cols
+          BDBaseYPushCur (Fix (BDDebug s x)) ->
+            Just $ BDDebug s $ Fix $ BDBaseYPushCur x
+          _ -> Nothing
+
+    descendBYPop :: BriDoc -> BriDoc
+    descendBYPop = anaDescend (coalg . unFix)
+      where
+        coalg :: BriDocF BriDoc -> Maybe (BriDocF BriDoc)
+        coalg = \case
+          BDBaseYPop (Fix (BDCols sig cols@(_ : _))) ->
+            Just $ BDCols sig $ L.init cols ++ [Fix (BDBaseYPop (L.last cols))]
+          BDBaseYPop (Fix (BDDebug s x)) ->
+            Just $ BDDebug s $ Fix $ BDBaseYPop x
+          _ -> Nothing
+
+    descendILPush :: BriDoc -> BriDoc
+    descendILPush = anaDescend (coalg . unFix)
+      where
+        coalg :: BriDocF BriDoc -> Maybe (BriDocF BriDoc)
+        coalg = \case
+          BDIndentLevelPushCur (Fix (BDCols sig cols@(_ : _))) ->
+            Just $ BDCols sig (Fix (BDIndentLevelPushCur (L.head cols)) : L.tail cols)
+          BDIndentLevelPushCur (Fix (BDDebug s x)) ->
+            Just $ BDDebug s $ Fix $ BDIndentLevelPushCur x
+          _ -> Nothing
+
+    descendILPop :: BriDoc -> BriDoc
+    descendILPop = anaDescend (coalg . unFix)
+      where
+        coalg :: BriDocF BriDoc -> Maybe (BriDocF BriDoc)
+        coalg = \case
+          BDIndentLevelPop (Fix (BDCols sig cols@(_ : _))) ->
+            Just $ BDCols sig $ L.init cols ++ [Fix (BDIndentLevelPop (L.last cols))]
+          BDIndentLevelPop (Fix (BDDebug s x)) ->
+            Just $ BDDebug s $ Fix $ BDIndentLevelPop x
+          _ -> Nothing
+
+    descendAddB :: BriDoc -> BriDoc
+    descendAddB = anaDescend (coalg . unFix)
+      where
+        coalg :: BriDocF BriDoc -> Maybe (BriDocF BriDoc)
+        coalg = \case
+          BDAddBaseY BrIndentNone (Fix x) -> Just x
+          -- AddIndent floats into Lines.
+          BDAddBaseY indent (Fix (BDLines lines)) ->
+            Just $ BDLines $ Fix . BDAddBaseY indent <$> lines
+          -- AddIndent floats into last column
+          BDAddBaseY indent (Fix (BDCols sig cols)) ->
+            Just $ BDCols sig $ L.init cols ++ [Fix (BDAddBaseY indent (L.last cols))]
+          -- merge AddIndent and Par
+          BDAddBaseY ind1 (Fix (BDPar ind2 line indented)) ->
+            Just $ BDPar (mergeIndents ind1 ind2) line indented
+          BDAddBaseY ind (Fix (BDAnnotationBefore ann x)) ->
+            Just $ BDAnnotationBefore ann (Fix (BDAddBaseY ind x))
+          BDAddBaseY ind (Fix (BDAnnotationAfter ann x)) ->
+            Just $ BDAnnotationAfter ann $ Fix $ BDAddBaseY ind x
+          BDAddBaseY ind (Fix (BDAnnotationKW kw x)) ->
+            Just $ BDAnnotationKW kw $ Fix $ BDAddBaseY ind x
+          BDAddBaseY ind (Fix (BDSeq list)) ->
+            Just $ BDSeq $ L.init list ++ [Fix (BDAddBaseY ind (L.last list))]
+          BDAddBaseY _ (Fix lit@BDLit{}) -> Just lit
+          BDAddBaseY ind (Fix (BDBaseYPushCur x)) ->
+            Just $ BDBaseYPushCur $ Fix $ BDAddBaseY ind x
+          BDAddBaseY ind (Fix (BDBaseYPop x)) ->
+            Just $ BDBaseYPop $ Fix $ BDAddBaseY ind x
+          BDAddBaseY ind (Fix (BDDebug s x)) ->
+            Just $ BDDebug s $ Fix $ BDAddBaseY ind x
+          BDAddBaseY ind (Fix (BDIndentLevelPop x)) ->
+            Just $ BDIndentLevelPop $ Fix $ BDAddBaseY ind x
+          BDAddBaseY ind (Fix (BDIndentLevelPushCur x)) ->
+            Just $ BDIndentLevelPushCur $ Fix $ BDAddBaseY ind x
+          BDAddBaseY ind (Fix (BDEnsureIndent ind2 x)) ->
+            Just $ BDEnsureIndent (mergeIndents ind ind2) x
+          _ -> Nothing

@@ -7,8 +7,7 @@ module Language.Haskell.Brittany.Internal
   , pPrintModuleAndCheck
   ) where
 
-import Control.Category hiding (id, (.))
-import Control.Monad.Trans.MultiRWS.Strict (mAsk, mTell, mSet, mGet)
+import Control.Monad.Trans.MultiRWS.Strict (mAsk, mTell)
 import Control.Monad.Trans.MultiRWS.Strict qualified as MultiRWSS
 import Data.Foldable
 import Data.Functor.Identity
@@ -195,16 +194,19 @@ ppPreamble m@HsModule{} = do
 
 layoutBriDoc :: BriDocNumbered -> PPMLocal ()
 layoutBriDoc briDoc = do
+
+  let pureTransforms
+        = transformSimplifyIndent
+        . transformSimplifyColumns
+        . transformSimplifyPar
+        . transformSimplifyFloating
+
   -- first step: transform the briDoc.
-  briDoc' <- MultiRWSS.withMultiStateS BDEmpty $ do
+  (briDoc' :: BriDoc) <- -- MultiRWSS.withMultiStateS BDEmpty $ do
     -- Note that briDoc is BriDocNumbered, but state type is BriDoc.
     -- That's why the alt-transform looks a bit special here.
     -- bridoc transformation: remove alts
-    transformAlts briDoc >>= mSet
-    mGet >>= (transformSimplifyFloating >>> mSet)
-    mGet >>= (transformSimplifyPar >>> mSet)
-    mGet >>= (transformSimplifyColumns >>> mSet)
-    mGet >>= (transformSimplifyIndent >>> mSet)
+    pureTransforms <$> transformAlts briDoc
 
   let state = LayoutState
         { _lstate_baseYs           = [0]

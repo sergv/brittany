@@ -1,160 +1,149 @@
-{-# LANGUAGE LambdaCase        #-}
-{-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Language.Haskell.Brittany.Internal.Transformations.Columns (transformSimplifyColumns) where
 
-import Data.Generics.Uniplate.Direct qualified as Uniplate
-import GHC.OldList qualified as List
-import Language.Haskell.Brittany.Internal.Prelude
+import Prelude hiding (lines)
+
+import Data.List qualified as L
+
+import Language.Haskell.Brittany.Internal.RecursionSchemes
 import Language.Haskell.Brittany.Internal.Types
 
 transformSimplifyColumns :: BriDoc -> BriDoc
-transformSimplifyColumns = Uniplate.rewrite $ \case
-  -- BDWrapAnnKey annKey bd ->
-  --   BDWrapAnnKey annKey $ transformSimplify bd
-  BDEmpty -> Nothing
-  BDLit{} -> Nothing
-  BDSeq list
-    | any
-      (\case
-        BDSeq{} -> True
-        BDEmpty{} -> True
-        _ -> False
-      )
-      list
-    -> Just $ BDSeq $ list >>= \case
-      BDEmpty -> []
-      BDSeq l -> l
-      x -> [x]
-  BDSeq (BDCols sig1 cols1@(_ : _) : rest)
-    | all
-      (\case
-        BDSeparator -> True
-        _ -> False
-      )
-      rest
-    -> Just $ BDCols sig1 (List.init cols1 ++ [BDSeq (List.last cols1 : rest)])
-  BDLines lines
-    | any
-      (\case
-        BDLines{} -> True
-        BDEmpty{} -> True
-        _ -> False
-      )
-      lines
-    -> Just $ BDLines $ filter isNotEmpty $ lines >>= \case
-      BDLines l -> l
-      x -> [x]
-  -- prior floating in
-  BDAnnotationBefore ann (BDSeq (l : lr)) ->
-    Just $ BDSeq (BDAnnotationBefore ann l : lr)
-  BDAnnotationBefore ann (BDLines (l : lr)) ->
-    Just $ BDLines (BDAnnotationBefore ann l : lr)
-  BDAnnotationBefore ann (BDCols sig (l : lr)) ->
-    Just $ BDCols sig (BDAnnotationBefore ann l : lr)
-  -- post floating in
-  BDAnnotationAfter ann (BDSeq list) ->
-    Just $ BDSeq $ List.init list ++ [BDAnnotationAfter ann $ List.last list]
-  BDAnnotationAfter ann (BDLines list) ->
-    Just
-      $ BDLines
-      $ List.init list
-      ++ [BDAnnotationAfter ann $ List.last list]
-  BDAnnotationAfter ann (BDCols sig cols) ->
-    Just
-      $ BDCols sig
-      $ List.init cols
-      ++ [BDAnnotationAfter ann $ List.last cols]
-  BDAnnotationKW kw (BDSeq list) ->
-    Just
-      $ BDSeq
-      $ List.init list
-      ++ [BDAnnotationKW kw $ List.last list]
-  BDAnnotationKW kw (BDLines list) ->
-    Just
-      $ BDLines
-      $ List.init list
-      ++ [BDAnnotationKW kw $ List.last list]
-  BDAnnotationKW kw (BDCols sig cols) ->
-    Just
-      $ BDCols sig
-      $ List.init cols
-      ++ [BDAnnotationKW kw $ List.last cols]
-  -- ensureIndent float-in
-  -- not sure if the following rule is necessary; tests currently are
-  -- unaffected.
-  -- BDEnsureIndent indent (BDLines lines) ->
-  --   Just $ BDLines $ BDEnsureIndent indent <$> lines
-  -- matching col special transformation
-  BDCols sig1 cols1@(_ : _)
-    | BDLines lines@(_ : _ : _) <- List.last cols1
-    , BDCols sig2 cols2 <- List.last lines
-    , sig1 == sig2
-    -> Just $ BDLines
-      [ BDCols sig1 $ List.init cols1 ++ [BDLines $ List.init lines]
-      , BDCols sig2 cols2
-      ]
-  BDCols sig1 cols1@(_ : _)
-    | BDLines lines@(_ : _ : _) <- List.last cols1
-    , BDEnsureIndent _ (BDCols sig2 cols2) <- List.last lines
-    , sig1 == sig2
-    -> Just $ BDLines
-      [ BDCols sig1 $ List.init cols1 ++ [BDLines $ List.init lines]
-      , BDCols sig2 cols2
-      ]
-  BDPar ind col1@(BDCols sig1 _) col2@(BDCols sig2 _) | sig1 == sig2 ->
-    Just $ BDAddBaseY ind (BDLines [col1, col2])
-  BDPar ind col1@(BDCols sig1 _) (BDLines (col2@(BDCols sig2 _) : rest))
-    | sig1 == sig2 -> Just $ BDPar ind (BDLines [col1, col2]) (BDLines rest)
-  BDPar ind (BDLines lines1) col2@(BDCols sig2 _)
-    | BDCols sig1 _ <- List.last lines1, sig1 == sig2 -> Just
-    $ BDAddBaseY ind (BDLines $ lines1 ++ [col2])
-  BDPar ind (BDLines lines1) (BDLines (col2@(BDCols sig2 _) : rest))
-    | BDCols sig1 _ <- List.last lines1, sig1 == sig2 -> Just
-    $ BDPar ind (BDLines $ lines1 ++ [col2]) (BDLines rest)
-  -- BDPar ind1 (BDCols sig1 cols1) (BDPar ind2 line (BDCols sig2 cols2))
-  --   | sig1==sig2 ->
-  --       Just $ BDPar
-  --         ind1
-  --         (BDLines [BDCols sig1 cols1, BDCols sig])
-  BDCols sig1 cols
-    | BDPar _ind line (BDCols sig2 cols2) <- List.last cols, sig1 == sig2
-    -> Just
-      $ BDLines [BDCols sig1 (List.init cols ++ [line]), BDCols sig2 cols2]
-  BDCols sig1 cols
-    | BDPar ind line (BDLines lines) <- List.last cols
-    , BDCols sig2 cols2 <- List.last lines
-    , sig1 == sig2
-    -> Just $ BDLines
-      [ BDCols sig1
-      $ List.init cols
-      ++ [BDPar ind line (BDLines $ List.init lines)]
-      , BDCols sig2 cols2
-      ]
-  BDLines [x]            -> Just x
-  BDLines []             -> Just BDEmpty
-  BDSeq{}                -> Nothing
-  BDCols{}               -> Nothing
-  BDSeparator            -> Nothing
-  BDAddBaseY{}           -> Nothing
-  BDBaseYPushCur{}       -> Nothing
-  BDBaseYPop{}           -> Nothing
-  BDIndentLevelPushCur{} -> Nothing
-  BDIndentLevelPop{}     -> Nothing
-  BDPar{}                -> Nothing
-  BDAlt{}                -> Nothing
-  BDForceMultiline{}     -> Nothing
-  BDForceSingleline{}    -> Nothing
-  BDForwardLineMode{}    -> Nothing
-  BDExternal{}           -> Nothing
-  BDPlain{}              -> Nothing
-  BDLines{}              -> Nothing
-  BDAnnotationBefore{}    -> Nothing
-  BDAnnotationKW{}       -> Nothing
-  BDAnnotationAfter{}     -> Nothing
-  BDMoveToKWDP{}         -> Nothing
-  BDEnsureIndent{}       -> Nothing
-  BDSetParSpacing{}      -> Nothing
-  BDForceParSpacing{}    -> Nothing
-  BDDebug{}              -> Nothing
-  BDNonBottomSpacing _ x -> Just x
+transformSimplifyColumns = cataRewrite alg
+  where
+    alg :: BriDocF BriDoc -> Maybe BriDoc
+    alg = \case
+      -- BDWrapAnnKey annKey bd ->
+      --   BDWrapAnnKey annKey $ transformSimplify bd
+      BDEmpty -> Nothing
+      BDLit{} -> Nothing
+      BDSeq list
+        | any
+          (\case
+            Fix BDSeq{}   -> True
+            Fix BDEmpty{} -> True
+            _              -> False
+          )
+          list
+        -> Just $ Fix $ BDSeq $ flip foldMap list $ \case
+          Fix BDEmpty   -> []
+          Fix (BDSeq l) -> l
+          x              -> [x]
+      BDSeq (Fix (BDCols sig1 cols1@(_ : _)) : rest)
+        | all
+          (\case
+            Fix BDSeparator -> True
+            _                -> False
+          )
+          rest
+        -> Just $ Fix $ BDCols sig1 (L.init cols1 ++ [Fix (BDSeq (L.last cols1 : rest))])
+      BDLines lines
+        | any
+          (\case
+            Fix BDLines{} -> True
+            Fix BDEmpty{} -> True
+            _              -> False
+          )
+          lines
+        -> Just $ Fix $ BDLines $ filter isNotEmpty $ flip foldMap lines $ \case
+          Fix (BDLines l) -> l
+          x                -> [x]
+      -- prior floating in
+      BDAnnotationBefore ann (Fix (BDSeq (l : lr))) ->
+        Just $ Fix $ BDSeq $ Fix (BDAnnotationBefore ann l) : lr
+      BDAnnotationBefore ann (Fix (BDLines (l : lr))) ->
+        Just $ Fix $ BDLines $ Fix (BDAnnotationBefore ann l) : lr
+      BDAnnotationBefore ann (Fix (BDCols sig (l : lr))) ->
+        Just $ Fix $ BDCols sig $ Fix (BDAnnotationBefore ann l) : lr
+      -- post floating in
+      BDAnnotationAfter ann (Fix (BDSeq list)) ->
+        Just $ Fix $ BDSeq $ L.init list ++ [Fix (BDAnnotationAfter ann (L.last list))]
+      BDAnnotationAfter ann (Fix (BDLines list)) ->
+        Just $ Fix $ BDLines $ L.init list ++ [Fix (BDAnnotationAfter ann (L.last list))]
+      BDAnnotationAfter ann (Fix (BDCols sig cols)) ->
+        Just $ Fix $ BDCols sig $ L.init cols ++ [Fix (BDAnnotationAfter ann (L.last cols))]
+      BDAnnotationKW kw (Fix (BDSeq list)) ->
+        Just $ Fix $ BDSeq $ L.init list ++ [Fix (BDAnnotationKW kw (L.last list))]
+      BDAnnotationKW kw (Fix (BDLines list)) ->
+        Just $ Fix $ BDLines $ L.init list ++ [Fix (BDAnnotationKW kw (L.last list))]
+      BDAnnotationKW kw (Fix (BDCols sig cols)) ->
+        Just $ Fix $ BDCols sig $ L.init cols ++ [Fix (BDAnnotationKW kw (L.last cols))]
+      -- ensureIndent float-in
+      -- not sure if the following rule is necessary; tests currently are
+      -- unaffected.
+      -- BDEnsureIndent indent (BDLines lines) ->
+      --   Just $ BDLines $ BDEnsureIndent indent <$> lines
+      -- matching col special transformation
+      BDCols sig1 cols1@(_ : _)
+        | Fix (BDLines lines@(_ : _ : _)) <- L.last cols1
+        , Fix (BDCols sig2 cols2) <- L.last lines
+        , sig1 == sig2
+        -> Just $ Fix $ BDLines
+          [ Fix $ BDCols sig1 $ L.init cols1 ++ [Fix $ BDLines $ L.init lines]
+          , Fix $ BDCols sig2 cols2
+          ]
+      BDCols sig1 cols1@(_ : _)
+        | Fix (BDLines lines@(_ : _ : _))                   <- L.last cols1
+        , Fix (BDEnsureIndent _ (Fix (BDCols sig2 cols2))) <- L.last lines
+        , sig1 == sig2
+        -> Just $ Fix $ BDLines
+          [ Fix $ BDCols sig1 $ L.init cols1 ++ [Fix $ BDLines $ L.init lines]
+          , Fix $ BDCols sig2 cols2
+          ]
+      BDPar ind col1@(Fix (BDCols sig1 _)) col2@(Fix (BDCols sig2 _))
+        | sig1 == sig2
+        -> Just $ Fix $ BDAddBaseY ind $ Fix $ BDLines [col1, col2]
+      BDPar ind col1@(Fix (BDCols sig1 _)) (Fix (BDLines (col2@(Fix (BDCols sig2 _)) : rest)))
+        | sig1 == sig2
+        -> Just $ Fix $ BDPar ind (Fix (BDLines [col1, col2])) (Fix (BDLines rest))
+      BDPar ind (Fix (BDLines lines1)) col2@(Fix (BDCols sig2 _))
+        | Fix (BDCols sig1 _) <- L.last lines1
+        , sig1 == sig2
+        -> Just $ Fix $ BDAddBaseY ind $ Fix $ BDLines $ lines1 ++ [col2]
+      BDPar ind (Fix (BDLines lines1)) (Fix (BDLines (col2@(Fix (BDCols sig2 _)) : rest)))
+        | Fix (BDCols sig1 _) <- L.last lines1
+        , sig1 == sig2
+        -> Just $ Fix $ BDPar ind (Fix (BDLines $ lines1 ++ [col2])) (Fix (BDLines rest))
+      -- BDPar ind1 (Fix (BDCols sig1 cols1)) (Fix (BDPar ind2 line (Fix (BDCols sig2 cols2))))
+      --   | sig1 == sig2
+      --   -> Just $ Fix $ BDPar ind1 $ Fix BDLines [Fix (BDCols sig1 cols1), Fix (BDCols sig)]
+      BDCols sig1 cols
+        | Fix (BDPar _ind line (Fix (BDCols sig2 cols2))) <- L.last cols
+        , sig1 == sig2
+        -> Just $ Fix $ BDLines [Fix (BDCols sig1 (L.init cols ++ [line])), Fix (BDCols sig2 cols2)]
+      BDCols sig1 cols
+        | Fix (BDPar ind line (Fix (BDLines lines))) <- L.last cols
+        , Fix (BDCols sig2 cols2)                    <- L.last lines
+        , sig1 == sig2
+        -> Just $ Fix $ BDLines
+          [ Fix $ BDCols sig1 $ L.init cols ++ [Fix $ BDPar ind line $ Fix $ BDLines $ L.init lines]
+          , Fix $ BDCols sig2 cols2
+          ]
+      BDLines [x]            -> Just x
+      BDLines []             -> Just $ Fix BDEmpty
+      BDSeq{}                -> Nothing
+      BDCols{}               -> Nothing
+      BDSeparator            -> Nothing
+      BDAddBaseY{}           -> Nothing
+      BDBaseYPushCur{}       -> Nothing
+      BDBaseYPop{}           -> Nothing
+      BDIndentLevelPushCur{} -> Nothing
+      BDIndentLevelPop{}     -> Nothing
+      BDPar{}                -> Nothing
+      BDAlt{}                -> Nothing
+      BDForceMultiline{}     -> Nothing
+      BDForceSingleline{}    -> Nothing
+      BDForwardLineMode{}    -> Nothing
+      BDExternal{}           -> Nothing
+      BDPlain{}              -> Nothing
+      BDLines{}              -> Nothing
+      BDAnnotationBefore{}   -> Nothing
+      BDAnnotationKW{}       -> Nothing
+      BDAnnotationAfter{}    -> Nothing
+      BDMoveToKWDP{}         -> Nothing
+      BDEnsureIndent{}       -> Nothing
+      BDSetParSpacing{}      -> Nothing
+      BDForceParSpacing{}    -> Nothing
+      BDDebug{}              -> Nothing
+      BDNonBottomSpacing _ x -> Just x

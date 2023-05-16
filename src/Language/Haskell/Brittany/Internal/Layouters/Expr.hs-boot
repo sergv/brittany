@@ -14,6 +14,6 @@ layoutExpr :: LHsExpr GhcPs -> ToBriDocM BriDocNumbered
 
 -- layoutStmt :: ToBriDoc' (StmtLR GhcPs GhcPs (LHsExpr GhcPs))
 
-litBriDoc :: HsLit GhcPs -> BriDocFInt
+litBriDoc :: HsLit GhcPs -> BriDocF BriDocNumbered
 
-overLitValBriDoc :: OverLitVal -> BriDocFInt
+overLitValBriDoc :: OverLitVal -> BriDocF BriDocNumbered

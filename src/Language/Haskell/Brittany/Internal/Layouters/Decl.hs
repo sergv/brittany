@@ -861,7 +861,7 @@ layoutClsInst lcid@(L _ cid) = docLines
     :: [ToBriDocM (LocatedAn AnnListItem BriDocNumbered)] -> ToBriDocM BriDocNumbered
   docSortedLines l =
     allocateNode
-      . BDFLines
+      . BDLines
       . fmap unLoc
       . List.sortOn (ExactPrint.rs . locA . getLoc)
       =<< sequence l

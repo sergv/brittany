@@ -85,6 +85,7 @@ module Language.Haskell.Brittany.Internal.LayouterBasics
   , docSharedWrapper
   ) where
 
+import Control.Comonad.Cofree
 import Control.Monad.Trans.MultiRWS.Strict qualified as MultiRWSS
 import Control.Monad.Writer.Strict qualified as Writer
 import Data.Char qualified as Char
@@ -177,7 +178,7 @@ briDocByExactInlineOnly infoStr ast = do
   fallbackMode <-
     mAsk <&> (_conf_errorHandling >>> _econf_ExactPrintFallback >>> confUnpack)
   let
-    exactPrintNode t = allocateNode $ BDFExternal False t
+    exactPrintNode t = allocateNode $ BDExternal False t
   let
     errorAction = do
       mTell [ErrorUnknownNode infoStr (locA (getLoc ast)) (pretty ast)]
@@ -346,10 +347,10 @@ hasAnnKeyword ast annKeyword =
 -- new BriDoc stuff
 
 allocateNode
-  :: MonadMultiState NodeAllocIndex m => BriDocFInt -> m BriDocNumbered
+  :: MonadMultiState NodeAllocIndex m => BriDocF BriDocNumbered -> m BriDocNumbered
 allocateNode bd = do
   i <- allocNodeIndex
-  pure (i, bd)
+  pure $ i :< bd
 
 allocNodeIndex :: MonadMultiState NodeAllocIndex m => m Int
 allocNodeIndex = do
@@ -358,10 +359,10 @@ allocNodeIndex = do
   pure i
 
 docEmpty :: ToBriDocM BriDocNumbered
-docEmpty = allocateNode BDFEmpty
+docEmpty = allocateNode BDEmpty
 
 docLit :: Text -> ToBriDocM BriDocNumbered
-docLit = allocateNode . BDFLit
+docLit = allocateNode . BDLit
 
 docLitS :: String -> ToBriDocM BriDocNumbered
 docLitS = docLit . Text.pack
@@ -372,12 +373,12 @@ docExt
   -> LocatedAn ann ast
   -> Bool
   -> ToBriDocM BriDocNumbered
-docExt f x shouldAddComment = allocateNode $ BDFExternal
+docExt f x shouldAddComment = allocateNode $ BDExternal
   shouldAddComment
   (f $ Text.pack $ ExactPrint.exactPrint x)
 
 docAlt :: [ToBriDocM BriDocNumbered] -> ToBriDocM BriDocNumbered
-docAlt l = allocateNode . BDFAlt =<< sequence l
+docAlt l = allocateNode . BDAlt =<< sequence l
 
 newtype CollectAltM a = CollectAltM (Writer.Writer [ToBriDocM BriDocNumbered] a)
   deriving (Functor, Applicative, Monad)
@@ -393,45 +394,45 @@ runFilteredAlternative (CollectAltM action) = docAlt $ Writer.execWriter action
 
 docSeq :: [ToBriDocM BriDocNumbered] -> ToBriDocM BriDocNumbered
 docSeq [] = docEmpty
-docSeq l  = allocateNode . BDFSeq =<< sequence l
+docSeq l  = allocateNode . BDSeq =<< sequence l
 
 docLines :: [ToBriDocM BriDocNumbered] -> ToBriDocM BriDocNumbered
-docLines l = allocateNode . BDFLines =<< sequence l
+docLines l = allocateNode . BDLines =<< sequence l
 
 docCols :: ColSig -> [ToBriDocM BriDocNumbered] -> ToBriDocM BriDocNumbered
-docCols sig l = allocateNode . BDFCols sig =<< sequence l
+docCols sig l = allocateNode . BDCols sig =<< sequence l
 
 docAddBaseY :: BrIndent -> ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
-docAddBaseY ind bdm = allocateNode . BDFAddBaseY ind =<< bdm
+docAddBaseY ind bdm = allocateNode . BDAddBaseY ind =<< bdm
 
 docSetBaseY :: ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
 docSetBaseY bdm = do
   bd <- bdm
   -- the order here is important so that these two nodes can be treated
   -- properly over at `transformAlts`.
-  n1 <- allocateNode $ BDFBaseYPushCur bd
-  n2 <- allocateNode $ BDFBaseYPop n1
+  n1 <- allocateNode $ BDBaseYPushCur bd
+  n2 <- allocateNode $ BDBaseYPop n1
   pure n2
 
 docSetIndentLevel :: ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
 docSetIndentLevel bdm = do
   bd <- bdm
-  n1 <- allocateNode $ BDFIndentLevelPushCur bd
-  n2 <- allocateNode $ BDFIndentLevelPop n1
+  n1 <- allocateNode $ BDIndentLevelPushCur bd
+  n2 <- allocateNode $ BDIndentLevelPop n1
   pure n2
 
 docSetBaseAndIndent :: ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
 docSetBaseAndIndent = docSetBaseY . docSetIndentLevel
 
 docSeparator :: ToBriDocM BriDocNumbered
-docSeparator = allocateNode BDFSeparator
+docSeparator = allocateNode BDSeparator
 
 docAnnotationKW
   :: Maybe AnnKeywordId
   -> ToBriDocM BriDocNumbered
   -> ToBriDocM BriDocNumbered
 docAnnotationKW kw bdm =
-  allocateNode . BDFAnnotationKW kw =<< bdm
+  allocateNode . BDAnnotationKW kw =<< bdm
 
 docMoveToKWDP
   :: AnnKeywordId
@@ -439,22 +440,22 @@ docMoveToKWDP
   -> ToBriDocM BriDocNumbered
   -> ToBriDocM BriDocNumbered
 docMoveToKWDP kw shouldRestoreIndent bdm =
-  allocateNode . BDFMoveToKWDP kw shouldRestoreIndent =<< bdm
+  allocateNode . BDMoveToKWDP kw shouldRestoreIndent =<< bdm
 
 docNonBottomSpacing :: ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
-docNonBottomSpacing bdm = allocateNode . BDFNonBottomSpacing False =<< bdm
+docNonBottomSpacing bdm = allocateNode . BDNonBottomSpacing False =<< bdm
 
 docNonBottomSpacingS :: ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
-docNonBottomSpacingS bdm = allocateNode . BDFNonBottomSpacing True =<< bdm
+docNonBottomSpacingS bdm = allocateNode . BDNonBottomSpacing True =<< bdm
 
 docSetParSpacing :: ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
-docSetParSpacing bdm = allocateNode . BDFSetParSpacing =<< bdm
+docSetParSpacing bdm = allocateNode . BDSetParSpacing =<< bdm
 
 docForceParSpacing :: ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
-docForceParSpacing bdm = allocateNode . BDFForceParSpacing =<< bdm
+docForceParSpacing bdm = allocateNode . BDForceParSpacing =<< bdm
 
 docDebug :: String -> ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
-docDebug s bdm = allocateNode . BDFDebug s =<< bdm
+docDebug s bdm = allocateNode . BDDebug s =<< bdm
 
 appSep :: ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
 appSep x = docSeq [x, docSeparator]
@@ -521,13 +522,13 @@ wrapBefore :: EpAnn () -> ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
 wrapBefore epann bdm = do
   bd <- bdm
   i  <- allocNodeIndex
-  pure (i, BDFAnnotationBefore epann bd)
+  pure $ i :< BDAnnotationBefore epann bd
 
 wrapAfter :: EpAnn () -> ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
 wrapAfter epann bdm = do
   bd <- bdm
   i  <- allocNodeIndex
-  pure (i, BDFAnnotationAfter epann bd)
+  pure $ i :< BDAnnotationAfter epann bd
 
 instance DocWrapable (ToBriDocM BriDocNumbered) where
   docWrapNodeAround (L ann _ast) bdm = do
@@ -535,10 +536,10 @@ instance DocWrapable (ToBriDocM BriDocNumbered) where
     i1 <- allocNodeIndex
     -- i2 <- allocNodeIndex
     pure
-      $ (i1,)
-      $ BDFAnnotationBefore (forgetAnn ann)
+      $ (i1 :<)
+      $ BDAnnotationBefore (forgetAnn ann)
       --  $ (i2,)
-      --  $ BDFAnnotationAfter
+      --  $ BDAnnotationAfter
       $ bd
   docWrapNodeBefore (L ann _ast) =
     wrapBefore (forgetAnn ann)
@@ -645,17 +646,17 @@ docPar
 docPar lineM indentedM = do
   line     <- lineM
   indented <- indentedM
-  allocateNode $ BDFPar BrIndentNone line indented
+  allocateNode $ BDPar BrIndentNone line indented
 
 docForceSingleline :: ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
-docForceSingleline bdm = allocateNode . BDFForceSingleline =<< bdm
+docForceSingleline bdm = allocateNode . BDForceSingleline =<< bdm
 
 docForceMultiline :: ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
-docForceMultiline bdm = allocateNode . BDFForceMultiline =<< bdm
+docForceMultiline bdm = allocateNode . BDForceMultiline =<< bdm
 
 docEnsureIndent
   :: BrIndent -> ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
-docEnsureIndent ind mbd = mbd >>= \bd -> allocateNode $ BDFEnsureIndent ind bd
+docEnsureIndent ind mbd = mbd >>= \bd -> allocateNode $ BDEnsureIndent ind bd
 
 unknownNodeError
   :: (Pretty ann, Pretty ast)

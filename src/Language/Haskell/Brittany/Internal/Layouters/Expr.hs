@@ -892,7 +892,7 @@ layoutExpr lexpr@(L _ expr) = do
     HsUntypedSplice _ (HsUntypedSpliceExpr _ e) -> do
       docSeq [docLitS "$", docParenL, layoutExpr e, docParenR]
     HsUntypedSplice _ (HsQuasiQuote _ quoter content) -> do
-      allocateNode $ BDFPlain
+      allocateNode $ BDPlain
         (Text.pack
         $ "["
         ++ showOutputable quoter
@@ -1052,26 +1052,26 @@ recordExpression dotdot indentPolicy lexpr nameDoc rFs@(rF1 : rFr) = do
         in [line1] ++ lineR ++ [dotdotLine, lineN]
       )
 
-litBriDoc :: HsLit GhcPs -> BriDocFInt
+litBriDoc :: HsLit GhcPs -> BriDocF BriDocNumbered
 litBriDoc = \case
-  HsChar         (SourceText t) _c             -> BDFLit $ Text.pack t -- BDFLit $ Text.pack $ ['\'', c, '\'']
-  HsCharPrim     (SourceText t) _c             -> BDFLit $ Text.pack t -- BDFLit $ Text.pack $ ['\'', c, '\'']
-  HsString       (SourceText t) _fastString    -> BDFLit $ Text.pack t -- BDFLit $ Text.pack $ FastString.unpackFS fastString
-  HsStringPrim   (SourceText t) _byteString    -> BDFLit $ Text.pack t -- BDFLit $ Text.pack $ Data.ByteString.Char8.unpack byteString
-  HsInt _        (IL (SourceText t) _ _)       -> BDFLit $ Text.pack t -- BDFLit $ Text.pack $ show i
-  HsIntPrim      (SourceText t) _i             -> BDFLit $ Text.pack t -- BDFLit $ Text.pack $ show i
-  HsWordPrim     (SourceText t) _i             -> BDFLit $ Text.pack t -- BDFLit $ Text.pack $ show i
-  HsInt64Prim    (SourceText t) _i             -> BDFLit $ Text.pack t -- BDFLit $ Text.pack $ show i
-  HsWord64Prim   (SourceText t) _i             -> BDFLit $ Text.pack t -- BDFLit $ Text.pack $ show i
-  HsInteger      (SourceText t) _i _type       -> BDFLit $ Text.pack t -- BDFLit $ Text.pack $ show i
-  HsRat _        FL{fl_text = SourceText t} _  -> BDFLit $ Text.pack t
-  HsFloatPrim _  FL{fl_text = SourceText t}    -> BDFLit $ Text.pack t
-  HsDoublePrim _ FL{fl_text = SourceText t}    -> BDFLit $ Text.pack t
+  HsChar         (SourceText t) _c             -> BDLit $ Text.pack t -- BDLit $ Text.pack $ ['\'', c, '\'']
+  HsCharPrim     (SourceText t) _c             -> BDLit $ Text.pack t -- BDLit $ Text.pack $ ['\'', c, '\'']
+  HsString       (SourceText t) _fastString    -> BDLit $ Text.pack t -- BDLit $ Text.pack $ FastString.unpackFS fastString
+  HsStringPrim   (SourceText t) _byteString    -> BDLit $ Text.pack t -- BDLit $ Text.pack $ Data.ByteString.Char8.unpack byteString
+  HsInt _        (IL (SourceText t) _ _)       -> BDLit $ Text.pack t -- BDLit $ Text.pack $ show i
+  HsIntPrim      (SourceText t) _i             -> BDLit $ Text.pack t -- BDLit $ Text.pack $ show i
+  HsWordPrim     (SourceText t) _i             -> BDLit $ Text.pack t -- BDLit $ Text.pack $ show i
+  HsInt64Prim    (SourceText t) _i             -> BDLit $ Text.pack t -- BDLit $ Text.pack $ show i
+  HsWord64Prim   (SourceText t) _i             -> BDLit $ Text.pack t -- BDLit $ Text.pack $ show i
+  HsInteger      (SourceText t) _i _type       -> BDLit $ Text.pack t -- BDLit $ Text.pack $ show i
+  HsRat _        FL{fl_text = SourceText t} _  -> BDLit $ Text.pack t
+  HsFloatPrim _  FL{fl_text = SourceText t}    -> BDLit $ Text.pack t
+  HsDoublePrim _ FL{fl_text = SourceText t}    -> BDLit $ Text.pack t
   _                                            -> error "litBriDoc: literal with no SourceText"
 
-overLitValBriDoc :: OverLitVal -> BriDocFInt
+overLitValBriDoc :: OverLitVal -> BriDocF BriDocNumbered
 overLitValBriDoc = \case
-  HsIntegral (IL (SourceText t) _ _)      -> BDFLit $ Text.pack t
-  HsFractional FL{fl_text = SourceText t} -> BDFLit $ Text.pack t
-  HsIsString (SourceText t) _             -> BDFLit $ Text.pack t
+  HsIntegral (IL (SourceText t) _ _)      -> BDLit $ Text.pack t
+  HsFractional FL{fl_text = SourceText t} -> BDLit $ Text.pack t
+  HsIsString (SourceText t) _             -> BDLit $ Text.pack t
   _                                       -> error "overLitValBriDoc: literal with no SourceText"

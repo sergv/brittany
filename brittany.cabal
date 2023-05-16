@@ -104,6 +104,7 @@ library
     Language.Haskell.Brittany.Internal.ParseModule
     Language.Haskell.Brittany.Internal.Prelude
     Language.Haskell.Brittany.Internal.PreludeUtils
+    Language.Haskell.Brittany.Internal.RecursionSchemes
     Language.Haskell.Brittany.Internal.Transformations.Alt
     Language.Haskell.Brittany.Internal.Transformations.Columns
     Language.Haskell.Brittany.Internal.Transformations.Floating
@@ -124,9 +125,11 @@ library
     , cmdargs >= 0.10.21
     , containers >= 0.6.4
     , czipwith >= 1.0.1
+    , data-fix
     , directory >= 1.3.6
     , extra >= 1.7.10
     , filepath >= 1.4.2
+    , free
     , ghc >= 9.6.1
     , ghc-boot-th >= 9.2.2
     , ghc-exactprint >= 1.5

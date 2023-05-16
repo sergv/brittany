@@ -9,6 +9,7 @@
 
 module Language.Haskell.Brittany.Internal.Transformations.Alt (transformAlts) where
 
+import Control.Comonad.Cofree
 import Control.Monad.Memo qualified as Memo
 import Control.Monad.Trans.MultiRWS.Strict qualified as MultiRWSS
 import Data.Functor
@@ -88,30 +89,28 @@ transformAlts =
     --     go = Memo.memo $ \bdX -> do
     --       i <- lift $ incGet
     --       fmap (\bd' -> (i,bd')) $ case bdX of
-    --         BDEmpty           -> pure $ BDFEmpty
-    --         BDLit t           -> pure $ BDFLit t
-    --         BDSeq list        -> BDFSeq <$> go `mapM` list
-    --         BDCols sig list   -> BDFCols sig <$> go `mapM` list
-    --         BDSeparator       -> pure $ BDFSeparator
-    --         BDAddBaseY ind bd -> BDFAddBaseY ind <$> go bd
-    --         BDSetBaseY bd     -> BDFSetBaseY <$> go bd
-    --         BDSetIndentLevel bd     -> BDFSetIndentLevel <$> go bd
-    --         BDPar ind line indented -> [ BDFPar ind line' indented'
+    --         BDEmpty           -> pure $ BDEmpty
+    --         BDLit t           -> pure $ BDLit t
+    --         BDSeq list        -> BDSeq <$> go `mapM` list
+    --         BDCols sig list   -> BDCols sig <$> go `mapM` list
+    --         BDSeparator       -> pure $ BDSeparator
+    --         BDAddBaseY ind bd -> BDAddBaseY ind <$> go bd
+    --         BDSetBaseY bd     -> BDSetBaseY <$> go bd
+    --         BDSetIndentLevel bd     -> BDSetIndentLevel <$> go bd
+    --         BDPar ind line indented -> [ BDPar ind line' indented'
     --                                    | line' <- go line
     --                                    , indented' <- go indented
     --                                    ]
-    --         BDAlt alts              -> BDFAlt <$> go `mapM` alts -- not that this will happen
-    --         BDForceMultiline  bd    -> BDFForceMultiline <$> go bd
-    --         BDForceSingleline bd    -> BDFForceSingleline <$> go bd
-    --         BDForwardLineMode bd    -> BDFForwardLineMode <$> go bd
-    --         BDExternal k ks c t          -> pure $ BDFExternal k ks c t
-    --         BDAnnotationBefore annKey bd -> BDFAnnotationBefore annKey <$> go bd
-    --         BDAnnotationPost  annKey bd  -> BDFAnnotationAter  annKey <$> go bd
-    --         BDLines lines         -> BDFLines <$> go `mapM` lines
-    --         BDEnsureIndent ind bd -> BDFEnsureIndent ind <$> go bd
-    --         BDProhibitMTEL bd     -> BDFProhibitMTEL <$> go bd
-
-
+    --         BDAlt alts              -> BDAlt <$> go `mapM` alts -- not that this will happen
+    --         BDorceMultiline  bd    -> BDForceMultiline <$> go bd
+    --         BDorceSingleline bd    -> BDForceSingleline <$> go bd
+    --         BDorwardLineMode bd    -> BDForwardLineMode <$> go bd
+    --         BDExternal k ks c t          -> pure $ BDExternal k ks c t
+    --         BDAnnotationBefore annKey bd -> BDAnnotationBefore annKey <$> go bd
+    --         BDAnnotationPost  annKey bd  -> BDAnnotationAter  annKey <$> go bd
+    --         BDLines lines         -> BDLines <$> go `mapM` lines
+    --         BDEnsureIndent ind bd -> BDEnsureIndent ind <$> go bd
+    --         BDProhibitMTEL bd     -> BDProhibitMTEL <$> go bd
 
   rec
     :: BriDocNumbered
@@ -120,16 +119,16 @@ transformAlts =
          [VerticalSpacing]
          (MultiRWSS.MultiRWS r w (AltCurPos ': s))
          BriDocNumbered
-  rec bdX@(brDcId, brDc) = do
-    let reWrap = (,) brDcId
+  rec bdX@(brDcId :< brDc) = do
+    let reWrap = (brDcId :<)
     -- debugAcp :: AltCurPos <- mGet
     case brDc of
-      BDFEmpty{}            -> processSpacingSimple bdX $> bdX
-      BDFLit{}              -> processSpacingSimple bdX $> bdX
-      BDFSeq list           -> reWrap . BDFSeq <$> list `forM` rec
-      BDFCols sig list      -> reWrap . BDFCols sig <$> list `forM` rec
-      BDFSeparator          -> processSpacingSimple bdX $> bdX
-      BDFAddBaseY indent bd -> do
+      BDEmpty{}            -> processSpacingSimple bdX $> bdX
+      BDLit{}              -> processSpacingSimple bdX $> bdX
+      BDSeq list           -> reWrap . BDSeq <$> list `forM` rec
+      BDCols sig list      -> reWrap . BDCols sig <$> list `forM` rec
+      BDSeparator          -> processSpacingSimple bdX $> bdX
+      BDAddBaseY indent bd -> do
         acp <- mGet
         indAdd <- fixIndentationForMultiple acp indent
         mSet $ acp { _acp_indentPrep = max (_acp_indentPrep acp) indAdd }
@@ -138,24 +137,24 @@ transformAlts =
         mSet $ acp' { _acp_indent = _acp_indent acp }
         pure $ case indent of
           BrIndentNone -> r
-          BrIndentRegular -> reWrap $ BDFAddBaseY (BrIndentSpecial indAdd) r
-          BrIndentSpecial i -> reWrap $ BDFAddBaseY (BrIndentSpecial i) r
-      BDFBaseYPushCur bd -> do
+          BrIndentRegular -> reWrap $ BDAddBaseY (BrIndentSpecial indAdd) r
+          BrIndentSpecial i -> reWrap $ BDAddBaseY (BrIndentSpecial i) r
+      BDBaseYPushCur bd -> do
         acp <- mGet
         mSet $ acp { _acp_indent = _acp_line acp }
         r <- rec bd
-        pure $ reWrap $ BDFBaseYPushCur r
-      BDFBaseYPop bd -> do
+        pure $ reWrap $ BDBaseYPushCur r
+      BDBaseYPop bd -> do
         acp <- mGet
         r <- rec bd
         acp' <- mGet
         mSet $ acp' { _acp_indent = _acp_indentPrep acp }
-        pure $ reWrap $ BDFBaseYPop r
-      BDFIndentLevelPushCur bd -> do
-        reWrap . BDFIndentLevelPushCur <$> rec bd
-      BDFIndentLevelPop bd -> do
-        reWrap . BDFIndentLevelPop <$> rec bd
-      BDFPar indent sameLine indented -> do
+        pure $ reWrap $ BDBaseYPop r
+      BDIndentLevelPushCur bd -> do
+        reWrap . BDIndentLevelPushCur <$> rec bd
+      BDIndentLevelPop bd -> do
+        reWrap . BDIndentLevelPop <$> rec bd
+      BDPar indent sameLine indented -> do
         indAmount <-
           mAsk <&> (_conf_layout >>> _lconfig_indentAmount >>> confUnpack)
         let
@@ -169,19 +168,19 @@ transformAlts =
         sameLine' <- rec sameLine
         mModify $ \acp' -> acp' { _acp_line = ind, _acp_indent = ind }
         indented' <- rec indented
-        pure $ reWrap $ BDFPar indent sameLine' indented'
-      BDFAlt [] -> error "empty BDAlt" -- returning BDEmpty instead is a
+        pure $ reWrap $ BDPar indent sameLine' indented'
+      BDAlt [] -> error "empty BDAlt" -- returning BDEmpty instead is a
                                       -- possibility, but i will prefer a
                                       -- fail-early approach; BDEmpty does not
                                       -- make sense semantically for Alt[].
-      BDFAlt alts -> do
+      BDAlt alts -> do
         altChooser <- mAsk <&> (_conf_layout >>> _lconfig_altChooser >>> confUnpack)
         case altChooser of
           AltChooserSimpleQuick -> do
             rec $ head alts
           AltChooserShallowBest -> do
-            spacings <- alts `forM` getSpacing
-            acp <- mGet
+            spacings <- traverse getSpacing alts
+            acp      <- mGet
             let
               lineCheck LineModeInvalid = False
               lineCheck (LineModeValid (VerticalSpacing _ p _)) =
@@ -231,7 +230,7 @@ transformAlts =
               $ fromMaybe (-- trace ("choosing last") $
                            List.last alts)
               $ Data.List.Extra.firstJust (fmap snd) checkedOptions
-      BDFForceMultiline bd -> do
+      BDForceMultiline bd -> do
         acp <- mGet
         x <- do
           mSet $ mergeLineMode acp (AltLineModeStateForceML False)
@@ -239,7 +238,7 @@ transformAlts =
         acp' <- mGet
         mSet $ acp' { _acp_forceMLFlag = _acp_forceMLFlag acp }
         pure $ x
-      BDFForceSingleline bd -> do
+      BDForceSingleline bd -> do
         acp <- mGet
         x <- do
           mSet $ mergeLineMode acp AltLineModeStateForceSL
@@ -247,7 +246,7 @@ transformAlts =
         acp' <- mGet
         mSet $ acp' { _acp_forceMLFlag = _acp_forceMLFlag acp }
         pure $ x
-      BDFForwardLineMode bd -> do
+      BDForwardLineMode bd -> do
         acp <- mGet
         x <- do
           mSet $ acp
@@ -257,29 +256,29 @@ transformAlts =
         acp' <- mGet
         mSet $ acp' { _acp_forceMLFlag = _acp_forceMLFlag acp }
         pure $ x
-      BDFExternal{} -> processSpacingSimple bdX $> bdX
-      BDFPlain{} -> processSpacingSimple bdX $> bdX
-      BDFAnnotationBefore ann bd -> do
+      BDExternal{} -> processSpacingSimple bdX $> bdX
+      BDPlain{} -> processSpacingSimple bdX $> bdX
+      BDAnnotationBefore ann bd -> do
         acp <- mGet
         mSet
           $ acp { _acp_forceMLFlag = altLineModeDecay $ _acp_forceMLFlag acp }
         bd' <- rec bd
-        pure $ reWrap $ BDFAnnotationBefore ann bd'
-      BDFAnnotationAfter ann bd ->
-        reWrap . BDFAnnotationAfter ann <$> rec bd
-      BDFAnnotationKW kw bd ->
-        reWrap . BDFAnnotationKW kw <$> rec bd
-      BDFMoveToKWDP kw b bd ->
-        reWrap . BDFMoveToKWDP kw b <$> rec bd
-      BDFLines [] -> pure $ reWrap BDFEmpty -- evil transformation. or harmless.
-      BDFLines (l : lr) -> do
+        pure $ reWrap $ BDAnnotationBefore ann bd'
+      BDAnnotationAfter ann bd ->
+        reWrap . BDAnnotationAfter ann <$> rec bd
+      BDAnnotationKW kw bd ->
+        reWrap . BDAnnotationKW kw <$> rec bd
+      BDMoveToKWDP kw b bd ->
+        reWrap . BDMoveToKWDP kw b <$> rec bd
+      BDLines [] -> pure $ reWrap BDEmpty -- evil transformation. or harmless.
+      BDLines (l : lr) -> do
         ind <- _acp_indent <$> mGet
         l' <- rec l
         lr' <- lr `forM` \x -> do
           mModify $ \acp -> acp { _acp_line = ind, _acp_indent = ind }
           rec x
-        pure $ reWrap $ BDFLines (l' : lr')
-      BDFEnsureIndent indent bd -> do
+        pure $ reWrap $ BDLines (l' : lr')
+      BDEnsureIndent indent bd -> do
         acp <- mGet
         indAdd <- fixIndentationForMultiple acp indent
         mSet $ acp
@@ -288,7 +287,7 @@ transformAlts =
           , _acp_indent = _acp_indent acp + indAdd
           , _acp_line = max (_acp_line acp) (_acp_indent acp + indAdd)
             -- we cannot use just _acp_line acp + indAdd because of the case
-            -- where there are multiple BDFEnsureIndents in the same line.
+            -- where there are multiple BDEnsureIndents in the same line.
             -- Then, the actual indentation is relative to the current
             -- indentation, not the current cursor position.
           }
@@ -298,21 +297,21 @@ transformAlts =
         pure $ case indent of
           BrIndentNone -> r
           BrIndentRegular ->
-            reWrap $ BDFEnsureIndent (BrIndentSpecial indAdd) r
-          BrIndentSpecial i -> reWrap $ BDFEnsureIndent (BrIndentSpecial i) r
-      BDFNonBottomSpacing _ bd -> rec bd
-      BDFSetParSpacing bd -> rec bd
-      BDFForceParSpacing bd -> rec bd
-      BDFDebug s bd -> do
+            reWrap $ BDEnsureIndent (BrIndentSpecial indAdd) r
+          BrIndentSpecial i -> reWrap $ BDEnsureIndent (BrIndentSpecial i) r
+      BDNonBottomSpacing _ bd -> rec bd
+      BDSetParSpacing bd -> rec bd
+      BDForceParSpacing bd -> rec bd
+      BDDebug s bd -> do
         acp :: AltCurPos <- mGet
         tellDebugMess
-          $ "transformAlts: BDFDEBUG "
+          $ "transformAlts: BDDEBUG "
           ++ s
           ++ " (node-id="
           ++ show brDcId
           ++ "): acp="
           ++ show acp
-        reWrap . BDFDebug s <$> rec bd
+        reWrap . BDDebug s <$> rec bd
   processSpacingSimple
     :: ( MonadMultiReader Config m
        , MonadMultiState AltCurPos m
@@ -334,13 +333,7 @@ transformAlts =
   hasSpace2 lconf (AltCurPos line _indent _ _) (VerticalSpacing sameLine VerticalSpacingParNone _)
     = line + sameLine <= confUnpack (_lconfig_cols lconf)
   hasSpace2 lconf (AltCurPos line indent indentPrep _) (VerticalSpacing sameLine (VerticalSpacingParSome par) _)
-    = line
-      + sameLine
-      <= confUnpack (_lconfig_cols lconf)
-      && indent
-      + indentPrep
-      + par
-      <= confUnpack (_lconfig_cols lconf)
+    = line + sameLine <= confUnpack (_lconfig_cols lconf) && indent + indentPrep + par <= confUnpack (_lconfig_cols lconf)
   hasSpace2 lconf (AltCurPos line _indent _ _) (VerticalSpacing sameLine VerticalSpacingParAlways{} _)
     = line + sameLine <= confUnpack (_lconfig_cols lconf)
 
@@ -352,22 +345,22 @@ getSpacing
 getSpacing !bridoc = rec bridoc
  where
   rec :: BriDocNumbered -> m (LineModeValidity VerticalSpacing)
-  rec (brDcId, brDc) = do
+  rec (brDcId :< brDc) = do
     config <- mAsk
     let colMax :: Int
         !colMax = config & _conf_layout & _lconfig_cols & confUnpack
     result <- case brDc of
-      BDFEmpty ->
+      BDEmpty ->
         pure $ LineModeValid $ VerticalSpacing 0 VerticalSpacingParNone False
-      BDFLit t -> pure $ LineModeValid $ VerticalSpacing
+      BDLit t -> pure $ LineModeValid $ VerticalSpacing
         (Text.length t)
         VerticalSpacingParNone
         False
-      BDFSeq list -> sumVs <$> rec `mapM` list
-      BDFCols _sig list -> sumVs <$> rec `mapM` list
-      BDFSeparator ->
+      BDSeq list -> sumVs <$> rec `mapM` list
+      BDCols _sig list -> sumVs <$> rec `mapM` list
+      BDSeparator ->
         pure $ LineModeValid $ VerticalSpacing 1 VerticalSpacingParNone False
-      BDFAddBaseY indent bd -> do
+      BDAddBaseY indent bd -> do
         mVs <- rec bd
         pure $ mVs <&> \vs -> vs
           { _vs_paragraph = case _vs_paragraph vs of
@@ -389,7 +382,7 @@ getSpacing !bridoc = rec bridoc
                 i + (confUnpack $ _lconfig_indentAmount $ _conf_layout $ config)
               BrIndentSpecial j -> i + j
           }
-      BDFBaseYPushCur bd -> do
+      BDBaseYPushCur bd -> do
         mVs <- rec bd
         pure $ mVs <&> \vs -> vs
           -- We leave par as-is, even though it technically is not
@@ -406,10 +399,10 @@ getSpacing !bridoc = rec bridoc
             )
           , _vs_paragraph = VerticalSpacingParSome 0
           }
-      BDFBaseYPop bd -> rec bd
-      BDFIndentLevelPushCur bd -> rec bd
-      BDFIndentLevelPop bd -> rec bd
-      BDFPar BrIndentNone sameLine indented -> do
+      BDBaseYPop bd -> rec bd
+      BDIndentLevelPushCur bd -> rec bd
+      BDIndentLevelPop bd -> rec bd
+      BDPar BrIndentNone sameLine indented -> do
         mVs <- rec sameLine
         mIndSp <- rec indented
         pure
@@ -432,33 +425,33 @@ getSpacing !bridoc = rec bridoc
                   == VerticalSpacingParNone
                   && _vs_parFlag indSp
             ]
-      BDFPar{} -> error "BDPar with indent in getSpacing"
-      BDFAlt [] -> error "empty BDAlt"
-      BDFAlt (alt : _) -> rec alt
-      BDFForceMultiline bd -> do
+      BDPar{} -> error "BDPar with indent in getSpacing"
+      BDAlt [] -> error "empty BDAlt"
+      BDAlt (alt : _) -> rec alt
+      BDForceMultiline bd -> do
         mVs <- rec bd
         pure $ mVs >>= (_vs_paragraph >>> \case
           VerticalSpacingParNone -> LineModeInvalid
           _ -> mVs)
-      BDFForceSingleline bd -> do
+      BDForceSingleline bd -> do
         mVs <- rec bd
         pure $ mVs >>= (_vs_paragraph >>> \case
           VerticalSpacingParNone -> mVs
           _ -> LineModeInvalid)
-      BDFForwardLineMode bd -> rec bd
-      BDFExternal _ txt -> pure $ LineModeValid $ case Text.lines txt of
+      BDForwardLineMode bd -> rec bd
+      BDExternal _ txt -> pure $ LineModeValid $ case Text.lines txt of
         [t] -> VerticalSpacing (Text.length t) VerticalSpacingParNone False
         _ -> VerticalSpacing 999 VerticalSpacingParNone False
-      BDFPlain txt -> pure $ LineModeValid $ case Text.lines txt of
+      BDPlain txt -> pure $ LineModeValid $ case Text.lines txt of
         [t] -> VerticalSpacing (Text.length t) VerticalSpacingParNone False
         _ -> VerticalSpacing 999 VerticalSpacingParNone False
-      BDFAnnotationBefore _ bd -> rec bd
-      BDFAnnotationKW _kw bd   -> rec bd
-      BDFAnnotationAfter _ bd  -> rec bd
-      BDFMoveToKWDP _kw _b bd  -> rec bd
-      BDFLines [] ->
+      BDAnnotationBefore _ bd -> rec bd
+      BDAnnotationKW _kw bd   -> rec bd
+      BDAnnotationAfter _ bd  -> rec bd
+      BDMoveToKWDP _kw _b bd  -> rec bd
+      BDLines [] ->
         pure $ LineModeValid $ VerticalSpacing 0 VerticalSpacingParNone False
-      BDFLines (l : ls) -> do
+      BDLines (l : ls) -> do
         lSps <- (:|) <$> rec l <*> traverse rec ls
         let mVs = NE.head lSps
         pure
@@ -466,7 +459,7 @@ getSpacing !bridoc = rec bridoc
             | VerticalSpacing lsp _ _ <- mVs
             , lineMax <- getMaxVS $ maxVs $ NE.toList lSps
             ]
-      BDFEnsureIndent indent bd -> do
+      BDEnsureIndent indent bd -> do
         mVs <- rec bd
         let
           addInd = case indent of
@@ -476,7 +469,7 @@ getSpacing !bridoc = rec bridoc
             BrIndentSpecial i -> i
         pure $ mVs <&> \(VerticalSpacing lsp psp pf) ->
           VerticalSpacing (lsp + addInd) psp pf
-      BDFNonBottomSpacing b bd -> do
+      BDNonBottomSpacing b bd -> do
         mVs <- rec bd
         pure $ mVs <|> LineModeValid
           (VerticalSpacing
@@ -487,20 +480,20 @@ getSpacing !bridoc = rec bridoc
             )
             False
           )
-      BDFSetParSpacing bd -> do
+      BDSetParSpacing bd -> do
         mVs <- rec bd
         pure $ mVs <&> \vs -> vs { _vs_parFlag = True }
-      BDFForceParSpacing bd -> do
+      BDForceParSpacing bd -> do
         mVs <- rec bd
         pure
           $ [ vs
             | vs <- mVs
             , _vs_parFlag vs || _vs_paragraph vs == VerticalSpacingParNone
             ]
-      BDFDebug s bd -> do
+      BDDebug s bd -> do
         r <- rec bd
         tellDebugMess
-          $ "getSpacing: BDFDebug "
+          $ "getSpacing: BDDebug "
           ++ show s
           ++ " (node-id="
           ++ show brDcId
@@ -580,10 +573,10 @@ getSpacings limit bridoc = preFilterLimit <$> rec bridoc
     -- TODO: 3 is arbitrary.
   preFilterLimit :: [VerticalSpacing] -> [VerticalSpacing]
   preFilterLimit = take (3 * limit)
-  memoWithKey :: Memo.MonadMemo k v m1 => k -> m1 v -> m1 v
+  memoWithKey :: Memo.MonadMemo k v n => k -> n v -> n v
   memoWithKey k v = Memo.memo (const v) k
   rec :: BriDocNumbered -> Memo.MemoT Int [VerticalSpacing] m [VerticalSpacing]
-  rec (brDcId, brdc) = memoWithKey brDcId $ do
+  rec (brDcId :< brdc) = memoWithKey brDcId $ do
     config <- mAsk
     let colMax :: Int
         !colMax = config & _conf_layout & _lconfig_cols & confUnpack
@@ -594,14 +587,12 @@ getSpacings limit bridoc = preFilterLimit <$> rec bridoc
         VerticalSpacingParAlways{} -> True
     let
       specialCompare vs1 vs2 =
-        if ((_vs_sameLine vs1 == _vs_sameLine vs2)
-           && (_vs_parFlag vs1 == _vs_parFlag vs2)
-           )
-          then case (_vs_paragraph vs1, _vs_paragraph vs2) of
-            (VerticalSpacingParAlways i1, VerticalSpacingParAlways i2) ->
-              if i1 < i2 then Smaller else Bigger
-            (p1, p2) -> if p1 == p2 then Smaller else Unequal
-          else Unequal
+        if _vs_sameLine vs1 == _vs_sameLine vs2 && _vs_parFlag vs1 == _vs_parFlag vs2
+        then case (_vs_paragraph vs1, _vs_paragraph vs2) of
+          (VerticalSpacingParAlways i1, VerticalSpacingParAlways i2) ->
+            if i1 < i2 then Smaller else Bigger
+          (p1, p2) -> if p1 == p2 then Smaller else Unequal
+        else Unequal
     let
       allowHangingQuasiQuotes :: Bool
       allowHangingQuasiQuotes =
@@ -657,13 +648,13 @@ getSpacings limit bridoc = preFilterLimit <$> rec bridoc
                        -- total.
           . preFilterLimit
     result <- case brdc of
-      BDFEmpty -> pure $ [VerticalSpacing 0 VerticalSpacingParNone False]
-      BDFLit t ->
+      BDEmpty -> pure $ [VerticalSpacing 0 VerticalSpacingParNone False]
+      BDLit t ->
         pure $ [VerticalSpacing (Text.length t) VerticalSpacingParNone False]
-      BDFSeq list -> fmap sumVs . mapM filterAndLimit <$> rec `mapM` list
-      BDFCols _sig list -> fmap sumVs . mapM filterAndLimit <$> rec `mapM` list
-      BDFSeparator -> pure $ [VerticalSpacing 1 VerticalSpacingParNone False]
-      BDFAddBaseY indent bd -> do
+      BDSeq list -> fmap sumVs . mapM filterAndLimit <$> rec `mapM` list
+      BDCols _sig list -> fmap sumVs . mapM filterAndLimit <$> rec `mapM` list
+      BDSeparator -> pure $ [VerticalSpacing 1 VerticalSpacingParNone False]
+      BDAddBaseY indent bd -> do
         mVs <- rec bd
         pure $ mVs <&> \vs -> vs
           { _vs_paragraph = case _vs_paragraph vs of
@@ -685,7 +676,7 @@ getSpacings limit bridoc = preFilterLimit <$> rec bridoc
                 i + (confUnpack $ _lconfig_indentAmount $ _conf_layout $ config)
               BrIndentSpecial j -> i + j
           }
-      BDFBaseYPushCur bd -> do
+      BDBaseYPushCur bd -> do
         mVs <- rec bd
         pure $ mVs <&> \vs -> vs
           -- We leave par as-is, even though it technically is not
@@ -705,10 +696,10 @@ getSpacings limit bridoc = preFilterLimit <$> rec bridoc
             VerticalSpacingParSome i -> VerticalSpacingParSome i
             VerticalSpacingParAlways i -> VerticalSpacingParAlways i
           }
-      BDFBaseYPop bd -> rec bd
-      BDFIndentLevelPushCur bd -> rec bd
-      BDFIndentLevelPop bd -> rec bd
-      BDFPar BrIndentNone sameLine indented -> do
+      BDBaseYPop bd -> rec bd
+      BDIndentLevelPushCur bd -> rec bd
+      BDIndentLevelPop bd -> rec bd
+      BDPar BrIndentNone sameLine indented -> do
         mVss <- filterAndLimit <$> rec sameLine
         indSps <- filterAndLimit <$> rec indented
         let mVsIndSp = take limit $ [ (x, y) | x <- mVss, y <- indSps ]
@@ -729,24 +720,24 @@ getSpacings limit bridoc = preFilterLimit <$> rec bridoc
             && _vs_parFlag indSp
             )
 
-      BDFPar{} -> error "BDPar with indent in getSpacing"
-      BDFAlt [] -> error "empty BDAlt"
+      BDPar{} -> error "BDPar with indent in getSpacing"
+      BDAlt [] -> error "empty BDAlt"
       -- BDAlt (alt:_) -> rec alt
-      BDFAlt alts -> do
+      BDAlt alts -> do
         r <- rec `mapM` alts
         pure $ filterAndLimit =<< r
-      BDFForceMultiline bd -> do
+      BDForceMultiline bd -> do
         mVs <- filterAndLimit <$> rec bd
         pure $ filter ((/= VerticalSpacingParNone) . _vs_paragraph) mVs
-      BDFForceSingleline bd -> do
+      BDForceSingleline bd -> do
         mVs <- filterAndLimit <$> rec bd
         pure $ filter ((== VerticalSpacingParNone) . _vs_paragraph) mVs
-      BDFForwardLineMode bd -> rec bd
-      BDFExternal _ txt | [t] <- Text.lines txt ->
+      BDForwardLineMode bd -> rec bd
+      BDExternal _ txt | [t] <- Text.lines txt ->
         pure $ [VerticalSpacing (Text.length t) VerticalSpacingParNone False]
-      BDFExternal{} -> pure $ [] -- yes, we just assume that we cannot properly layout
+      BDExternal{} -> pure $ [] -- yes, we just assume that we cannot properly layout
                     -- this.
-      BDFPlain t -> pure
+      BDPlain t -> pure
         [ case Text.lines t of
             [] -> VerticalSpacing 0 VerticalSpacingParNone False
             [t1] ->
@@ -755,26 +746,25 @@ getSpacings limit bridoc = preFilterLimit <$> rec bridoc
               VerticalSpacing (Text.length t1) (VerticalSpacingParAlways 0) True
         | allowHangingQuasiQuotes
         ]
-      BDFAnnotationBefore _ bd -> rec bd
-      BDFAnnotationKW _kw bd   -> rec bd
-      BDFAnnotationAfter _ bd  -> rec bd
-      BDFMoveToKWDP _kw _b bd  -> rec bd
-      BDFLines []              -> pure [VerticalSpacing 0 VerticalSpacingParNone False]
-      BDFLines ls@(_ : _)      -> do
+      BDAnnotationBefore _ bd -> rec bd
+      BDAnnotationKW _kw bd   -> rec bd
+      BDAnnotationAfter _ bd  -> rec bd
+      BDMoveToKWDP _kw _b bd  -> rec bd
+      BDLines []              -> pure [VerticalSpacing 0 VerticalSpacingParNone False]
+      BDLines ls@(_ : _)      -> do
         -- we simply assume that lines is only used "properly", i.e. in
         -- such a way that the first line can be treated "as a part of the
         -- paragraph". That most importantly means that Lines should never
         -- be inserted anywhere but at the start of the line. A
         -- counterexample would be anything like Seq[Lit "foo", Lines].
         lSpss <- map filterAndLimit <$> rec `mapM` ls
-        let
-          worbled = fmap reverse $ sequence $ reverse $ lSpss
-          sumF lSps@(lSp1 : _) =
-            VerticalSpacing (_vs_sameLine lSp1) (spMakePar $ maxVs lSps) False
-          sumF [] =
-            error
-              $ "should not happen. if my logic does not fail"
-              ++ "me, this follows from not (null ls)."
+        let worbled = fmap reverse $ sequence $ reverse $ lSpss
+            sumF lSps@(lSp1 : _) =
+              VerticalSpacing (_vs_sameLine lSp1) (spMakePar $ maxVs lSps) False
+            sumF [] =
+              error
+                $ "should not happen. if my logic does not fail"
+                ++ "me, this follows from not (null ls)."
         pure $ sumF <$> worbled
         -- lSpss@(mVs:_) <- rec `mapM` ls
         -- pure $ case Control.Lens.transposeOf traverse lSpss of -- TODO: we currently only
@@ -787,17 +777,16 @@ getSpacings limit bridoc = preFilterLimit <$> rec bridoc
         --   []       -> []
         --   (lSps:_) -> mVs <&> \(VerticalSpacing lsp _) ->
         --     VerticalSpacing lsp $ VerticalSpacingParSome $ getMaxVS $ maxVs lSps
-      BDFEnsureIndent indent bd -> do
+      BDEnsureIndent indent bd -> do
         mVs <- rec bd
-        let
-          addInd = case indent of
-            BrIndentNone -> 0
-            BrIndentRegular ->
-              confUnpack $ _lconfig_indentAmount $ _conf_layout $ config
-            BrIndentSpecial i -> i
+        let addInd = case indent of
+              BrIndentNone      -> 0
+              BrIndentRegular   ->
+                confUnpack $ _lconfig_indentAmount $ _conf_layout $ config
+              BrIndentSpecial i -> i
         pure $ mVs <&> \(VerticalSpacing lsp psp parFlag) ->
           VerticalSpacing (lsp + addInd) psp parFlag
-      BDFNonBottomSpacing b bd -> do
+      BDNonBottomSpacing b bd -> do
         -- TODO: the `b` flag is an ugly hack, but I was not able to make
         -- all tests work without it. It should be possible to have
         -- `spMakePar` map VSPAlways{} to VSPSome x1, which fixes this
@@ -832,7 +821,7 @@ getSpacings limit bridoc = preFilterLimit <$> rec bridoc
           -- leading to unnecessary new-lines. Disabled for now. A better
           -- solution would require conditionally folding the search-space
           -- only in appropriate locations (i.e. a new BriDoc node type
-          -- for this purpose, perhaps "BDFNonBottomSpacing1").
+          -- for this purpose, perhaps "BDNonBottomSpacing1").
           -- else
           --   [ Foldable.foldl1
           --     (\(VerticalSpacing x1 x2 _) (VerticalSpacing y1 y2 _) ->
@@ -852,20 +841,20 @@ getSpacings limit bridoc = preFilterLimit <$> rec bridoc
           --         False)
           --     mVs
           --   ]
-      BDFSetParSpacing bd -> do
+      BDSetParSpacing bd -> do
         mVs <- rec bd
         pure $ mVs <&> \vs -> vs { _vs_parFlag = True }
-      BDFForceParSpacing bd -> do
+      BDForceParSpacing bd -> do
         mVs <- preFilterLimit <$> rec bd
         pure
           $ [ vs
             | vs <- mVs
             , _vs_parFlag vs || _vs_paragraph vs == VerticalSpacingParNone
             ]
-      BDFDebug s bd -> do
+      BDDebug s bd -> do
         r <- rec bd
         tellDebugMess
-          $ "getSpacings: BDFDebug "
+          $ "getSpacings: BDDebug "
           ++ show s
           ++ " (node-id="
           ++ show brDcId
@@ -931,22 +920,20 @@ fixIndentationForMultiple
   :: (MonadMultiReader (CConfig Identity) m) => AltCurPos -> BrIndent -> m Int
 fixIndentationForMultiple acp indent = do
   indAmount <- mAsk <&> (_conf_layout >>> _lconfig_indentAmount >>> confUnpack)
-  let
-    indAddRaw = case indent of
-      BrIndentNone -> 0
-      BrIndentRegular -> indAmount
-      BrIndentSpecial i -> i
+  let indAddRaw = case indent of
+        BrIndentNone -> 0
+        BrIndentRegular -> indAmount
+        BrIndentSpecial i -> i
   -- for IndentPolicyMultiple, we restrict the amount of added
   -- indentation in such a manner that we end up on a multiple of the
   -- base indentation.
   indPolicy <- mAsk <&> (_conf_layout >>> _lconfig_indentPolicy >>> confUnpack)
   pure $ if indPolicy == IndentPolicyMultiple
     then
-      let
-        indAddMultiple1 =
-          indAddRaw - ((_acp_indent acp + indAddRaw) `mod` indAmount)
-        indAddMultiple2 = if indAddMultiple1 <= 0
-          then indAddMultiple1 + indAmount
-          else indAddMultiple1
+      let indAddMultiple1 =
+            indAddRaw - ((_acp_indent acp + indAddRaw) `mod` indAmount)
+          indAddMultiple2 = if indAddMultiple1 <= 0
+            then indAddMultiple1 + indAmount
+            else indAddMultiple1
       in indAddMultiple2
     else indAddRaw
