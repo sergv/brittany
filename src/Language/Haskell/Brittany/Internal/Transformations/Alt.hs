@@ -190,8 +190,6 @@ transformAlts =
                   AltLineModeStateForceSL{} -> p == VerticalSpacingParNone
                   AltLineModeStateForceML{} -> p /= VerticalSpacingParNone
                   AltLineModeStateContradiction -> False
-              -- TODO: use COMPLETE pragma instead?
-              lineCheck _ = error "ghc exhaustive check is insufficient"
             lconf <- _conf_layout <$> mAsk
             let
               options = -- trace ("considering options:" ++ show (length alts, acp)) $
@@ -328,12 +326,10 @@ transformAlts =
       acp <- mGet
       mSet $ acp { _acp_line = _acp_line acp + i }
     LineModeValid VerticalSpacing{} -> error "processSpacingSimple par"
-    _ -> error "ghc exhaustive check is insufficient"
   hasSpace1
     :: LayoutConfig -> AltCurPos -> LineModeValidity VerticalSpacing -> Bool
   hasSpace1 _ _ LineModeInvalid = False
   hasSpace1 lconf acp (LineModeValid vs) = hasSpace2 lconf acp vs
-  hasSpace1 _ _ _ = error "ghc exhaustive check is insufficient"
   hasSpace2 :: LayoutConfig -> AltCurPos -> VerticalSpacing -> Bool
   hasSpace2 lconf (AltCurPos line _indent _ _) (VerticalSpacing sameLine VerticalSpacingParNone _)
     = line + sameLine <= confUnpack (_lconfig_cols lconf)

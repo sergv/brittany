@@ -416,3 +416,5 @@ pattern LineModeValid :: forall t. t -> LineModeValidity t
 pattern LineModeValid x = LineModeValidity (Strict.Just x) :: LineModeValidity t
 pattern LineModeInvalid :: forall t. LineModeValidity t
 pattern LineModeInvalid = LineModeValidity Strict.Nothing :: LineModeValidity t
+
+{-# COMPLETE LineModeValid, LineModeInvalid #-}
