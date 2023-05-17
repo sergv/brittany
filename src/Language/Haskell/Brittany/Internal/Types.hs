@@ -43,10 +43,14 @@ import Data.Data (Data)
 import Data.Generics.Uniplate.Direct as Uniplate
 import Data.Strict.Maybe qualified as Strict
 import Data.Text.Lazy.Builder qualified as Text.Builder
+import Data.Void
+import GHC.Parser.Annotation
+import GHC.Types.SrcLoc
+import Prettyprinter (Doc)
+import Safe qualified
+
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.Prelude
-import Safe qualified
-import GHC.Parser.Annotation
 
 type PPM = MultiRWSS.MultiRWS
   '[Config]
@@ -135,7 +139,7 @@ data BrittanyError
     --   output and second the corresponding, ill-formed input.
   | LayoutWarning String
     -- ^ some warning
-  | forall ast ann. Data ast => ErrorUnknownNode String (LocatedAn ann ast)
+  | ErrorUnknownNode String SrcSpan (Doc Void)
     -- ^ internal error: pretty-printing is not implemented for type of node
     --   in the syntax-tree
   | ErrorOutputCheck String

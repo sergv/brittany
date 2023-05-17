@@ -44,7 +44,6 @@ import Language.Haskell.Brittany.Internal.BackendUtils
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.Types
-import Language.Haskell.Brittany.Internal.Utils
 import Language.Haskell.GHC.ExactPrint.Types
 import Language.Haskell.GHC.ExactPrint.Types qualified as ExactPrint.Types
 import Language.Haskell.GHC.ExactPrint.Utils
@@ -70,12 +69,12 @@ data ColInfo
   | ColInfoNo BriDoc
   | ColInfo !ColIndex ColSig [(Int, ColInfo)]
 
-instance Show ColInfo where
-  show ColInfoStart = "ColInfoStart"
-  show (ColInfoNo bd) =
-    "ColInfoNo " ++ show (take 30 (show (briDocToDoc bd)) ++ "..")
-  show (ColInfo ind sig list) =
-    "ColInfo " ++ show ind ++ " " ++ show sig ++ " " ++ show list
+-- instance Show ColInfo where
+--   show ColInfoStart = "ColInfoStart"
+--   show (ColInfoNo bd) =
+--     "ColInfoNo " ++ show (take 30 (show (briDocToDoc bd)) ++ "..")
+--   show (ColInfo ind sig list) =
+--     "ColInfo " ++ show ind ++ " " ++ show sig ++ " " ++ show list
 
 data ColBuildState = ColBuildState
   { _cbs_map   :: !ColMap1

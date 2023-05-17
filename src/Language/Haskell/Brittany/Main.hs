@@ -1,5 +1,5 @@
 {-# LANGUAGE LambdaCase        #-}
-{-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections     #-}
 
 module Language.Haskell.Brittany.Main (main, mainWith) where
@@ -8,21 +8,12 @@ import Control.Monad (zipWithM)
 import Control.Monad.Trans.Except qualified as ExceptT
 import Data.Either qualified
 import Data.Foldable
+import Data.List qualified as L
 import Data.Monoid qualified
 import Data.Semigroup qualified as Semigroup
 import Data.Text.IO qualified as TIO
-import GHC (GenLocated(L), SrcSpan)
-import GHC.OldList qualified as List
-import GHC.Parser.Annotation (SrcSpanAnn'(locA))
-import GHC.Utils.Outputable (Outputable(..), showSDocUnsafe)
-import Language.Haskell.Brittany.Internal.Config
-import Language.Haskell.Brittany.Internal.Config.Types
-import Language.Haskell.Brittany.Internal.Formatting
-import Language.Haskell.Brittany.Internal.Prelude
-import Language.Haskell.Brittany.Internal.PreludeUtils
-import Language.Haskell.Brittany.Internal.Types
-import Language.Haskell.Brittany.Internal.Utils
-import Paths_brittany
+import Prettyprinter ((<+>))
+import Prettyprinter.Combinators
 import System.Directory qualified as Directory
 import System.Environment qualified as Environment
 import System.Exit qualified
@@ -32,6 +23,16 @@ import Text.ParserCombinators.ReadPrec qualified as ReadPrec
 import Text.PrettyPrint qualified as PP
 import Text.Read (Read(..))
 import UI.Butcher.Monadic
+
+import GHC.Types.SrcLoc (SrcSpan)
+import Language.Haskell.Brittany.Internal.Config
+import Language.Haskell.Brittany.Internal.Config.Types
+import Language.Haskell.Brittany.Internal.Formatting
+import Language.Haskell.Brittany.Internal.Prelude
+import Language.Haskell.Brittany.Internal.PreludeUtils
+import Language.Haskell.Brittany.Internal.Types
+import Language.Haskell.Brittany.Internal.Utils
+import Paths_brittany
 
 data WriteMode = Display | Inplace
 
@@ -56,7 +57,7 @@ mainWith progName args
   $ mainFromCmdParserWithHelpDesc mainCmdParser
 
 helpDoc :: PP.Doc
-helpDoc = PP.vcat $ List.intersperse
+helpDoc = PP.vcat $ L.intersperse
   (PP.text "")
   [ parDocW
     [ "Reformats one or more haskell modules."
@@ -99,10 +100,11 @@ helpDoc = PP.vcat $ List.intersperse
   ]
 
 licenseDoc :: PP.Doc
-licenseDoc = PP.vcat $ List.intersperse
+licenseDoc = PP.vcat $ L.intersperse
   (PP.text "")
   [ parDoc $ "Copyright (C) 2016-2019 Lennart Spitzner"
   , parDoc $ "Copyright (C) 2019 PRODA LTD"
+  , parDoc $ "Copyright (C) 2022-2023 Sergey Vinokurov"
   , parDocW
     [ "This program is free software: you can redistribute it and/or modify"
     , "it under the terms of the GNU Affero General Public License,"
@@ -237,12 +239,12 @@ data ChangeStatus = Changes | NoChanges
 
 classifyError
   :: BrittanyError
-  -> ([(String, String)], [String], [(String, SrcSpan, PP.Doc)], [String])
+  -> ([(String, String)], [String], [(String, SrcSpan, Doc Void)], [String])
 classifyError = \case
-  ErrorMacroConfig x y             -> ([(x, y)], mempty, mempty, mempty)
-  LayoutWarning msg                -> (mempty, [msg], mempty, mempty)
-  ErrorUnknownNode msg (L loc ast) -> (mempty, mempty, [(msg, locA loc, astToDoc ast)] , mempty)
-  ErrorOutputCheck msg             -> (mempty, mempty, mempty, [msg])
+  ErrorMacroConfig x y         -> ([(x, y)], mempty, mempty,            mempty)
+  LayoutWarning msg            -> (mempty,   [msg],  mempty,            mempty)
+  ErrorUnknownNode msg loc ast -> (mempty,   mempty, [(msg, loc, ast)], mempty)
+  ErrorOutputCheck msg         -> (mempty,   mempty, mempty,            [msg])
 
 -- | The main IO parts for the default mode of operation, and after commandline
 -- and config stuff is processed.
@@ -288,8 +290,8 @@ coreIO config suppressOutput checkMode inputPathM outputPathM =
 
       unless (null unknownNodes) $ do
         putStrErrLn "WARNING: encountered unknown syntactical constructs:"
-        for_ unknownNodes $ \(str, loc, _astDoc) -> do
-          putStrErrLn $ "  " <> str <> " at " <> showSDocUnsafe (ppr loc)
+        for_ unknownNodes $ \(str, loc, ast) -> do
+          putStrErrLn $ renderString $ "  " <> pretty str <+> "at" <+> pretty loc <> ":" ## ast
         putStrErrLn
           "  -> falling back on exactprint for this element of the module"
 

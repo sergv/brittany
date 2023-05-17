@@ -22,6 +22,8 @@ import Data.Semigroup qualified as Semigroup
 import Data.Text qualified as T
 import Data.Text qualified as Text
 import Data.Traversable
+import Prettyprinter (Pretty(..))
+
 import GHC (GenLocated(L))
 import GHC.Data.Bag (bagToList, emptyBag)
 import GHC.Data.FastString qualified as FastString
@@ -124,7 +126,7 @@ layoutSig lsig@(L _loc sig) = case sig of
 specStringCompat
   :: MonadMultiWriter [BrittanyError] m => LSig GhcPs -> InlineSpec -> m String
 specStringCompat ast = \case
-  NoUserInlinePrag -> mTell [ErrorUnknownNode "NoUserInline" ast] $> ""
+  NoUserInlinePrag -> "" <$ mTell [ErrorUnknownNode "NoUserInlinePrag" (locA (getLoc ast)) (pretty ast)]
   Inline    _      -> pure "INLINE "
   Inlinable _      -> pure "INLINABLE "
   NoInline  _      -> pure "NOINLINE "

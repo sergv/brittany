@@ -98,9 +98,12 @@ import Data.Semigroup qualified as Semigroup
 import Data.Sequence qualified as Seq
 import Data.Text qualified as Text
 import Data.Text.Lazy.Builder qualified as Text.Builder
+import Prettyprinter (Pretty(..))
+
 import GHC (GenLocated(L), moduleName, moduleNameString)
 import GHC.OldList qualified as List
 import GHC.Parser.Annotation as GHC
+import GHC.PrettyInstances ()
 import GHC.Types.Name (getOccString)
 import GHC.Types.Name.Occurrence (occNameString)
 import GHC.Types.Name.Reader (RdrName(..))
@@ -113,7 +116,6 @@ import Language.Haskell.GHC.ExactPrint qualified as ExactPrint
 import Language.Haskell.GHC.ExactPrint.Types
 import Language.Haskell.GHC.ExactPrint.Types qualified as ExactPrint
 import Language.Haskell.GHC.ExactPrint.Types qualified as ExactPrint.Types
-
 import Language.Haskell.GHC.ExactPrint.Utils (ss2posEnd, ss2pos)
 import Language.Haskell.GHC.ExactPrint.Utils qualified as ExactPrint.Utils
 
@@ -165,7 +167,7 @@ briDocByExactNoComment' f x = docExt f x False
 -- not contain any newlines. If this property is not met, the semantics
 -- depend on the @econf_AllowRiskyExactPrintUse@ config flag.
 briDocByExactInlineOnly
-  :: (Typeable ann, Data ast)
+  :: (Typeable ann, Data ast, Pretty ann, Pretty ast)
   => ExactPrint (LocatedAn ann ast)
   => String
   -> LocatedAn ann ast
@@ -178,7 +180,7 @@ briDocByExactInlineOnly infoStr ast = do
     exactPrintNode t = allocateNode $ BDFExternal False t
   let
     errorAction = do
-      mTell [ErrorUnknownNode infoStr ast]
+      mTell [ErrorUnknownNode infoStr (locA (getLoc ast)) (pretty ast)]
       docLitS "{- BRITTANY ERROR UNHANDLED SYNTACTICAL CONSTRUCT -}"
   case (fallbackMode, Text.lines exactPrinted) of
     (ExactPrintFallbackModeNever, _) -> errorAction
@@ -656,12 +658,12 @@ docEnsureIndent
 docEnsureIndent ind mbd = mbd >>= \bd -> allocateNode $ BDFEnsureIndent ind bd
 
 unknownNodeError
-  :: Data ast
+  :: (Pretty ann, Pretty ast)
   => String
   -> LocatedAn ann ast
   -> ToBriDocM BriDocNumbered
 unknownNodeError infoStr ast = do
-  mTell [ErrorUnknownNode infoStr ast]
+  mTell [ErrorUnknownNode infoStr (locA (getLoc ast)) (pretty ast)]
   docLitS "{- BRITTANY ERROR UNHANDLED SYNTACTICAL CONSTRUCT -}"
 
 spacifyDocs :: [ToBriDocM BriDocNumbered] -> [ToBriDocM BriDocNumbered]
