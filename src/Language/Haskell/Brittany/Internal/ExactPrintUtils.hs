@@ -1,7 +1,6 @@
 {-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE MonadComprehensions #-}
-{-# LANGUAGE NoImplicitPrelude   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Language.Haskell.Brittany.Internal.ExactPrintUtils
@@ -13,7 +12,6 @@ module Language.Haskell.Brittany.Internal.ExactPrintUtils
 
 import Control.Monad.Trans.MultiRWS.Strict qualified as MultiRWSS
 import Language.Haskell.Brittany.Internal.Config.Types
-import Language.Haskell.Brittany.Internal.Prelude
 import GHC.Types.SrcLoc
 
 -- newtype ToplevelAnns = ToplevelAnns { unToplevelAnns :: Map AnnKey Anns }
