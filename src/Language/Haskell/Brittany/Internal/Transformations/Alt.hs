@@ -1,26 +1,28 @@
-{-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE DataKinds           #-}
-{-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE MonadComprehensions #-}
-{-# LANGUAGE NoImplicitPrelude   #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeOperators       #-}
 
 module Language.Haskell.Brittany.Internal.Transformations.Alt (transformAlts) where
 
+import Control.Applicative
 import Control.Comonad.Cofree
 import Control.Monad.Memo qualified as Memo
+import Control.Monad.Trans.MultiRWS (MonadMultiReader(..), MonadMultiState(..), MonadMultiWriter(..), mGet)
 import Control.Monad.Trans.MultiRWS.Strict qualified as MultiRWSS
 import Data.Functor
+import Data.Functor.Identity
 import Data.HList.ContainsType
+import Data.List qualified as L
 import Data.List.Extra qualified
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.List.NonEmpty qualified as NE
-import Data.Semigroup qualified as Semigroup
-import Data.Text qualified as Text
-import GHC.OldList qualified as List
+import Data.Maybe
+import Data.Semigroup
+import Data.Sequence (Seq)
+import Data.Text qualified as T
+import Data.Traversable
+
 import Language.Haskell.Brittany.Internal.Config.Types
-import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.Brittany.Internal.Utils
 
@@ -40,18 +42,19 @@ data AltLineModeState
   deriving (Show)
 
 altLineModeRefresh :: AltLineModeState -> AltLineModeState
-altLineModeRefresh AltLineModeStateNone = AltLineModeStateNone
-altLineModeRefresh AltLineModeStateForceML{} = AltLineModeStateForceML False
-altLineModeRefresh AltLineModeStateForceSL = AltLineModeStateForceSL
-altLineModeRefresh AltLineModeStateContradiction =
-  AltLineModeStateContradiction
+altLineModeRefresh = \case
+  AltLineModeStateNone          -> AltLineModeStateNone
+  AltLineModeStateForceML{}     -> AltLineModeStateForceML False
+  AltLineModeStateForceSL       -> AltLineModeStateForceSL
+  AltLineModeStateContradiction -> AltLineModeStateContradiction
 
 altLineModeDecay :: AltLineModeState -> AltLineModeState
-altLineModeDecay AltLineModeStateNone = AltLineModeStateNone
-altLineModeDecay (AltLineModeStateForceML False) = AltLineModeStateForceML True
-altLineModeDecay (AltLineModeStateForceML True) = AltLineModeStateNone
-altLineModeDecay AltLineModeStateForceSL = AltLineModeStateForceSL
-altLineModeDecay AltLineModeStateContradiction = AltLineModeStateContradiction
+altLineModeDecay = \case
+  AltLineModeStateNone          -> AltLineModeStateNone
+  AltLineModeStateForceML False -> AltLineModeStateForceML True
+  AltLineModeStateForceML True  -> AltLineModeStateNone
+  AltLineModeStateForceSL       -> AltLineModeStateForceSL
+  AltLineModeStateContradiction -> AltLineModeStateContradiction
 
 mergeLineMode :: AltCurPos -> AltLineModeState -> AltCurPos
 mergeLineMode acp s = case (_acp_forceMLFlag acp, s) of
@@ -125,8 +128,8 @@ transformAlts =
     case brDc of
       BDEmpty{}            -> processSpacingSimple bdX $> bdX
       BDLit{}              -> processSpacingSimple bdX $> bdX
-      BDSeq list           -> reWrap . BDSeq <$> list `forM` rec
-      BDCols sig list      -> reWrap . BDCols sig <$> list `forM` rec
+      BDSeq list           -> reWrap . BDSeq <$> list `for` rec
+      BDCols sig list      -> reWrap . BDCols sig <$> list `for` rec
       BDSeparator          -> processSpacingSimple bdX $> bdX
       BDAddBaseY indent bd -> do
         acp <- mGet
@@ -155,8 +158,7 @@ transformAlts =
       BDIndentLevelPop bd -> do
         reWrap . BDIndentLevelPop <$> rec bd
       BDPar indent sameLine indented -> do
-        indAmount <-
-          mAsk <&> (_conf_layout >>> _lconfig_indentAmount >>> confUnpack)
+        indAmount <- confUnpack . _lconfig_indentAmount . _conf_layout <$> mAsk
         let
           indAdd = case indent of
             BrIndentNone -> 0
@@ -174,7 +176,7 @@ transformAlts =
                                       -- fail-early approach; BDEmpty does not
                                       -- make sense semantically for Alt[].
       BDAlt alts -> do
-        altChooser <- mAsk <&> (_conf_layout >>> _lconfig_altChooser >>> confUnpack)
+        altChooser <- confUnpack . _lconfig_altChooser . _conf_layout <$> mAsk
         case altChooser of
           AltChooserSimpleQuick -> do
             rec $ head alts
@@ -197,8 +199,7 @@ transformAlts =
                                  (hasSpace1 lconf acp vs && lineCheck vs, bd)
                 )
             rec
-              $ fromMaybe (-- trace ("choosing last") $
-                           List.last alts)
+              $ fromMaybe (L.last alts)
               $ Data.List.Extra.firstJust
                   (\(_i :: Int, (b, x)) ->
                     [ -- traceShow ("choosing option " ++ show i) $
@@ -208,7 +209,7 @@ transformAlts =
                   )
               $ zip [1 ..] options
           AltChooserBoundedSearch limit -> do
-            spacings <- alts `forM` getSpacings limit
+            spacings <- alts `for` getSpacings limit
             acp <- mGet
             let
               lineCheck (VerticalSpacing _ p _) = case _acp_forceMLFlag acp of
@@ -228,7 +229,7 @@ transformAlts =
                 zip [1 ..] options <&> (\(i, (b, x)) -> [ (i, x) | b ])
             rec
               $ fromMaybe (-- trace ("choosing last") $
-                           List.last alts)
+                           L.last alts)
               $ Data.List.Extra.firstJust (fmap snd) checkedOptions
       BDForceMultiline bd -> do
         acp <- mGet
@@ -274,7 +275,7 @@ transformAlts =
       BDLines (l : lr) -> do
         ind <- _acp_indent <$> mGet
         l' <- rec l
-        lr' <- lr `forM` \x -> do
+        lr' <- lr `for` \x -> do
           mModify $ \acp -> acp { _acp_line = ind, _acp_indent = ind }
           rec x
         pure $ reWrap $ BDLines (l' : lr')
@@ -348,12 +349,12 @@ getSpacing !bridoc = rec bridoc
   rec (brDcId :< brDc) = do
     config <- mAsk
     let colMax :: Int
-        !colMax = config & _conf_layout & _lconfig_cols & confUnpack
+        !colMax = confUnpack $ _lconfig_cols $ _conf_layout config
     result <- case brDc of
       BDEmpty ->
         pure $ LineModeValid $ VerticalSpacing 0 VerticalSpacingParNone False
       BDLit t -> pure $ LineModeValid $ VerticalSpacing
-        (Text.length t)
+        (T.length t)
         VerticalSpacingParNone
         False
       BDSeq list -> sumVs <$> rec `mapM` list
@@ -430,21 +431,25 @@ getSpacing !bridoc = rec bridoc
       BDAlt (alt : _) -> rec alt
       BDForceMultiline bd -> do
         mVs <- rec bd
-        pure $ mVs >>= (_vs_paragraph >>> \case
-          VerticalSpacingParNone -> LineModeInvalid
-          _ -> mVs)
+        pure $ do
+          x <- mVs
+          case _vs_paragraph x of
+            VerticalSpacingParNone -> LineModeInvalid
+            _                      -> mVs
       BDForceSingleline bd -> do
         mVs <- rec bd
-        pure $ mVs >>= (_vs_paragraph >>> \case
-          VerticalSpacingParNone -> mVs
-          _ -> LineModeInvalid)
+        pure $ do
+          x <- mVs
+          case _vs_paragraph x of
+            VerticalSpacingParNone -> mVs
+            _                      -> LineModeInvalid
       BDForwardLineMode bd -> rec bd
-      BDExternal _ txt -> pure $ LineModeValid $ case Text.lines txt of
-        [t] -> VerticalSpacing (Text.length t) VerticalSpacingParNone False
-        _ -> VerticalSpacing 999 VerticalSpacingParNone False
-      BDPlain txt -> pure $ LineModeValid $ case Text.lines txt of
-        [t] -> VerticalSpacing (Text.length t) VerticalSpacingParNone False
-        _ -> VerticalSpacing 999 VerticalSpacingParNone False
+      BDExternal _ txt -> pure $ LineModeValid $ case T.lines txt of
+        [t] -> VerticalSpacing (T.length t) VerticalSpacingParNone False
+        _   -> VerticalSpacing 999 VerticalSpacingParNone False
+      BDPlain txt -> pure $ LineModeValid $ case T.lines txt of
+        [t] -> VerticalSpacing (T.length t) VerticalSpacingParNone False
+        _   -> VerticalSpacing 999 VerticalSpacingParNone False
       BDAnnotationBefore _ bd -> rec bd
       BDAnnotationKW _kw bd   -> rec bd
       BDAnnotationAfter _ bd  -> rec bd
@@ -503,8 +508,8 @@ getSpacing !bridoc = rec bridoc
     pure result
   maxVs
     :: [LineModeValidity VerticalSpacing] -> LineModeValidity VerticalSpacing
-  maxVs = foldl'
-    (liftM2
+  maxVs = L.foldl'
+    (liftA2
       (\(VerticalSpacing x1 x2 _) (VerticalSpacing y1 y2 _) -> VerticalSpacing
         (max x1 y1)
         (case (x2, y2) of
@@ -525,7 +530,7 @@ getSpacing !bridoc = rec bridoc
     (LineModeValid $ VerticalSpacing 0 VerticalSpacingParNone False)
   sumVs
     :: [LineModeValidity VerticalSpacing] -> LineModeValidity VerticalSpacing
-  sumVs sps = foldl' (liftM2 go) initial sps
+  sumVs sps = L.foldl' (liftA2 go) initial sps
    where
     go (VerticalSpacing x1 x2 x3) (VerticalSpacing y1 y2 _) = VerticalSpacing
       (x1 + y1)
@@ -548,7 +553,7 @@ getSpacing !bridoc = rec bridoc
     isPar _ = False
     parFlag = case sps of
       [] -> True
-      _ -> all singleline (List.init sps) && isPar (List.last sps)
+      _ -> all singleline (L.init sps) && isPar (L.last sps)
     initial = LineModeValid $ VerticalSpacing 0 VerticalSpacingParNone parFlag
   getMaxVS :: LineModeValidity VerticalSpacing -> LineModeValidity Int
   getMaxVS = fmap $ \(VerticalSpacing x1 x2 _) -> x1 `max` case x2 of
@@ -579,11 +584,11 @@ getSpacings limit bridoc = preFilterLimit <$> rec bridoc
   rec (brDcId :< brdc) = memoWithKey brDcId $ do
     config <- mAsk
     let colMax :: Int
-        !colMax = config & _conf_layout & _lconfig_cols & confUnpack
+        !colMax = confUnpack $ _lconfig_cols $ _conf_layout config
     let
       hasOkColCount (VerticalSpacing lsp psp _) = lsp <= colMax && case psp of
-        VerticalSpacingParNone -> True
-        VerticalSpacingParSome i -> i <= colMax
+        VerticalSpacingParNone     -> True
+        VerticalSpacingParSome i   -> i <= colMax
         VerticalSpacingParAlways{} -> True
     let
       specialCompare vs1 vs2 =
@@ -593,11 +598,12 @@ getSpacings limit bridoc = preFilterLimit <$> rec bridoc
             if i1 < i2 then Smaller else Bigger
           (p1, p2) -> if p1 == p2 then Smaller else Unequal
         else Unequal
-    let
-      allowHangingQuasiQuotes :: Bool
-      allowHangingQuasiQuotes =
-        config & _conf_layout & _lconfig_allowHangingQuasiQuotes & confUnpack
-    let -- this is like List.nub, with one difference: if two elements
+    let allowHangingQuasiQuotes :: Bool
+        allowHangingQuasiQuotes
+          = confUnpack
+          $ _lconfig_allowHangingQuasiQuotes
+          $ _conf_layout config
+    let -- this is like L.nub, with one difference: if two elements
         -- are unequal only in _vs_paragraph, with both ParAlways, we
         -- treat them like equals and replace the first occurence with the
         -- smallest member of this "equal group".
@@ -650,7 +656,7 @@ getSpacings limit bridoc = preFilterLimit <$> rec bridoc
     result <- case brdc of
       BDEmpty -> pure $ [VerticalSpacing 0 VerticalSpacingParNone False]
       BDLit t ->
-        pure $ [VerticalSpacing (Text.length t) VerticalSpacingParNone False]
+        pure $ [VerticalSpacing (T.length t) VerticalSpacingParNone False]
       BDSeq list -> fmap sumVs . mapM filterAndLimit <$> rec `mapM` list
       BDCols _sig list -> fmap sumVs . mapM filterAndLimit <$> rec `mapM` list
       BDSeparator -> pure $ [VerticalSpacing 1 VerticalSpacingParNone False]
@@ -733,17 +739,17 @@ getSpacings limit bridoc = preFilterLimit <$> rec bridoc
         mVs <- filterAndLimit <$> rec bd
         pure $ filter ((== VerticalSpacingParNone) . _vs_paragraph) mVs
       BDForwardLineMode bd -> rec bd
-      BDExternal _ txt | [t] <- Text.lines txt ->
-        pure $ [VerticalSpacing (Text.length t) VerticalSpacingParNone False]
+      BDExternal _ txt | [t] <- T.lines txt ->
+        pure $ [VerticalSpacing (T.length t) VerticalSpacingParNone False]
       BDExternal{} -> pure $ [] -- yes, we just assume that we cannot properly layout
                     -- this.
       BDPlain t -> pure
-        [ case Text.lines t of
+        [ case T.lines t of
             [] -> VerticalSpacing 0 VerticalSpacingParNone False
             [t1] ->
-              VerticalSpacing (Text.length t1) VerticalSpacingParNone False
+              VerticalSpacing (T.length t1) VerticalSpacingParNone False
             (t1 : _) ->
-              VerticalSpacing (Text.length t1) (VerticalSpacingParAlways 0) True
+              VerticalSpacing (T.length t1) (VerticalSpacingParAlways 0) True
         | allowHangingQuasiQuotes
         ]
       BDAnnotationBefore _ bd -> rec bd
@@ -863,7 +869,7 @@ getSpacings limit bridoc = preFilterLimit <$> rec bridoc
         pure r
     pure result
   maxVs :: [VerticalSpacing] -> VerticalSpacing
-  maxVs = foldl'
+  maxVs = L.foldl'
     (\(VerticalSpacing x1 x2 _) (VerticalSpacing y1 y2 _) -> VerticalSpacing
       (max x1 y1)
       (case (x2, y2) of
@@ -882,7 +888,7 @@ getSpacings limit bridoc = preFilterLimit <$> rec bridoc
     )
     (VerticalSpacing 0 VerticalSpacingParNone False)
   sumVs :: [VerticalSpacing] -> VerticalSpacing
-  sumVs sps = foldl' go initial sps
+  sumVs sps = L.foldl' go initial sps
    where
     go (VerticalSpacing x1 x2 x3) (VerticalSpacing y1 y2 _) = VerticalSpacing
       (x1 + y1)
@@ -903,7 +909,7 @@ getSpacings limit bridoc = preFilterLimit <$> rec bridoc
     isPar x = _vs_parFlag x
     parFlag = case sps of
       [] -> True
-      _ -> all singleline (List.init sps) && isPar (List.last sps)
+      _ -> all singleline (L.init sps) && isPar (L.last sps)
     initial = VerticalSpacing 0 VerticalSpacingParNone parFlag
   getMaxVS :: VerticalSpacing -> Int
   getMaxVS (VerticalSpacing x1 x2 _) = x1 `max` case x2 of
@@ -919,15 +925,15 @@ getSpacings limit bridoc = preFilterLimit <$> rec bridoc
 fixIndentationForMultiple
   :: (MonadMultiReader (CConfig Identity) m) => AltCurPos -> BrIndent -> m Int
 fixIndentationForMultiple acp indent = do
-  indAmount <- mAsk <&> (_conf_layout >>> _lconfig_indentAmount >>> confUnpack)
+  indAmount <- confUnpack . _lconfig_indentAmount . _conf_layout <$> mAsk
   let indAddRaw = case indent of
-        BrIndentNone -> 0
-        BrIndentRegular -> indAmount
+        BrIndentNone      -> 0
+        BrIndentRegular   -> indAmount
         BrIndentSpecial i -> i
   -- for IndentPolicyMultiple, we restrict the amount of added
   -- indentation in such a manner that we end up on a multiple of the
   -- base indentation.
-  indPolicy <- mAsk <&> (_conf_layout >>> _lconfig_indentPolicy >>> confUnpack)
+  indPolicy <- confUnpack . _lconfig_indentPolicy . _conf_layout <$> mAsk
   pure $ if indPolicy == IndentPolicyMultiple
     then
       let indAddMultiple1 =

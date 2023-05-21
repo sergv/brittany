@@ -1,8 +1,5 @@
-{-# LANGUAGE FlexibleContexts    #-}
-{-# LANGUAGE LambdaCase          #-}
-{-# LANGUAGE NoImplicitPrelude   #-}
-{-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Language.Haskell.Brittany.Internal.Layouters.Decl
   ( layoutDecl
@@ -12,15 +9,16 @@ module Language.Haskell.Brittany.Internal.Layouters.Decl
   , layoutPatternBindFinal
   ) where
 
+import Control.Monad.Trans.MultiRWS (MonadMultiReader(..), MonadMultiWriter(..))
 import Data.Data (Data)
-import Data.Foldable qualified
+import Data.Foldable
 import Data.Functor
 import Data.List qualified as L
-import Data.Maybe qualified
+import Data.Maybe
 import Data.Occurrences
-import Data.Semigroup qualified as Semigroup
+import Data.Semigroup
+import Data.Text (Text)
 import Data.Text qualified as T
-import Data.Text qualified as Text
 import Data.Traversable
 import Prettyprinter (Pretty(..))
 
@@ -28,9 +26,9 @@ import GHC (GenLocated(L))
 import GHC.Data.Bag (bagToList, emptyBag)
 import GHC.Data.FastString qualified as FastString
 import GHC.Hs
-import GHC.OldList qualified as List
 import GHC.Types.Basic (Activation(..), InlinePragma(..), InlineSpec(..), RuleMatchInfo(..))
 import GHC.Types.Fixity (LexicalFixity(..))
+import GHC.Types.Name.Reader
 import GHC.Types.SrcLoc (SrcSpan, getLoc, unLoc)
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.ExactPrintUtils
@@ -40,7 +38,6 @@ import {-# SOURCE #-} Language.Haskell.Brittany.Internal.Layouters.Expr
 import Language.Haskell.Brittany.Internal.Layouters.Pattern
 import {-# SOURCE #-} Language.Haskell.Brittany.Internal.Layouters.Stmt
 import Language.Haskell.Brittany.Internal.Layouters.Type
-import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.GHC.ExactPrint.Utils qualified as ExactPrint
 
@@ -98,10 +95,10 @@ layoutSig lsig@(L _loc sig) = case sig of
             Just key -> [appSep $ docLitS key]
             Nothing  -> []
           nameStrs    = map lrdrNameToTextAnn names
-          nameStr     = Text.intercalate ", " $ nameStrs
+          nameStr     = T.intercalate ", " $ nameStrs
           hasComments = hasAnyCommentsBelow lsig
-      typeDoc <- docSharedWrapper layoutSigType typ
-      shouldBeHanging <- mAsk <&> (_conf_layout >>> _lconfig_hangingTypeSignature >>> confUnpack)
+      typeDoc         <- docSharedWrapper layoutSigType typ
+      shouldBeHanging <- confUnpack . _lconfig_hangingTypeSignature . _conf_layout <$> mAsk
       if shouldBeHanging
       then
         docSeq
@@ -203,14 +200,14 @@ layoutLocalBinds
   :: HsLocalBindsLR GhcPs GhcPs -> ToBriDocM (Maybe [BriDocNumbered])
 layoutLocalBinds binds = case binds of
   -- HsValBinds (ValBindsIn lhsBindsLR []) ->
-  --   Just . (>>= either id pure) . Data.Foldable.toList <$> mapBagM layoutBind lhsBindsLR -- TODO: fix ordering
+  --   Just . (>>= either id pure) . toList <$> mapBagM layoutBind lhsBindsLR -- TODO: fix ordering
   -- x@(HsValBinds (ValBindsIn{})) ->
   --   Just . (:[]) <$> unknownNodeError "HsValBinds (ValBindsIn _ (_:_))" x
   HsValBinds _ (ValBinds _ bindlrs sigs) -> do
     let unordered =
-          [ BagBind b | b <- Data.Foldable.toList bindlrs ]
+          [ BagBind b | b <- toList bindlrs ]
           ++ [ BagSig s | s <- sigs ]
-        ordered = List.sortOn (ExactPrint.rs . bindOrSigtoSrcSpan) unordered
+        ordered = L.sortOn (ExactPrint.rs . bindOrSigtoSrcSpan) unordered
     docs <- for ordered $ \case
       BagBind b -> either id pure <$> layoutBind b
       BagSig  s -> pure <$> layoutSig s
@@ -272,7 +269,7 @@ layoutPatternBind funId binderDoc lmatch@(L _ match) = do
         : (spacifyDocs $ docForceSingleline <$> ps)
     (Nothing, ps) ->
       docCols ColPatterns
-        $ (List.intersperse docSeparator $ docForceSingleline <$> ps)
+        $ (L.intersperse docSeparator $ docForceSingleline <$> ps)
   clauseDocs <- docWrapNodeAfter lmatch $ layoutGrhs `mapM` grhss
   mWhereDocs <- layoutLocalBinds whereBinds
   let alignmentToken = if null pats then Nothing else funId
@@ -289,8 +286,8 @@ fixPatternBindIdentifier :: Match GhcPs (LHsExpr GhcPs) -> Text -> Text
 fixPatternBindIdentifier match idStr = go $ m_ctxt match
  where
   go = \case
-    (FunRhs _ _ SrcLazy) -> Text.cons '~' idStr
-    (FunRhs _ _ SrcStrict) -> Text.cons '!' idStr
+    (FunRhs _ _ SrcLazy) -> T.cons '~' idStr
+    (FunRhs _ _ SrcStrict) -> T.cons '!' idStr
     (FunRhs _ _ NoSrcStrict) -> idStr
     (StmtCtxt ctx1) -> goInner ctx1
     _ -> idStr
@@ -320,9 +317,9 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
         Just patDoc -> docPar (pure patDoc)
   whereIndent <- do
     shouldSpecial <-
-      mAsk <&> (_conf_layout >>> _lconfig_indentWhereSpecial >>> confUnpack)
+      confUnpack . _lconfig_indentWhereSpecial . _conf_layout <$> mAsk
     regularIndentAmount <-
-      mAsk <&> (_conf_layout >>> _lconfig_indentAmount >>> confUnpack)
+      confUnpack . _lconfig_indentAmount . _conf_layout <$> mAsk
     pure $ if shouldSpecial
       then BrIndentSpecial (max 1 (regularIndentAmount `div` 2))
       else BrIndentRegular
@@ -368,7 +365,7 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
       gs ->
         docSeq
           $ [appSep $ docLitS "|"]
-          ++ (List.intersperse
+          ++ (L.intersperse
                docCommaSep
                (docForceSingleline . pure <$> gs)
              )
@@ -381,7 +378,7 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
         ]
       _        -> Nothing
 
-  indentPolicy <- mAsk <&> (_conf_layout >>> _lconfig_indentPolicy >>> confUnpack)
+  indentPolicy <- confUnpack . _lconfig_indentPolicy . _conf_layout <$> mAsk
 
   runFilteredAlternative $ do
 
@@ -400,7 +397,7 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
               ]
             ]
         -- one-line solution + where in next line(s)
-        addAlternativeCond (Data.Maybe.isJust mWhereDocs)
+        addAlternativeCond (isJust mWhereDocs)
           $ docLines
           $ [ docCols
                 (ColBindingLine alignmentToken)
@@ -531,7 +528,7 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
                         [ docForceSingleline
                             $ docSeq
                             $ [appSep $ docLitS "|"]
-                            ++ List.intersperse docCommaSep (pure <$> gs)
+                            ++ L.intersperse docCommaSep (pure <$> gs)
                         ]
                     )
                   ++ [ docSeparator
@@ -565,7 +562,7 @@ layoutPatternBindFinal alignmentToken binderDoc mPatDoc clauseDocs mWhereDocs ha
                       [ docForceSingleline
                           $ docSeq
                           $ [appSep $ docLitS "|"]
-                          ++ List.intersperse docCommaSep (pure <$> gs)
+                          ++ L.intersperse docCommaSep (pure <$> gs)
                       ]
                   )
                   ++ [ docCols
@@ -676,7 +673,7 @@ layoutLPatSyn name = \case
   RecCon recArgs -> do
     let docName = lrdrNameToTextAnn name
         args    = map (lrdrNameToTextAnn . foLabel . recordPatSynField) recArgs
-    docSeq . fmap docLit $ [docName, " { "] <> intersperse ", " args <> [" }"]
+    docSeq . fmap docLit $ [docName, " { "] <> L.intersperse ", " args <> [" }"]
 
 -- | Helper method to get the where clause from of explicitly bidirectional
 -- pattern synonyms
@@ -800,7 +797,7 @@ layoutTyFamInstDecl inClass outerNode tfid = do
             , [makeForallDoc foralls | HsOuterExplicit _ext foralls <- [bndrsMay]]
             , [docParenL | needsParens]
             , [appSep $ docWrapNodeAround name $ docLit nameStr]
-            , intersperse docSeparator (layoutHsTyPats pats)
+            , L.intersperse docSeparator (layoutHsTyPats pats)
             , [docParenR | needsParens]
             ]
         hasComments =
@@ -863,7 +860,7 @@ layoutClsInst lcid@(L _ cid) = docLines
     allocateNode
       . BDLines
       . fmap unLoc
-      . List.sortOn (ExactPrint.rs . locA . getLoc)
+      . L.sortOn (ExactPrint.rs . locA . getLoc)
       =<< sequence l
 
   layoutAndLocateSig :: LSig GhcPs -> ToBriDocM (LocatedAn AnnListItem BriDocNumbered)
@@ -943,18 +940,18 @@ layoutClsInst lcid@(L _ cid) = docLines
   -- -- to layout data/type decls.
   -- stripWhitespace :: Text -> Text
   -- stripWhitespace t =
-  --   Text.intercalate "\n" $ go $ List.drop 1 $ Text.lines t
+  --   T.intercalate "\n" $ go $ L.drop 1 $ T.lines t
   --   where
   --     go []               = []
   --     go (line1 : lineR)
   --       | isTypeOrData st = st : lineR
   --       | otherwise       = st : go lineR
   --       where
-  --         st = Text.stripStart line1
+  --         st = T.stripStart line1
   --     isTypeOrData t' =
-  --       ("type" `Text.isPrefixOf` t')
-  --         || ("newtype" `Text.isPrefixOf` t')
-  --         || ("data" `Text.isPrefixOf` t')
+  --       ("type" `T.isPrefixOf` t')
+  --         || ("newtype" `T.isPrefixOf` t')
+  --         || ("data" `T.isPrefixOf` t')
 
 --------------------------------------------------------------------------------
 -- Common Helpers

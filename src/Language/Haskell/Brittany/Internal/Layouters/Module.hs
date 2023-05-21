@@ -1,10 +1,7 @@
-{-# LANGUAGE DeriveFunctor       #-}
-{-# LANGUAGE DeriveGeneric       #-}
-{-# LANGUAGE DerivingVia         #-}
-{-# LANGUAGE LambdaCase          #-}
-{-# LANGUAGE NamedFieldPuns      #-}
-{-# LANGUAGE RankNTypes          #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE DerivingVia    #-}
+{-# LANGUAGE LambdaCase     #-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE RankNTypes     #-}
 
 module Language.Haskell.Brittany.Internal.Layouters.Module
   ( layoutModule
@@ -14,24 +11,23 @@ module Language.Haskell.Brittany.Internal.Layouters.Module
   , transformToCommentedImport
   ) where
 
+import Control.Monad.Trans.MultiRWS (MonadMultiReader(..))
 import Data.Bifunctor
 import Data.Foldable
-import Data.Functor
 import Data.List qualified as L
 import Data.List.Reversed (RList)
 import Data.List.Reversed qualified as RL
 import Data.Maybe qualified
-import Data.Semigroup qualified as Semigroup
-import Data.Text qualified as Text
+import Data.Semigroup
+import Data.Text qualified as T
+
 import GHC (GenLocated(L), unLoc)
 import GHC.Hs
 import GHC.OldList qualified as List
--- import GHC.Unit.Module.Name
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.LayouterBasics
 import Language.Haskell.Brittany.Internal.Layouters.IE
 import Language.Haskell.Brittany.Internal.Layouters.Import
-import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.GHC.ExactPrint as ExactPrint
 import Language.Haskell.GHC.ExactPrint.Types (commentContents)
@@ -47,9 +43,9 @@ layoutModule mod' = case mod' of
     docLines (commentedImportsToDoc <$> sortCommentedImports commentedImports)
   HsModule{hsmodName = Just n, hsmodExports, hsmodImports} -> do
     let commentedImports = transformToCommentedImport hsmodImports
-    let tn = Text.pack $ moduleNameString $ unLoc n
+    let tn = T.pack $ moduleNameString $ unLoc n
     allowSingleLineExportList <-
-      mAsk <&> (_conf_layout >>> _lconfig_allowSingleLineExportList >>> confUnpack)
+      confUnpack . _lconfig_allowSingleLineExportList . _conf_layout <$> mAsk
     -- the config should not prevent single-line layout when there is no
     -- export list
     let allowSingleLine = allowSingleLineExportList || Data.Maybe.isNothing hsmodExports
@@ -57,23 +53,23 @@ layoutModule mod' = case mod' of
       $ docSeq
           [ runFilteredAlternative $ do
             addAlternativeCond allowSingleLine $ docForceSingleline $ docSeq
-              [ appSep $ docLit $ Text.pack "module"
+              [ appSep $ docLit $ T.pack "module"
               , appSep $ docLit tn
               , appSep $ case hsmodExports of
                 Nothing -> docEmpty
                 Just x -> layoutLLIEs True KeepItemsUnsorted x
               , docSeparator
-              , docLit $ Text.pack "where"
+              , docLit $ T.pack "where"
               ]
             addAlternative $ docLines
               [ docAddBaseY BrIndentRegular $ docPar
-                  (docSeq [appSep $ docLit $ Text.pack "module", docLit tn])
+                  (docSeq [appSep $ docLit $ T.pack "module", docLit tn])
                   (docSeq
                     [ case hsmodExports of
                       Nothing -> docEmpty
                       Just x -> layoutLLIEs False KeepItemsUnsorted x
                     , docSeparator
-                    , docLit $ Text.pack "where"
+                    , docLit $ T.pack "where"
                     ]
                   )
               ]

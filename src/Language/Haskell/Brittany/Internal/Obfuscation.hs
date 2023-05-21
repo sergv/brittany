@@ -1,16 +1,17 @@
-{-# LANGUAGE NoImplicitPrelude #-}
-
 module Language.Haskell.Brittany.Internal.Obfuscation (obfuscate) where
 
 import Data.Char
 import Data.Functor
 import Data.List qualified as L
 import Data.Map qualified as M
+import Data.Maybe
+import Data.Set (Set)
 import Data.Set qualified as S
+import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Traversable
 import Data.Vector (Vector)
 import Data.Vector qualified as V
-import Language.Haskell.Brittany.Internal.Prelude
 import System.Random
 
 obfuscate :: Text -> IO Text
@@ -22,7 +23,7 @@ obfuscate input = do
       exceptionFilter x | x `S.member` extraKWs = False
       exceptionFilter x = not $ null $ drop 1 x
   let filtered = filter exceptionFilter idents
-  mappings <- fmap M.fromList $ filtered `forM` \x -> do
+  mappings <- fmap M.fromList $ filtered `for` \x -> do
     r <- createAlias x
     pure (x, r)
   let groups' = groups <&> \w -> fromMaybe w (M.lookup w mappings)

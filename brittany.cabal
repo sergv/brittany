@@ -102,7 +102,6 @@ library
     Language.Haskell.Brittany.Internal.Layouters.Type
     Language.Haskell.Brittany.Internal.Obfuscation
     Language.Haskell.Brittany.Internal.ParseModule
-    Language.Haskell.Brittany.Internal.Prelude
     Language.Haskell.Brittany.Internal.PreludeUtils
     Language.Haskell.Brittany.Internal.RecursionSchemes
     Language.Haskell.Brittany.Internal.Transformations.Alt

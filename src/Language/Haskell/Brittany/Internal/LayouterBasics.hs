@@ -1,11 +1,5 @@
-{-# LANGUAGE FlexibleContexts           #-}
-{-# LANGUAGE FlexibleInstances          #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE LambdaCase                 #-}
-{-# LANGUAGE NamedFieldPuns             #-}
-{-# LANGUAGE NoImplicitPrelude          #-}
-{-# LANGUAGE ScopedTypeVariables        #-}
-{-# LANGUAGE TupleSections              #-}
+{-# LANGUAGE LambdaCase     #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module Language.Haskell.Brittany.Internal.LayouterBasics
   ( processDefault
@@ -86,23 +80,28 @@ module Language.Haskell.Brittany.Internal.LayouterBasics
   ) where
 
 import Control.Comonad.Cofree
+import Control.Monad
+import Control.Monad.Trans.MultiRWS (MonadMultiReader(..), MonadMultiState(..), MonadMultiWriter(..), mGet)
 import Control.Monad.Trans.MultiRWS.Strict qualified as MultiRWSS
-import Control.Monad.Writer.Strict qualified as Writer
-import Data.Char qualified as Char
+import Control.Monad.Writer.Strict
+import Data.Char
 import Data.Data (Data)
-import Data.Functor
+import Data.Functor.Identity
 import Data.Generics qualified as SYB
+import Data.List qualified as L
 import Data.Maybe
 import Data.Monoid as Monoid
 import Data.Occurrences
-import Data.Semigroup qualified as Semigroup
+import Data.Semigroup
+import Data.Sequence (Seq)
 import Data.Sequence qualified as Seq
-import Data.Text qualified as Text
-import Data.Text.Lazy.Builder qualified as Text.Builder
+import Data.Text (Text)
+import Data.Text qualified as T
+import Data.Text.Lazy.Builder qualified as TLB
+import Data.Typeable
 import Prettyprinter (Pretty(..))
 
 import GHC (GenLocated(L), moduleName, moduleNameString)
-import GHC.OldList qualified as List
 import GHC.Parser.Annotation as GHC
 import GHC.PrettyInstances ()
 import GHC.Types.Name (getOccString)
@@ -110,7 +109,6 @@ import GHC.Types.Name.Occurrence (occNameString)
 import GHC.Types.Name.Reader (RdrName(..))
 import GHC.Types.SrcLoc (getLoc)
 import Language.Haskell.Brittany.Internal.Config.Types
-import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.GHC.ExactPrint (ExactPrint(..), exactPrint)
 import Language.Haskell.GHC.ExactPrint qualified as ExactPrint
@@ -121,7 +119,7 @@ import Language.Haskell.GHC.ExactPrint.Utils (ss2posEnd, ss2pos)
 import Language.Haskell.GHC.ExactPrint.Utils qualified as ExactPrint.Utils
 
 processDefault
-  :: ( MonadMultiWriter Text.Builder.Builder m
+  :: ( MonadMultiWriter TLB.Builder m
      , ExactPrint a
      )
   => a
@@ -134,7 +132,7 @@ processDefault x = do
   --       the module (header). This would remove the need for this hack!
   case exactPrint x of
     "\n" -> pure ()
-    str  -> mTell $ Text.Builder.fromString str
+    str  -> mTell $ TLB.fromString str
 
 -- | Use ExactPrint's output for this node; add a newly generated inline comment
 -- at insertion position (meant to point out to the user that this node is
@@ -174,30 +172,30 @@ briDocByExactInlineOnly
   -> LocatedAn ann ast
   -> ToBriDocM BriDocNumbered
 briDocByExactInlineOnly infoStr ast = do
-  let exactPrinted = Text.pack $ ExactPrint.exactPrint ast
+  let exactPrinted = T.pack $ ExactPrint.exactPrint ast
   fallbackMode <-
-    mAsk <&> (_conf_errorHandling >>> _econf_ExactPrintFallback >>> confUnpack)
+    confUnpack . _econf_ExactPrintFallback . _conf_errorHandling <$> mAsk
   let
     exactPrintNode t = allocateNode $ BDExternal False t
   let
     errorAction = do
       mTell [ErrorUnknownNode infoStr (locA (getLoc ast)) (pretty ast)]
       docLitS "{- BRITTANY ERROR UNHANDLED SYNTACTICAL CONSTRUCT -}"
-  case (fallbackMode, Text.lines exactPrinted) of
+  case (fallbackMode, T.lines exactPrinted) of
     (ExactPrintFallbackModeNever, _) -> errorAction
     (_, [t]) -> exactPrintNode
-      (Text.dropWhile Char.isSpace . Text.dropWhileEnd Char.isSpace $ t)
+      (T.dropWhile isSpace . T.dropWhileEnd isSpace $ t)
     (ExactPrintFallbackModeRisky, _) -> exactPrintNode exactPrinted
     _ -> errorAction
 
 rdrNameToText :: RdrName -> Text
--- rdrNameToText = Text.pack . show . flip runSDoc unsafeGlobalDynFlags . ppr
-rdrNameToText (Unqual occname) = Text.pack $ occNameString occname
+-- rdrNameToText = T.pack . show . flip runSDoc unsafeGlobalDynFlags . ppr
+rdrNameToText (Unqual occname) = T.pack $ occNameString occname
 rdrNameToText (Qual mname occname) =
-  Text.pack $ moduleNameString mname ++ "." ++ occNameString occname
+  T.pack $ moduleNameString mname ++ "." ++ occNameString occname
 rdrNameToText (Orig modul occname) =
-  Text.pack $ moduleNameString (moduleName modul) ++ occNameString occname
-rdrNameToText (Exact name) = Text.pack $ getOccString name
+  T.pack $ moduleNameString (moduleName modul) ++ occNameString occname
+rdrNameToText (Exact name) = T.pack $ getOccString name
 
 lrdrNameToText :: GenLocated l RdrName -> Text
 lrdrNameToText (L _ n) = rdrNameToText n
@@ -219,11 +217,11 @@ lrdrNameToTextAnnGen
 lrdrNameToTextAnnGen f (L a n) =
   case (n, nameAdornment (anns (ann a))) of
     (Exact{}, _)
-      | t == Text.pack "()" -> t
-    (_, Just NameBackquotes) -> Text.pack "`" <> t <> Text.pack "`"
-    (_, Just NameParensHash) -> Text.pack "(#" <> t <> Text.pack "#)"
-    (_, Just NameSquare)     -> Text.pack "[" <> t <> Text.pack "]"
-    (_, Just NameParens)     -> Text.pack "(" <> t <> Text.pack ")"
+      | t == T.pack "()" -> t
+    (_, Just NameBackquotes) -> T.pack "`" <> t <> T.pack "`"
+    (_, Just NameParensHash) -> T.pack "(#" <> t <> T.pack "#)"
+    (_, Just NameSquare)     -> T.pack "[" <> t <> T.pack "]"
+    (_, Just NameParens)     -> T.pack "(" <> t <> T.pack ")"
     _                        -> t
   where
     t :: Text
@@ -235,12 +233,12 @@ lrdrNameToTextAnn
 lrdrNameToTextAnn = lrdrNameToTextAnnGen id
 
 isDataTypeEquality :: Text -> Bool
-isDataTypeEquality = (== Text.pack "Data.Type.Equality~")
+isDataTypeEquality = (== T.pack "Data.Type.Equality~")
 
 -- rraaaahhh special casing rraaahhhhhh
 specialCaseDataTypeEquality :: Text -> Text
 specialCaseDataTypeEquality x
-  | isDataTypeEquality x = Text.pack "~"
+  | isDataTypeEquality x = T.pack "~"
   | otherwise            = x
 
 lrdrNameToTextAnnTypeEqualityIsSpecial
@@ -365,7 +363,7 @@ docLit :: Text -> ToBriDocM BriDocNumbered
 docLit = allocateNode . BDLit
 
 docLitS :: String -> ToBriDocM BriDocNumbered
-docLitS = docLit . Text.pack
+docLitS = docLit . T.pack
 
 docExt
   :: ExactPrint (LocatedAn ann ast)
@@ -375,22 +373,22 @@ docExt
   -> ToBriDocM BriDocNumbered
 docExt f x shouldAddComment = allocateNode $ BDExternal
   shouldAddComment
-  (f $ Text.pack $ ExactPrint.exactPrint x)
+  (f $ T.pack $ ExactPrint.exactPrint x)
 
 docAlt :: [ToBriDocM BriDocNumbered] -> ToBriDocM BriDocNumbered
 docAlt l = allocateNode . BDAlt =<< sequence l
 
-newtype CollectAltM a = CollectAltM (Writer.Writer [ToBriDocM BriDocNumbered] a)
+newtype CollectAltM a = CollectAltM (Writer [ToBriDocM BriDocNumbered] a)
   deriving (Functor, Applicative, Monad)
 
 addAlternativeCond :: Bool -> ToBriDocM BriDocNumbered -> CollectAltM ()
 addAlternativeCond cond doc = when cond (addAlternative doc)
 
 addAlternative :: ToBriDocM BriDocNumbered -> CollectAltM ()
-addAlternative = CollectAltM . Writer.tell . (: [])
+addAlternative = CollectAltM . tell . (: [])
 
 runFilteredAlternative :: CollectAltM () -> ToBriDocM BriDocNumbered
-runFilteredAlternative (CollectAltM action) = docAlt $ Writer.execWriter action
+runFilteredAlternative (CollectAltM action) = docAlt $ execWriter action
 
 docSeq :: [ToBriDocM BriDocNumbered] -> ToBriDocM BriDocNumbered
 docSeq [] = docEmpty
@@ -468,7 +466,7 @@ docParenLSep = appSep docParenL
 
 -- TODO: we don't make consistent use of these (yet). However, I think the
 -- most readable approach overall might be something else: define
--- `lit = docLit . Text.pack` and `prepSep = docSeq [docSeparator, x]`.
+-- `lit = docLit . T.pack` and `prepSep = docSeq [docSeparator, x]`.
 -- I think those two would make the usage most readable.
 -- lit "("  and  appSep (lit "(")  are understandable and short without
 -- introducing a new top-level binding for all types of parentheses.
@@ -669,7 +667,7 @@ unknownNodeError infoStr ast = do
 
 spacifyDocs :: [ToBriDocM BriDocNumbered] -> [ToBriDocM BriDocNumbered]
 spacifyDocs [] = []
-spacifyDocs ds = fmap appSep (List.init ds) ++ [List.last ds]
+spacifyDocs ds = fmap appSep (L.init ds) ++ [L.last ds]
 
 briDocMToPPM :: ToBriDocM a -> PPMLocal a
 briDocMToPPM m = do

@@ -1,7 +1,5 @@
-{-# LANGUAGE LambdaCase          #-}
-{-# LANGUAGE NamedFieldPuns      #-}
-{-# LANGUAGE NoImplicitPrelude   #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE LambdaCase     #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module Language.Haskell.Brittany.Internal.Layouters.Type
   ( layoutSigType
@@ -10,16 +8,19 @@ module Language.Haskell.Brittany.Internal.Layouters.Type
   , processTyVarBndrsSingleline
   ) where
 
+import Prelude hiding (lines)
+
 import Data.Functor
-import Data.Text qualified as Text
+import Data.List qualified as L
+import Data.Text (Text)
+import Data.Text qualified as T
+
 import GHC.Hs
-import GHC.OldList qualified as List
 import GHC.Types.SourceText
 import GHC.Types.SrcLoc
 import GHC.Utils.Outputable (ftext, showSDocUnsafe)
 import Language.Haskell.Brittany.Internal.ExactPrintUtils (realSrcSpan')
 import Language.Haskell.Brittany.Internal.LayouterBasics
-import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.Brittany.Internal.Utils (FirstLastView(..), splitFirstLast)
 
@@ -42,13 +43,13 @@ layoutContext lcs@(L _ cs) = do
     [x] -> x
     _   -> runFilteredAlternative $ do
       addAlternative $ do
-        let list = List.intersperse docCommaSep $ docForceSingleline <$> cs'
+        let list = L.intersperse docCommaSep $ docForceSingleline <$> cs'
         docSeq $ [docParenL] ++ list ++ [docParenR]
       addAlternative $ do
         let open = docCols
               ColTyOpPrefix
               [docParenLSep, docAddBaseY (BrIndentSpecial 2) $ head cs']
-            list = List.tail cs' <&> \cntxtDoc -> docCols
+            list = L.tail cs' <&> \cntxtDoc -> docCols
               ColTyOpPrefix
               [docCommaSep, docAddBaseY (BrIndentSpecial 2) $ cntxtDoc]
         docPar open $ docLines $ list ++ [docParenR]
@@ -315,10 +316,10 @@ layoutType ltype@(L typAnn typ) = docWrapNodeAround ltype $ case typ of
     simpleL = do
       docs <- docSharedWrapper layoutType `mapM` typs
       let lines =
-            List.tail docs
+            L.tail docs
               <&> \d -> docAddBaseY (BrIndentSpecial 2)
                     $ docCols ColTyOpPrefix [docCommaSep, d]
-          commaDocs = List.intersperse docCommaSep (docForceSingleline <$> docs)
+          commaDocs = L.intersperse docCommaSep (docForceSingleline <$> docs)
       runFilteredAlternative $ do
         addAlternative $
           docSeq
@@ -338,12 +339,12 @@ layoutType ltype@(L typAnn typ) = docWrapNodeAround ltype $ case typ of
         addAlternative $
           docSeq
             $ [start]
-            ++ docWrapNodeAfter ltype (List.intersperse docCommaSep docs)
+            ++ docWrapNodeAfter ltype (L.intersperse docCommaSep docs)
             ++ [end]
         addAlternative $ do
           let line1 = docCols ColTyOpPrefix [start, head docs]
               lines =
-                List.tail docs
+                L.tail docs
                   <&> \d -> docAddBaseY (BrIndentSpecial 2)
                         $ docCols ColTyOpPrefix [docCommaSep, d]
           docPar
@@ -357,7 +358,7 @@ layoutType ltype@(L typAnn typ) = docWrapNodeAround ltype $ case typ of
   --   --       parse result for any type level operators.
   --   --       need to check how things are handled on the expression level.
   --   let opStr = lrdrNameToText opName
-  --   let opLen = Text.length opStr
+  --   let opLen = T.length opStr
   --   layouter1@(Layouter desc1 _ _) <- layoutType typ1
   --   layouter2@(Layouter desc2 _ _) <- layoutType typ2
   --   let line = do -- Maybe
@@ -394,14 +395,14 @@ layoutType ltype@(L typAnn typ) = docWrapNodeAround ltype $ case typ of
   --         case line of
   --           Just (LayoutColumns _ _ m) | m <= remaining && allowSameLine -> do
   --             applyLayouterRestore layouter1 defaultParams
-  --             layoutWriteAppend $ Text.pack " " <> opStr <> Text.pack " "
+  --             layoutWriteAppend $ T.pack " " <> opStr <> T.pack " "
   --             applyLayouterRestore layouter2 defaultParams
   --           _ -> do
   --             let upIndent   = maybe (1+opLen) (max (1+opLen)) $ _params_opIndent params
   --             let downIndent = maybe upIndent (max upIndent) $ _bdesc_opIndentFloatUp =<< _ldesc_block desc2
   --             layoutWithAddIndentN downIndent $ applyLayouterRestore layouter1 defaultParams
   --             layoutWriteNewline
-  --             layoutWriteAppend $ opStr <> Text.pack " "
+  --             layoutWriteAppend $ opStr <> T.pack " "
   --             layoutWriteEnsureBlockPlusN downIndent
   --             applyLayouterRestore layouter2 defaultParams
   --               { _params_sepLines = SepLineTypeOp
@@ -515,10 +516,10 @@ layoutType ltype@(L typAnn typ) = docWrapNodeAround ltype $ case typ of
   --         remaining <- getCurRemaining
   --         case line of
   --           Just (LayoutColumns _ _ m) | m <= remaining -> do
-  --             layoutWriteAppend $ Text.pack $ bangStr
+  --             layoutWriteAppend $ T.pack $ bangStr
   --             applyLayouterRestore layouter defaultParams
   --           _ -> do
-  --             layoutWriteAppend $ Text.pack $ bangStr
+  --             layoutWriteAppend $ T.pack $ bangStr
   --             layoutWritePostCommentsRestore ltype
   --             applyLayouterRestore layouter defaultParams
   --     , _layouter_ast = ltype
@@ -537,7 +538,7 @@ layoutType ltype@(L typAnn typ) = docWrapNodeAround ltype $ case typ of
       addAlternative $
         docSeq
           $ [docLitS "'["]
-          ++ List.intersperse specialCommaSep (docForceSingleline <$> typDocs)
+          ++ L.intersperse specialCommaSep (docForceSingleline <$> typDocs)
           ++ [docLitS "]"]
       addAlternative $
         case splitFirstLast typDocs of
@@ -565,7 +566,7 @@ layoutType ltype@(L typAnn typ) = docWrapNodeAround ltype $ case typ of
             addAlternativeCond (not hasComments)
               $ docSeq
               $ [docLitS "'["]
-              ++ List.intersperse
+              ++ L.intersperse
                    specialCommaSep
                    (docForceSingleline <$> (e1 : ems ++ [docNodeAnnKW ltype (Just AnnOpenS) eN]))
               ++ [docLitS " ]"]
@@ -628,7 +629,7 @@ processTyVarBndrsSingleline bndrDocs = bndrDocs >>= \case
   (tname, Nothing) -> [docSeparator, docLit tname]
   (tname, Just doc) ->
     [ docSeparator
-    , docLit $ Text.pack "(" <> tname <> Text.pack " :: "
+    , docLit $ T.pack "(" <> tname <> T.pack " :: "
     , docForceSingleline $ doc
     , docParenR
     ]

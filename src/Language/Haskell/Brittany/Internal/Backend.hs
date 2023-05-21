@@ -33,9 +33,10 @@ import Control.Monad.Trans.MultiRWS (MonadMultiReader(..), MonadMultiState(..), 
 import Control.Monad.Trans.State.Strict qualified as StateS
 import Data.Foldable
 import Data.Function
+import Data.Functor
 import Data.Functor.Identity
-import Data.IntMap.Lazy qualified as IntMapL
-import Data.IntMap.Strict qualified as IntMapS
+import Data.IntMap.Lazy qualified as IML
+import Data.IntMap.Strict qualified as IM
 import Data.List qualified as L
 import Data.Maybe
 import Data.Semigroup
@@ -43,9 +44,8 @@ import Data.Sequence (Seq)
 import Data.Sequence qualified as Seq
 import Data.Text qualified as T
 import Data.Text.Lazy.Builder qualified as TLB
-
-import Data.Functor
 import Data.Traversable
+
 import GHC.Parser.Annotation
 import GHC.Types.SrcLoc
 import Language.Haskell.Brittany.Internal.BackendUtils
@@ -65,10 +65,10 @@ data ColumnSpacing
 type ColumnBlock a = [a]
 type ColumnBlocks a = Seq [a]
 type ColMap1
-  = IntMapL.IntMap {- ColIndex -}
+  = IML.IntMap {- ColIndex -}
                    (Bool, ColumnBlocks ColumnSpacing)
 type ColMap2
-  = IntMapL.IntMap {- ColIndex -}
+  = IML.IntMap {- ColIndex -}
                    (Float, ColumnBlock Int, ColumnBlocks Int)
                                           -- (ratio of hasSpace, maximum, raw)
 
@@ -446,7 +446,7 @@ alignColsLines bridocs = do -- colInfos `forM_` \colInfo -> do
         <&> processInfo colMax processedMap
      where
       (colInfos, finalState) =
-        StateS.runState (mergeBriDocs bridocs) (ColBuildState IntMapS.empty 0)
+        StateS.runState (mergeBriDocs bridocs) (ColBuildState IM.empty 0)
       -- maxZipper :: [Int] -> [Int] -> [Int]
       -- maxZipper [] ys = ys
       -- maxZipper xs [] = xs
@@ -470,7 +470,7 @@ alignColsLines bridocs = do -- colInfos `forM_` \colInfo -> do
                   fLast (ColumnSpacingRef len _) = len
 
                   fInit (ColumnSpacingLeaf len)  = len
-                  fInit (ColumnSpacingRef _ i)   = case IntMapL.lookup i result of
+                  fInit (ColumnSpacingRef _ i)   = case IML.lookup i result of
                     Nothing           -> 0
                     Just (_, maxs, _) -> sum maxs
               maxCols =
@@ -564,11 +564,11 @@ alignColsLines bridocs = do -- colInfos `forM_` \colInfo -> do
               do -- update map
                 s <- StateS.get
                 let m = _cbs_map s
-                case IntMapS.lookup infoInd m of
+                case IM.lookup infoInd m of
                   Nothing          -> error $ "No column info for index " ++ show infoInd
                   Just (_, spaces) ->
                     StateS.put s
-                      { _cbs_map = IntMapS.insert
+                      { _cbs_map = IM.insert
                         infoInd
                         (lastFlag, spaces Seq.|> trueSpacings)
                         m
@@ -603,7 +603,7 @@ withAlloc lastFlag f = do
   StateS.put $ cbs { _cbs_index = ind + 1 }
   (space, info) <- f ind
   StateS.get >>= \c -> StateS.put
-    $ c { _cbs_map = IntMapS.insert ind (lastFlag, space) $ _cbs_map c }
+    $ c { _cbs_map = IM.insert ind (lastFlag, space) $ _cbs_map c }
   pure info
 
 processInfo :: forall m. LayoutConstraints m => Int -> ColMap2 -> ColInfo -> m ()
@@ -623,12 +623,12 @@ processInfo maxSpace m = \case
           Just c  -> c
         InsertNewlines{} -> spaceAdd
     let colMax = min colMaxConf (curX + maxSpace)
-    (ratio, maxCols1, _colss) <- case IntMapS.lookup ind m of
+    (ratio, maxCols1, _colss) <- case IM.lookup ind m of
       Nothing    -> error $ "No column info for index " ++ show ind
       Just entry -> pure entry
 
     let maxCols2 = list <&> \case
-          (_, ColInfo i _ _) -> case IntMapS.lookup i m of
+          (_, ColInfo i _ _) -> case IM.lookup i m of
             Nothing         -> error $ "No column info for index " ++ show i
             Just (_, ms, _) -> sum ms
           (l, _) -> l

@@ -1,6 +1,5 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE MonadComprehensions #-}
-{-# LANGUAGE NoImplicitPrelude #-}
 
 module Language.Haskell.Brittany.Internal.Layouters.Expr
   ( layoutExpr
@@ -8,15 +7,18 @@ module Language.Haskell.Brittany.Internal.Layouters.Expr
   , overLitValBriDoc
   ) where
 
+import Control.Monad.Trans.MultiRWS (MonadMultiReader(..))
 import Data.Functor
-import Data.Semigroup qualified as Semigroup
+import Data.List qualified as L
+import Data.Semigroup
 import Data.Sequence qualified as Seq
-import Data.Text qualified as Text
+import Data.Text (Text)
+import Data.Text qualified as T
 import Data.Traversable
+
 import GHC (GenLocated(L))
 import GHC.Data.FastString qualified as FastString
 import GHC.Hs
-import GHC.OldList qualified as List
 import GHC.Types.Basic
 import GHC.Types.Name
 import GHC.Types.Name.Reader
@@ -27,13 +29,12 @@ import Language.Haskell.Brittany.Internal.Layouters.Decl
 import Language.Haskell.Brittany.Internal.Layouters.Pattern
 import Language.Haskell.Brittany.Internal.Layouters.Stmt
 import Language.Haskell.Brittany.Internal.Layouters.Type
-import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.Brittany.Internal.Utils
 
 layoutExpr :: LHsExpr GhcPs -> ToBriDocM BriDocNumbered
 layoutExpr lexpr@(L _ expr) = do
-  indentPolicy <- mAsk <&> (_conf_layout >>> _lconfig_indentPolicy >>> confUnpack)
+  indentPolicy <- confUnpack . _lconfig_indentPolicy . _conf_layout <$> mAsk
   let allowFreeIndent = indentPolicy == IndentPolicyFree
   docWrapNodeAround lexpr $ case expr of
     HsVar _ vname ->
@@ -154,7 +155,7 @@ layoutExpr lexpr@(L _ expr) = do
       let
         colsOrSequence = case headE of
           L _ (HsVar _ (L _ (Unqual occname))) ->
-            docCols (ColApp $ Text.pack $ occNameString occname)
+            docCols (ColApp $ T.pack $ occNameString occname)
           _                                    -> docSeq
       headDoc   <- docSharedWrapper layoutExpr headE
       paramDocs <- docSharedWrapper layoutExpr `mapM` paramEs
@@ -731,11 +732,11 @@ layoutExpr lexpr@(L _ expr) = do
               , docNodeAnnKW lexpr (Just AnnOpenS)
                   $ appSep
                   $ docForceSingleline
-                  $ List.last stmtDocs
+                  $ L.last stmtDocs
               , appSep $ docLitS "|"
               , docSeq
-                  $ List.intersperse docCommaSep
-                  $ docForceSingleline <$> List.init stmtDocs
+                  $ L.intersperse docCommaSep
+                  $ docForceSingleline <$> L.init stmtDocs
               , docLitS " ]"
               ]
             addAlternative
@@ -745,11 +746,11 @@ layoutExpr lexpr@(L _ expr) = do
                     [ docNodeAnnKW lexpr Nothing $ appSep $ docLitS "["
                     , docSetBaseY
                     $ docNodeAnnKW lexpr (Just AnnOpenS)
-                    $ List.last stmtDocs
+                    $ L.last stmtDocs
                     ]
-                  stmtDocsInit = List.init stmtDocs
-                  s1           = List.head stmtDocsInit
-                  sM           = List.tail stmtDocsInit
+                  stmtDocsInit = L.init stmtDocs
+                  s1           = L.head stmtDocsInit
+                  sM           = L.tail stmtDocsInit
                   line1        =
                     docCols ColListComp [appSep $ docLitS "|", s1]
                   lineM        = sM <&> \d -> docCols ColListComp [docCommaSep, d]
@@ -784,7 +785,7 @@ layoutExpr lexpr@(L _ expr) = do
           addAlternativeCond (not hasComments)
             $ docSeq
             $ [docLitS "["]
-            ++ List.intersperse
+            ++ L.intersperse
                  docCommaSep
                  (docForceSingleline
                  <$> (e1 : ems ++ [docNodeAnnKW lexpr (Just AnnOpenS) eN])
@@ -811,7 +812,7 @@ layoutExpr lexpr@(L _ expr) = do
         recordExpression False indentPolicy lexpr nameDoc rFs
       HsRecFields [] (Just (L _ (RecFieldsDotDot 0))) -> do
         let t = lrdrNameToText lname
-        docWrapNodeAround lname $ docLit $ t <> Text.pack " { .. }"
+        docWrapNodeAround lname $ docLit $ t <> T.pack " { .. }"
       HsRecFields fs@(_ : _) (Just (L _ (RecFieldsDotDot dotdoti))) | dotdoti == length fs -> do
         let nameDoc = docWrapNodeAround lname $ docLit $ lrdrNameToText lname
         fieldDocs <- for fs $ \fieldl@(L _ (HsFieldBind _ann (L _ fieldOcc) fExpr pun)) -> do
@@ -893,7 +894,7 @@ layoutExpr lexpr@(L _ expr) = do
       docSeq [docLitS "$", docParenL, layoutExpr e, docParenR]
     HsUntypedSplice _ (HsQuasiQuote _ quoter content) -> do
       allocateNode $ BDPlain
-        (Text.pack
+        (T.pack
         $ "["
         ++ showOutputable quoter
         ++ "|"
@@ -947,7 +948,7 @@ recordExpression dotdot indentPolicy lexpr nameDoc rFs@(rF1 : rFr) = do
     addAlternative $ docSeq
       [ docNodeAnnKW lexpr Nothing $ appSep $ docForceSingleline nameDoc
       , appSep $ docLitS "{"
-      , docSeq $ List.intersperse docCommaSep $ rFs <&> \case
+      , docSeq $ L.intersperse docCommaSep $ rFs <&> \case
         (lfield, fieldStr, Just fieldDoc) -> docWrapNodeAround lfield $ docSeq
           [ appSep $ docLit fieldStr
           , appSep $ docLitS "="
@@ -1054,24 +1055,24 @@ recordExpression dotdot indentPolicy lexpr nameDoc rFs@(rF1 : rFr) = do
 
 litBriDoc :: HsLit GhcPs -> BriDocF BriDocNumbered
 litBriDoc = \case
-  HsChar         (SourceText t) _c             -> BDLit $ Text.pack t -- BDLit $ Text.pack $ ['\'', c, '\'']
-  HsCharPrim     (SourceText t) _c             -> BDLit $ Text.pack t -- BDLit $ Text.pack $ ['\'', c, '\'']
-  HsString       (SourceText t) _fastString    -> BDLit $ Text.pack t -- BDLit $ Text.pack $ FastString.unpackFS fastString
-  HsStringPrim   (SourceText t) _byteString    -> BDLit $ Text.pack t -- BDLit $ Text.pack $ Data.ByteString.Char8.unpack byteString
-  HsInt _        (IL (SourceText t) _ _)       -> BDLit $ Text.pack t -- BDLit $ Text.pack $ show i
-  HsIntPrim      (SourceText t) _i             -> BDLit $ Text.pack t -- BDLit $ Text.pack $ show i
-  HsWordPrim     (SourceText t) _i             -> BDLit $ Text.pack t -- BDLit $ Text.pack $ show i
-  HsInt64Prim    (SourceText t) _i             -> BDLit $ Text.pack t -- BDLit $ Text.pack $ show i
-  HsWord64Prim   (SourceText t) _i             -> BDLit $ Text.pack t -- BDLit $ Text.pack $ show i
-  HsInteger      (SourceText t) _i _type       -> BDLit $ Text.pack t -- BDLit $ Text.pack $ show i
-  HsRat _        FL{fl_text = SourceText t} _  -> BDLit $ Text.pack t
-  HsFloatPrim _  FL{fl_text = SourceText t}    -> BDLit $ Text.pack t
-  HsDoublePrim _ FL{fl_text = SourceText t}    -> BDLit $ Text.pack t
+  HsChar         (SourceText t) _c             -> BDLit $ T.pack t -- BDLit $ T.pack $ ['\'', c, '\'']
+  HsCharPrim     (SourceText t) _c             -> BDLit $ T.pack t -- BDLit $ T.pack $ ['\'', c, '\'']
+  HsString       (SourceText t) _fastString    -> BDLit $ T.pack t -- BDLit $ T.pack $ FastString.unpackFS fastString
+  HsStringPrim   (SourceText t) _byteString    -> BDLit $ T.pack t -- BDLit $ T.pack $ Data.ByteString.Char8.unpack byteString
+  HsInt _        (IL (SourceText t) _ _)       -> BDLit $ T.pack t -- BDLit $ T.pack $ show i
+  HsIntPrim      (SourceText t) _i             -> BDLit $ T.pack t -- BDLit $ T.pack $ show i
+  HsWordPrim     (SourceText t) _i             -> BDLit $ T.pack t -- BDLit $ T.pack $ show i
+  HsInt64Prim    (SourceText t) _i             -> BDLit $ T.pack t -- BDLit $ T.pack $ show i
+  HsWord64Prim   (SourceText t) _i             -> BDLit $ T.pack t -- BDLit $ T.pack $ show i
+  HsInteger      (SourceText t) _i _type       -> BDLit $ T.pack t -- BDLit $ T.pack $ show i
+  HsRat _        FL{fl_text = SourceText t} _  -> BDLit $ T.pack t
+  HsFloatPrim _  FL{fl_text = SourceText t}    -> BDLit $ T.pack t
+  HsDoublePrim _ FL{fl_text = SourceText t}    -> BDLit $ T.pack t
   _                                            -> error "litBriDoc: literal with no SourceText"
 
 overLitValBriDoc :: OverLitVal -> BriDocF BriDocNumbered
 overLitValBriDoc = \case
-  HsIntegral (IL (SourceText t) _ _)      -> BDLit $ Text.pack t
-  HsFractional FL{fl_text = SourceText t} -> BDLit $ Text.pack t
-  HsIsString (SourceText t) _             -> BDLit $ Text.pack t
+  HsIntegral (IL (SourceText t) _ _)      -> BDLit $ T.pack t
+  HsFractional FL{fl_text = SourceText t} -> BDLit $ T.pack t
+  HsIsString (SourceText t) _             -> BDLit $ T.pack t
   _                                       -> error "overLitValBriDoc: literal with no SourceText"

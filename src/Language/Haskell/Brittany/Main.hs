@@ -1,17 +1,23 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TupleSections     #-}
 
 module Language.Haskell.Brittany.Main (main, mainWith) where
 
-import Control.Monad (zipWithM)
+import Control.Applicative
+import Control.Monad
+import Control.Monad.IO.Class
 import Control.Monad.Trans.Except qualified as ExceptT
+import Control.Monad.Trans.Maybe
 import Data.Either qualified
 import Data.Foldable
+import Data.Functor.Identity
 import Data.List qualified as L
+import Data.Maybe
 import Data.Monoid qualified
-import Data.Semigroup qualified as Semigroup
+import Data.Semigroup
 import Data.Text.IO qualified as TIO
+import Data.Version
+import Data.Void
 import Prettyprinter ((<+>))
 import Prettyprinter.Combinators
 import System.Directory qualified as Directory
@@ -28,7 +34,6 @@ import GHC.Types.SrcLoc (SrcSpan)
 import Language.Haskell.Brittany.Internal.Config
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.Formatting
-import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.PreludeUtils
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.Brittany.Internal.Utils

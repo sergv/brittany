@@ -1,10 +1,11 @@
-{-# LANGUAGE NoImplicitPrelude #-}
 
 module Language.Haskell.Brittany.Internal.Layouters.Import (layoutImport) where
 
-import Data.Functor
-import Data.Semigroup qualified as Semigroup
-import Data.Text qualified as Text
+import Control.Monad.Trans.MultiRWS (MonadMultiReader(..))
+import Data.Semigroup
+import Data.Text (Text)
+import Data.Text qualified as T
+
 import GHC (GenLocated(L), unLoc)
 import GHC.Hs
 import GHC.Types.PkgQual
@@ -12,7 +13,6 @@ import GHC.Types.SourceText
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.LayouterBasics
 import Language.Haskell.Brittany.Internal.Layouters.IE
-import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.Types
 
 prepPkg :: SourceText -> String
@@ -25,16 +25,16 @@ prepPkg rawN = case rawN of
 layoutImport :: ImportDecl GhcPs -> ToBriDocM BriDocNumbered
 layoutImport importD = case importD of
   ImportDecl _ (L _ modName) pkg src safe q mas impList -> do
-    importCol    <- mAsk <&> (_conf_layout >>> _lconfig_importColumn >>> confUnpack)
-    importAsCol  <- mAsk <&> (_conf_layout >>> _lconfig_importAsColumn >>> confUnpack)
-    indentPolicy <- mAsk <&> (_conf_layout >>> _lconfig_indentPolicy >>> confUnpack)
+    importCol    <- confUnpack . _lconfig_importColumn   . _conf_layout <$> mAsk
+    importAsCol  <- confUnpack . _lconfig_importAsColumn . _conf_layout <$> mAsk
+    indentPolicy <- confUnpack . _lconfig_indentPolicy   . _conf_layout <$> mAsk
     let compact     = indentPolicy /= IndentPolicyFree
-        modNameT    = Text.pack $ moduleNameString modName
+        modNameT    = T.pack $ moduleNameString modName
         pkgNameT :: Maybe Text
         pkgNameT    = case pkg of
           NoRawPkgQual -> Nothing
-          RawPkgQual s -> Just $ Text.pack $ prepPkg $ sl_st s
-        masT        = Text.pack . moduleNameString . unLoc <$> mas
+          RawPkgQual s -> Just $ T.pack $ prepPkg $ sl_st s
+        masT        = T.pack . moduleNameString . unLoc <$> mas
         hiding      = case impList of
           Just (EverythingBut, _) -> True
           _                       -> False
@@ -42,7 +42,7 @@ layoutImport importD = case importD of
         qLengthReal =
           let qualifiedPart = if q /= NotQualified then length "qualified " else 0
               safePart = if safe then length "safe " else 0
-              pkgPart  = maybe 0 ((+ 1) . Text.length) pkgNameT
+              pkgPart  = maybe 0 ((+ 1) . T.length) pkgNameT
               srcPart  = case src of
                 IsBoot  -> length "{-# SOURCE #-} "
                 NotBoot -> 0
@@ -51,7 +51,7 @@ layoutImport importD = case importD of
         -- Cost in columns of importColumn
         asCost           = length "as "
         hidingParenCost  = if hiding then length "hiding ( " else length "( "
-        nameCost         = Text.length modNameT + qLength
+        nameCost         = T.length modNameT + qLength
         importQualifiers = docSeq
           [ appSep $ docLitS "import"
           , case src of

@@ -5,7 +5,6 @@
 ----------------------------------------------------------------------------
 
 {-# LANGUAGE MultiWayIf        #-}
-{-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Language.Haskell.Brittany.Internal.Formatting
@@ -13,8 +12,12 @@ module Language.Haskell.Brittany.Internal.Formatting
   , ParseError(..)
   ) where
 
-import Data.Semigroup qualified as Semigroup
+import Control.Monad.IO.Class
+import Data.Maybe
+import Data.Semigroup
+import Data.Sequence (Seq)
 import Data.Sequence qualified as Seq
+import Data.Text (Text)
 import Data.Text qualified as T
 import GHC.Driver.Session qualified as GHC
 import GHC.LanguageExtensions.Type qualified as GHC
@@ -22,10 +25,8 @@ import Language.Haskell.Brittany.Internal
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.Obfuscation
 import Language.Haskell.Brittany.Internal.ParseModule
-import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.GHC.ExactPrint qualified as ExactPrint
-import System.FilePath
 
 newtype ParseError = ParseError { unParseError :: String }
 

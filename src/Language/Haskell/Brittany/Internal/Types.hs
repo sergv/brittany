@@ -32,12 +32,15 @@ module Language.Haskell.Brittany.Internal.Types
   , pattern LineModeInvalid
   ) where
 
+import Control.Applicative
 import Control.Comonad.Cofree
 import Control.Monad.Trans.MultiRWS.Strict qualified as MultiRWSS
 import Data.Data (Data)
 import Data.Fix
+import Data.Sequence (Seq)
 import Data.Strict.Maybe qualified as Strict
-import Data.Text.Lazy.Builder qualified as Text.Builder
+import Data.Text (Text)
+import Data.Text.Lazy.Builder qualified as TLB
 import Data.Void
 import GHC.Parser.Annotation
 import GHC.Types.SrcLoc
@@ -45,7 +48,6 @@ import Prettyprinter (Doc)
 import Safe qualified
 
 import Language.Haskell.Brittany.Internal.Config.Types
-import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.PreludeUtils ()
 import Language.Haskell.Brittany.Internal.RecursionSchemes
 
@@ -54,12 +56,12 @@ import Prettyprinter.Generics
 
 type PPM = MultiRWSS.MultiRWS
   '[Config]
-  '[Text.Builder.Builder, [BrittanyError], Seq String]
+  '[TLB.Builder, [BrittanyError], Seq String]
   '[]
 
 type PPMLocal = MultiRWSS.MultiRWS
   '[Config]
-  '[Text.Builder.Builder, [BrittanyError], Seq String]
+  '[TLB.Builder, [BrittanyError], Seq String]
   '[]
 
 data ColsOrNewlines

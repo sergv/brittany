@@ -1,20 +1,22 @@
-{-# LANGUAGE FlexibleContexts    #-}
-{-# LANGUAGE LambdaCase          #-}
-{-# LANGUAGE NoImplicitPrelude   #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Language.Haskell.Brittany.Internal.Layouters.DataDecl (layoutDataDecl) where
 
+import Control.Monad
+import Control.Monad.Trans.MultiRWS (MonadMultiReader(..))
 import Data.Functor
-import Data.Semigroup qualified as Semigroup
-import GHC qualified
+import Data.List qualified as L
+import Data.List.NonEmpty (NonEmpty(..))
+import Data.Semigroup
+import Data.Text (Text)
+
 import GHC (GenLocated(L))
+import GHC qualified
 import GHC.Hs
-import GHC.OldList qualified as List
+import GHC.Types.Name.Reader
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.LayouterBasics
 import Language.Haskell.Brittany.Internal.Layouters.Type
-import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.GHC.ExactPrint (ExactPrint)
 
@@ -208,12 +210,12 @@ createContextDoc [] = docEmpty
 createContextDoc [t] =
   docSeq [layoutType t, docSeparator, docLitS "=>", docSeparator]
 createContextDoc (t1 : tR) = do
-  t1Doc <- docSharedWrapper layoutType t1
-  tRDocs <- tR `forM` docSharedWrapper layoutType
+  t1Doc  <- docSharedWrapper layoutType t1
+  tRDocs <- traverse (docSharedWrapper layoutType) tR
   docAlt
     [ docSeq
       [ docLitS "("
-      , docForceSingleline $ docSeq $ List.intersperse
+      , docForceSingleline $ docSeq $ L.intersperse
         docCommaSep
         (t1Doc : tRDocs)
       , docLitS ") =>"
@@ -233,7 +235,7 @@ createBndrDoc bs = do
     L _ (KindedTyVar _ _ext lrdrName kind) -> do
       d <- docSharedWrapper layoutType kind
       pure $ (lrdrNameToText lrdrName, Just $ d)
-  docSeq $ List.intersperse docSeparator $ tyVarDocs <&> \(vname, mKind) ->
+  docSeq $ L.intersperse docSeparator $ tyVarDocs <&> \(vname, mKind) ->
     case mKind of
       Nothing -> docLit vname
       Just kind -> docSeq
@@ -267,7 +269,7 @@ derivingClauseDoc (L _ (HsDerivingClause _ext mStrategy types@(L _ ts))) =
     $ case ts of
         DctSingle _ext typ -> layoutSigType typ
         DctMulti  _ext typ -> docSeq $
-          [docLitS "("] ++ List.intersperse docCommaSep (map layoutSigType  typ) ++ [docLitS ")"]
+          [docLitS "("] ++ L.intersperse docCommaSep (map layoutSigType  typ) ++ [docLitS ")"]
     , rhsStrategy
     ]
     where
@@ -295,14 +297,14 @@ createDetailsDoc
 --   _ -> undefined
 createDetailsDoc consNameStr details = case details of
   PrefixCon _targs args -> do
-    indentPolicy <- mAsk <&> (_conf_layout >>> _lconfig_indentPolicy >>> confUnpack)
+    indentPolicy <- confUnpack . _lconfig_indentPolicy . _conf_layout <$> mAsk
     let
       singleLine = docSeq
         [ docLit consNameStr
         , docSeparator
         , docForceSingleline
         $ docSeq
-        $ List.intersperse docSeparator
+        $ L.intersperse docSeparator
         $ layoutType . hsScaledThing <$> args
         ]
       leftIndented =
@@ -422,7 +424,7 @@ createNamesAndTypeDoc
   -> (ToBriDocM BriDocNumbered, ToBriDocM BriDocNumbered)
 createNamesAndTypeDoc lField names t =
   ( docNodeAnnKW lField Nothing $ docWrapNodeBefore lField $ docSeq
-    [ docSeq $ List.intersperse docCommaSep $ names <&> \case
+    [ docSeq $ L.intersperse docCommaSep $ names <&> \case
         L _ (FieldOcc _ fieldName) -> docLit (lrdrNameToTextAnn fieldName)
     ]
   , docWrapNodeAfter lField $ layoutType t

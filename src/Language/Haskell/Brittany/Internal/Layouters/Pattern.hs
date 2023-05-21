@@ -1,26 +1,25 @@
-{-# LANGUAGE LambdaCase          #-}
-{-# LANGUAGE NamedFieldPuns      #-}
-{-# LANGUAGE NoImplicitPrelude   #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE LambdaCase     #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module Language.Haskell.Brittany.Internal.Layouters.Pattern
   ( layoutPat
   , colsWrapPat
   ) where
 
-import Data.Foldable qualified as Foldable
+import Control.Monad
+import Data.Foldable
 import Data.Functor
+import Data.List qualified as L
+import Data.Sequence (Seq)
 import Data.Sequence qualified as Seq
-import Data.Text qualified as Text
-import Data.Traversable
+import Data.Text qualified as T
+
 import GHC (GenLocated(L), ol_val)
 import GHC.Hs
-import GHC.OldList qualified as List
 import GHC.Types.Basic
 import Language.Haskell.Brittany.Internal.LayouterBasics
 import {-# SOURCE #-} Language.Haskell.Brittany.Internal.Layouters.Expr
 import Language.Haskell.Brittany.Internal.Layouters.Type
-import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.Types
 
 -- | Layouts patterns (inside function bindings, case alternatives, let
@@ -35,31 +34,31 @@ import Language.Haskell.Brittany.Internal.Types
 -- the different cases below.
 layoutPat :: LPat GhcPs -> ToBriDocM (Seq BriDocNumbered)
 layoutPat lpat@(L _ pat) = docWrapNodeAround lpat $ case pat of
-  WildPat _ -> fmap Seq.singleton $ docLitS "_"
+  WildPat _ -> Seq.singleton <$> docLitS "_"
     -- _ -> expr
-  VarPat _ n -> fmap Seq.singleton $ docLit $ lrdrNameToText n
+  VarPat _ n -> Seq.singleton <$> docLit (lrdrNameToText n)
     -- abc -> expr
-  LitPat _ lit -> fmap Seq.singleton $ allocateNode $ litBriDoc lit
+  LitPat _ lit -> Seq.singleton <$> allocateNode (litBriDoc lit)
     -- 0 -> expr
   ParPat _ _lparenTok inner _rparenTok -> do
     -- (nestedpat) -> expr
-    left  <- docParenL
-    right <- docParenR
+    left      <- docParenL
+    right     <- docParenR
     innerDocs <- colsWrapPat =<< layoutPat inner
     pure $ Seq.empty Seq.|> left Seq.|> innerDocs Seq.|> right
     -- pure $ (left Seq.<| innerDocs) Seq.|> right
     -- case Seq.viewl innerDocs of
-    --   Seq.EmptyL -> fmap pure $ docLit $ Text.pack "()" -- this should never occur..
+    --   Seq.EmptyL -> fmap pure $ docLit $ T.pack "()" -- this should never occur..
     --   x1 Seq.:< rest -> case Seq.viewr rest of
     --     Seq.EmptyR ->
     --       fmap pure $ docSeq
-    --       [ docLit $ Text.pack "("
+    --       [ docLit $ T.pack "("
     --       , pure x1
-    --       , docLit $ Text.pack ")"
+    --       , docLit $ T.pack ")"
     --       ]
     --     middle Seq.:> xN -> do
-    --       x1' <- docSeq [docLit $ Text.pack "(", pure x1]
-    --       xN' <- docSeq [pure xN, docLit $ Text.pack ")"]
+    --       x1' <- docSeq [docLit $ T.pack "(", pure x1]
+    --       xN' <- docSeq [pure xN, docLit $ T.pack ")"]
     --       pure $ (x1' Seq.<| middle) Seq.|> xN'
   ConPat _ lname (PrefixCon (tyargs :: [HsConPatTyArg GhcPs]) args) -> do
     -- Abc @x @y @z a b c -> expr
@@ -71,7 +70,7 @@ layoutPat lpat@(L _ pat) = docWrapNodeAround lpat $ case pat of
       [] -> pure <$> docLit nameDoc
       xs -> do
         x1 <- appSep (docLit nameDoc)
-        xR <- fmap Seq.fromList $ sequence $ spacifyDocs $ fmap colsWrapPat xs
+        xR <- Seq.fromList <$> sequence (spacifyDocs (colsWrapPat <$> xs))
         pure $ x1 Seq.<| xR
 
     -- if null args'
@@ -90,7 +89,7 @@ layoutPat lpat@(L _ pat) = docWrapNodeAround lpat $ case pat of
   ConPat _ lname (RecCon (HsRecFields [] Nothing)) -> do
     -- Abc{} -> expr
     let t = lrdrNameToText lname
-    fmap Seq.singleton $ docLit $ t <> Text.pack "{}"
+    fmap Seq.singleton $ docLit $ t <> T.pack "{}"
   ConPat _ lname (RecCon (HsRecFields fs@(_ : _) Nothing)) -> do
     -- Abc { a = locA, b = locB, c = locC } -> expr1
     -- Abc { a, b, c } -> expr2
@@ -104,7 +103,7 @@ layoutPat lpat@(L _ pat) = docWrapNodeAround lpat $ case pat of
     Seq.singleton <$> docSeq
       [ appSep $ docLit t
       , appSep $ docLitS "{"
-      , docSeq $ List.intersperse docCommaSep $ fds <&> \case
+      , docSeq $ L.intersperse docCommaSep $ fds <&> \case
         (fieldName, Just fieldDoc) -> docSeq
           [ appSep $ docLit fieldName
           , appSep $ docLitS "="
@@ -149,7 +148,7 @@ layoutPat lpat@(L _ pat) = docWrapNodeAround lpat $ case pat of
       Unboxed -> wrapPatListy args "(##)" docParenHashLSep docParenHashRSep
   AsPat _ asName _atTok asPat -> do
     -- bind@nestedpat -> expr
-    wrapPatPrepend asPat (docLit $ Text.snoc (lrdrNameToText asName) '@')
+    wrapPatPrepend asPat (docLit $ T.snoc (lrdrNameToText asName) '@')
   SigPat _ pat1 (HsPS _ ty1) -> do
     -- i :: Int -> expr
     patDocs <- layoutPat pat1
@@ -191,7 +190,7 @@ layoutPat lpat@(L _ pat) = docWrapNodeAround lpat $ case pat of
   _ -> pure <$> briDocByExactInlineOnly "some unknown pattern" lpat
 
 colsWrapPat :: Seq BriDocNumbered -> ToBriDocM BriDocNumbered
-colsWrapPat = docCols ColPatterns . fmap pure . Foldable.toList
+colsWrapPat = docCols ColPatterns . fmap pure . toList
 
 wrapPatPrepend
   :: LPat GhcPs -> ToBriDocM BriDocNumbered -> ToBriDocM (Seq BriDocNumbered)

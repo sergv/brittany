@@ -1,6 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiWayIf #-}
-{-# LANGUAGE NoImplicitPrelude #-}
 
 module Language.Haskell.Brittany.Internal.Layouters.IE
   ( layoutLLIEs
@@ -10,15 +9,13 @@ module Language.Haskell.Brittany.Internal.Layouters.IE
 
 import Data.Data (Data)
 import Data.List.Extra qualified
-import Data.Text qualified as Text
-import GHC
-  ( GenLocated(L)
-  , unLoc
-  )
+import Data.Text (Text)
+import Data.Text qualified as T
+import Data.List qualified as L
+
+import GHC (GenLocated(L), unLoc)
 import GHC.Hs
-import GHC.OldList qualified as List
 import Language.Haskell.Brittany.Internal.LayouterBasics
-import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.Brittany.Internal.Utils
 
@@ -32,12 +29,12 @@ layoutIE lie@(L _ ie) = docWrapNodeAround lie $ case ie of
   IEThingWith _ x _ ns -> do
     let hasComments =
           hasCommentsBetween lie AnnOpenP AnnCloseP || hasAnyCommentsBelow x || or (map hasAnyCommentsBelow ns)
-    let sortedNs = List.sortOn wrappedNameToText ns
+    let sortedNs = L.sortOn wrappedNameToText ns
     runFilteredAlternative $ do
       addAlternativeCond (not hasComments)
         $ docSeq
         $ [layoutWrapped lie x, docParenL]
-        ++ intersperse docCommaSep (map nameDoc sortedNs)
+        ++ L.intersperse docCommaSep (map nameDoc sortedNs)
         ++ [docParenR]
       addAlternative
         $ docWrapNodeAfter lie
@@ -73,8 +70,8 @@ layoutIE lie@(L _ ie) = docWrapNodeAround lie $ case ie of
     layoutWrapped :: LIE GhcPs -> LIEWrappedName GhcPs -> ToBriDocM BriDocNumbered
     layoutWrapped _ = \case
       L _ (IEName    _ n) -> docLit $ lrdrNameToTextAnn n
-      L _ (IEPattern _ n) -> docLit $ Text.pack "pattern " <> lrdrNameToTextAnn n
-      L _ (IEType    _ n) -> docLit $ Text.pack "type " <> lrdrNameToTextAnn n
+      L _ (IEPattern _ n) -> docLit $ T.pack "pattern " <> lrdrNameToTextAnn n
+      L _ (IEType    _ n) -> docLit $ T.pack "type " <> lrdrNameToTextAnn n
 
 data SortItemsFlag = ShouldSortItems | KeepItemsUnsorted
 -- Helper function to deal with Located lists of LIEs.
@@ -93,7 +90,7 @@ layoutAnnAndSepLLIEs shouldSort llies@(L _ lies) = do
   let
     sortedLies =
       [ items
-      | group <- Data.List.Extra.groupOn lieToText $ List.sortOn lieToText lies
+      | group <- Data.List.Extra.groupOn lieToText $ L.sortOn lieToText lies
       , items <- mergeGroup group
       ]
   let
@@ -112,8 +109,8 @@ layoutAnnAndSepLLIEs shouldSort llies@(L _ lies) = do
   mergeGroup [] = []
   mergeGroup items@[_] = items
   mergeGroup items = if
-    | all isProperIEThing items -> [List.foldl1' thingFolder items]
-    | all isIEVar items -> [List.foldl1' thingFolder items]
+    | all isProperIEThing items -> [L.foldl1' thingFolder items]
+    | all isIEVar items -> [L.foldl1' thingFolder items]
     | otherwise -> items
   -- proper means that if it is a ThingWith, it does not contain a wildcard
   -- (because I don't know what a wildcard means if it is not already a
@@ -199,10 +196,10 @@ lieToText = \case
   -- Need to check, and either put them at the top (for module) or do some
   -- other clever thing.
   L _ (IEModuleContents _ n) -> moduleNameToText n
-  L _ IEGroup{}              -> Text.pack "@IEGroup"
-  L _ IEDoc{}                -> Text.pack "@IEDoc"
-  L _ IEDocNamed{}           -> Text.pack "@IEDocNamed"
+  L _ IEGroup{}              -> T.pack "@IEGroup"
+  L _ IEDoc{}                -> T.pack "@IEDoc"
+  L _ IEDocNamed{}           -> T.pack "@IEDocNamed"
  where
   moduleNameToText :: LocatedAn ann ModuleName -> Text
   moduleNameToText (L _ name) =
-    Text.pack ("@IEModuleContents" ++ moduleNameString name)
+    T.pack ("@IEModuleContents" ++ moduleNameString name)
