@@ -212,7 +212,7 @@ readConfigs cmdlineConfig configPaths = do
   let
     merged =
       Semigroup.sconcat $ NonEmpty.reverse (cmdlineConfig :| catMaybes configs)
-  pure $ cZipWith fromOptionIdentity staticDefaultConfig merged
+  pure $ cZipWith fromMaybeIdentity staticDefaultConfig merged
 
 -- | Reads provided configs
 -- but also applies the user default configuration (with lowest priority)

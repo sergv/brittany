@@ -1,9 +1,8 @@
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE DeriveDataTypeable         #-}
+{-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE NoImplicitPrelude #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
 
 module Language.Haskell.Brittany.Internal.Utils
   ( parDoc
@@ -11,7 +10,6 @@ module Language.Haskell.Brittany.Internal.Utils
   , showSDoc_
   , showOutputable
   , fromMaybeIdentity
-  , fromOptionIdentity
   , Max(..)
   , ShowIsId(..)
   , A(..)
@@ -22,19 +20,19 @@ module Language.Haskell.Brittany.Internal.Utils
   , spanMaybe
   , FirstLastView(..)
   , splitFirstLast
-  , transformUp
-  , transformDownMay
   ) where
 
-import Data.Coerce qualified
+import Control.Monad.Trans.MultiRWS (MonadMultiState(..), MonadMultiWriter(..), mGet)
+
+import Data.Coerce
 import Data.Data
-import Data.Functor
-import Data.Generics.Uniplate.Direct qualified as Uniplate
+import Data.Functor.Identity
+import Data.Maybe
+import Data.Sequence (Seq)
 import Data.Sequence qualified as Seq
 import GHC.Driver.Ppr qualified as GHC
 import GHC.OldList qualified as List
 import GHC.Utils.Outputable qualified as GHC
-import Language.Haskell.Brittany.Internal.Prelude
 import Text.PrettyPrint qualified as PP
 
 parDoc :: String -> PP.Doc
@@ -49,12 +47,8 @@ showSDoc_ = GHC.showSDocUnsafe
 showOutputable :: GHC.Outputable a => a -> String
 showOutputable = GHC.showPprUnsafe
 
-fromMaybeIdentity :: Identity a -> Maybe a -> Identity a
-fromMaybeIdentity x y = Data.Coerce.coerce $ fromMaybe (Data.Coerce.coerce x) y
-
-fromOptionIdentity :: Identity a -> Maybe a -> Identity a
-fromOptionIdentity x y =
-  Data.Coerce.coerce $ fromMaybe (Data.Coerce.coerce x) y
+fromMaybeIdentity :: forall a. Identity a -> Maybe a -> Identity a
+fromMaybeIdentity = coerce (fromMaybe :: a -> Maybe a -> a)
 
 -- maximum monoid over N+0
 -- or more than N, because Num is allowed.
@@ -110,25 +104,3 @@ splitFirstLast :: [a] -> FirstLastView a
 splitFirstLast []        = FirstLastEmpty
 splitFirstLast [x]       = FirstLastSingleton x
 splitFirstLast (x1 : xr) = FirstLast x1 (List.init xr) (List.last xr)
-
--- TODO: move to uniplate upstream?
--- aka `transform`
-transformUp :: Uniplate.Uniplate on => (on -> on) -> (on -> on)
-transformUp f = g
-  where
-    g = f . Uniplate.descend g
-
-_transformDown :: Uniplate.Uniplate on => (on -> on) -> (on -> on)
-_transformDown f = g
-  where
-    g = Uniplate.descend g . f
-
-transformDownMay :: Uniplate.Uniplate on => (on -> Maybe on) -> (on -> on)
-transformDownMay f = g
-  where
-    g x = maybe x (Uniplate.descend g) $ f x
-
-_transformDownRec :: Uniplate.Uniplate on => (on -> Maybe on) -> (on -> on)
-_transformDownRec f = g
-  where
-    g x = maybe (Uniplate.descend g x) g $ f x
