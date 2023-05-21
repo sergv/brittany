@@ -2,7 +2,6 @@
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE NamedFieldPuns      #-}
-{-# LANGUAGE NoImplicitPrelude   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Language.Haskell.Brittany.Internal.Backend
@@ -26,24 +25,31 @@ module Language.Haskell.Brittany.Internal.Backend
   , processInfoIgnore
   ) where
 
+import Prelude hiding (lines)
+
+import Control.Monad
 import Control.Monad.State (MonadState, get, put, evalState)
+import Control.Monad.Trans.MultiRWS (MonadMultiReader(..), MonadMultiState(..), MonadMultiWriter(..), mGet)
 import Control.Monad.Trans.State.Strict qualified as StateS
-import Data.Foldable as Foldable
+import Data.Foldable
+import Data.Function
+import Data.Functor.Identity
 import Data.IntMap.Lazy qualified as IntMapL
 import Data.IntMap.Strict qualified as IntMapS
-import Data.Semigroup qualified as Semigroup
+import Data.List qualified as L
+import Data.Maybe
+import Data.Semigroup
+import Data.Sequence (Seq)
 import Data.Sequence qualified as Seq
 import Data.Text qualified as T
 import Data.Text.Lazy.Builder qualified as TLB
 
 import Data.Functor
 import Data.Traversable
-import GHC.OldList qualified as List
 import GHC.Parser.Annotation
 import GHC.Types.SrcLoc
 import Language.Haskell.Brittany.Internal.BackendUtils
 import Language.Haskell.Brittany.Internal.Config.Types
-import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.RecursionSchemes
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.GHC.ExactPrint.Types
@@ -111,8 +117,8 @@ layoutBriDocM = para alg
         traverse_ fst list
       -- in this situation, there is nothing to do about cols.
       -- i think this one does not happen anymore with the current simplifications.
-      -- BDCols cSig list | BDPar sameLine lines <- List.last list ->
-      --   alignColsPar $ BDCols cSig (List.init list ++ [sameLine]) : lines
+      -- BDCols cSig list | BDPar sameLine lines <- L.last list ->
+      --   alignColsPar $ BDCols cSig (L.init list ++ [sameLine]) : lines
       BDCols _ list ->
         traverse_ fst list
       BDSeparator ->
@@ -429,13 +435,13 @@ alignColsLines bridocs = do -- colInfos `forM_` \colInfo -> do
     pure $ fromMaybe 0 (_lstate_addSepSpace state) + case _lstate_curYOrAddNewline state of
       Cols x           -> x
       InsertNewlines{} -> 0
-  colMax     <- mAsk <&> (_conf_layout >>> _lconfig_cols >>> confUnpack)
-  alignMax   <- mAsk <&> (_conf_layout >>> _lconfig_alignmentLimit >>> confUnpack)
-  alignBreak <- mAsk <&> (_conf_layout >>> _lconfig_alignmentBreakOnMultiline >>> confUnpack)
+  colMax     <- confUnpack . _lconfig_cols . _conf_layout <$> mAsk
+  alignMax   <- confUnpack . _lconfig_alignmentLimit . _conf_layout <$> mAsk
+  alignBreak <- confUnpack . _lconfig_alignmentBreakOnMultiline . _conf_layout <$> mAsk
   case () of
-    _ -> do
+    _ ->
       sequence_
-        $ List.intersperse layoutWriteEnsureNewlineBlock
+        $ L.intersperse layoutWriteEnsureNewlineBlock
         $ colInfos
         <&> processInfo colMax processedMap
      where
@@ -453,7 +459,7 @@ alignColsLines bridocs = do -- colInfos `forM_` \colInfo -> do
         where alignMax' = max 0 alignMax
 
       processedMap :: ColMap2
-      processedMap = fix $ \result ->
+      processedMap = fix $ \(result :: ColMap2) ->
         _cbs_map finalState <&> \(lastFlag, colSpacingss) ->
           let colss = colSpacingss <&> \spss -> case reverse spss of
                 []      -> []
@@ -468,11 +474,11 @@ alignColsLines bridocs = do -- colInfos `forM_` \colInfo -> do
                     Nothing           -> 0
                     Just (_, maxs, _) -> sum maxs
               maxCols =
-                fmap colAggregation $ transpose $ Foldable.toList colss
+                fmap colAggregation $ L.transpose $ toList colss
               (_, posXs) =
                 mapAccumL (\acc x -> (acc + x, acc)) curX maxCols
               counter count l =
-                if List.last posXs + List.last l <= colMax
+                if L.last posXs + L.last l <= colMax
                 then count + 1
                 else count
               ratio :: Float
@@ -605,8 +611,8 @@ processInfo maxSpace m = \case
   ColInfoStart       -> error "should not happen (TM)"
   ColInfoNo doc      -> layoutBriDocM doc
   ColInfo ind _ list -> do
-    colMaxConf <- mAsk <&> (_conf_layout >>> _lconfig_cols >>> confUnpack)
-    alignMode  <- mAsk <&> (_conf_layout >>> _lconfig_columnAlignMode >>> confUnpack)
+    colMaxConf <- confUnpack . _lconfig_cols . _conf_layout <$> mAsk
+    alignMode  <- confUnpack . _lconfig_columnAlignMode . _conf_layout <$> mAsk
     curX       <- do
       state <- mGet
       -- tellDebugMess ("processInfo: " ++ show (_lstate_curYOrAddNewline state) ++ " - " ++ show ((_lstate_addSepSpace state)))
@@ -647,10 +653,10 @@ processInfo maxSpace m = \case
                   (fromIntegral (i + colMax - curX) / fromIntegral (maxX - curX))
               offsets = subtract curX <$> posXs
               fixed :: [Int]
-              fixed   = offsets <&> (fromIntegral >>> (* factor) >>> truncate)
+              fixed   = map (truncate . (* factor) . fromIntegral) offsets
           _ -> posXs
 
-        spacings = zipWith (-) (List.tail fixedPosXs ++ [min maxX colMax]) fixedPosXs
+        spacings = zipWith (-) (L.tail fixedPosXs ++ [min maxX colMax]) fixedPosXs
 
         alignAct :: m ()
         alignAct = zip3 fixedPosXs spacings list `forM_` \(destX, s, x) -> do
@@ -658,11 +664,11 @@ processInfo maxSpace m = \case
           processInfo s m (snd x)
 
         noAlignAct :: m ()
-        noAlignAct = list `forM_` (snd >>> processInfoIgnore)
+        noAlignAct = traverse_ (processInfoIgnore . snd) list
 
         animousAct =
           -- trace ("animousAct fixedPosXs=" ++ show fixedPosXs ++ ", list=" ++ show list ++ ", maxSpace=" ++ show maxSpace ++ ", colMax="++show colMax) $
-          if List.last fixedPosXs + fst (List.last list) > colMax
+          if L.last fixedPosXs + fst (L.last list) > colMax
              -- per-item check if there is overflowing.
           then noAlignAct
           else alignAct
