@@ -1,5 +1,4 @@
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE NoImplicitPrelude #-}
 
 -- -- These optimizations are disabled to improve compile times (and compilation
 -- -- memory usage). When we do not disable them, the CI servers take more than
@@ -23,9 +22,6 @@ import Data.Aeson.Key qualified as Key
 import Data.Aeson.Types qualified as Aeson
 import Data.Yaml
 import Language.Haskell.Brittany.Internal.Config.Types
-import Language.Haskell.Brittany.Internal.Prelude
-
-
 
 aesonDecodeOptionsBrittany :: Aeson.Options
 aesonDecodeOptionsBrittany = Aeson.defaultOptions
