@@ -208,13 +208,15 @@ data ColSig
   | ColTuples
   | ColOpPrefix -- merge with ColList ? other stuff?
   | ColImport
-  deriving (Eq, Ord, Data, Show)
+  deriving (Eq, Ord, Data, Show, Generic)
+  deriving Pretty via PPGeneric ColSig
 
 data BrIndent
   = BrIndentNone
   | BrIndentRegular
   | BrIndentSpecial !Int
-  deriving (Eq, Ord, Data, Show)
+  deriving (Eq, Ord, Data, Show, Generic)
+  deriving Pretty via PPGeneric BrIndent
 
 type ToBriDocM = MultiRWSS.MultiRWS
                    '[Config] -- reader
@@ -228,7 +230,8 @@ type ToBriDocM = MultiRWSS.MultiRWS
 data DocMultiLine
   = MultiLineNo
   | MultiLinePossible
-  deriving (Eq)
+  deriving (Eq, Generic)
+  deriving Pretty via PPGeneric DocMultiLine
 
 data BriDocF a
   = BDEmpty
@@ -272,12 +275,8 @@ data BriDocF a
   | BDDebug String a
   deriving (Eq, Data, Functor, Foldable, Traversable, Generic)
 
-instance Pretty a => Pretty (BriDocF a) where
-  pretty = ppGeneric
+deriving via PPGeneric (BriDocF a) instance Pretty a => Pretty (BriDocF a)
 
--- deriving instance Data a => Data (BriDocF a)
-
--- type BriDocFInt = BriDocF ((,) Int)
 type BriDoc = Fix BriDocF
 type BriDocNumbered = Cofree BriDocF Int
 

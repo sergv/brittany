@@ -1,8 +1,8 @@
 {-# LANGUAGE DeriveFunctor       #-}
 {-# LANGUAGE DeriveGeneric       #-}
+{-# LANGUAGE DerivingVia         #-}
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE NamedFieldPuns      #-}
-{-# LANGUAGE NoImplicitPrelude   #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -85,6 +85,7 @@ data CommentedImport f a b
   | IndependentComment a
   | ImportStatement (ImportStatementData f a b)
   deriving (Eq, Generic, Functor)
+  deriving Pretty via PPGeneric (CommentedImport f a b)
 
 instance Functor f => Bifunctor (CommentedImport f) where
   bimap f g = \case
@@ -102,13 +103,9 @@ data ImportStatementData f a b = ImportStatementData
   { isdCommentsBefore :: f a
   , isdCommentsAfter  :: f a
   , isdImport         :: b
-  } deriving (Eq, Show, Generic, Functor)
-
-instance (Pretty (f a), Pretty a, Pretty b) => Pretty (CommentedImport f a b) where
-  pretty = ppGeneric
-
-instance (Pretty (f a), Pretty b) => Pretty (ImportStatementData f a b) where
-  pretty = ppGeneric
+  }
+  deriving (Eq, Show, Generic, Functor)
+  deriving Pretty via PPGeneric (ImportStatementData f a b)
 
 type CommentedImport'  = CommentedImport []    Comment (ImportDecl GhcPs)
 type CommentedImportRL = CommentedImport RList Comment (ImportDecl GhcPs)
