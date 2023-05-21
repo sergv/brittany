@@ -362,10 +362,10 @@ moveToExactAnn a = moveNextLine $
     EpAnnNotUsed -> 0
 
 moveNextLine :: MonadMultiState LayoutState m => Int -> m ()
-moveNextLine lineDelta = mModify $ \state ->
+moveNextLine delta = mModify $ \state ->
   let upd = case _lstate_curYOrAddNewline state of
-        old@Cols{}       -> if lineDelta == 0 then old else InsertNewlines lineDelta
-        InsertNewlines i -> InsertNewlines $ max lineDelta i
+        old@Cols{}       -> if delta == 0 then old else InsertNewlines delta
+        InsertNewlines i -> InsertNewlines $ max delta i
   in
     state
       { _lstate_curYOrAddNewline = upd
