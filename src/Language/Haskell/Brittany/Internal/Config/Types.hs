@@ -1,7 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE FlexibleInstances  #-}
-{-# LANGUAGE NoImplicitPrelude  #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell    #-}
 
@@ -26,14 +25,12 @@ module Language.Haskell.Brittany.Internal.Config.Types
   ) where
 
 import Data.CZipWith
-import Data.Coerce (Coercible, coerce)
+import Data.Coerce
 import Data.Data (Data)
-import Data.Semigroup qualified as Semigroup
+import Data.Functor.Identity
 import Data.Semigroup (Last)
 import Data.Semigroup.Generic
 import GHC.Generics
-import Language.Haskell.Brittany.Internal.Prelude
-import Language.Haskell.Brittany.Internal.PreludeUtils ()
 
 confUnpack :: Coercible a b => Identity a -> b
 confUnpack (Identity x) = coerce x
@@ -132,9 +129,9 @@ data CForwardOptions f = ForwardOptions
   } deriving Generic
 
 data CErrorHandlingConfig f = ErrorHandlingConfig
-  { _econf_produceOutputOnErrors :: f (Semigroup.Last Bool)
-  , _econf_Werror :: f (Semigroup.Last Bool)
-  , _econf_ExactPrintFallback :: f (Semigroup.Last ExactPrintFallbackMode)
+  { _econf_produceOutputOnErrors :: f (Last Bool)
+  , _econf_Werror :: f (Last Bool)
+  , _econf_ExactPrintFallback :: f (Last ExactPrintFallbackMode)
     -- ^ Determines when to fall back on the exactprint'ed output when
     -- syntactical constructs are encountered which are not yet handled by
     -- brittany.
@@ -142,13 +139,13 @@ data CErrorHandlingConfig f = ErrorHandlingConfig
     -- the syntactic validity of the brittany output, at least in theory there
     -- may be cases where the output is syntactically/semantically valid but
     -- has different semantics than the code pre-transformation.
-  , _econf_omit_output_valid_check :: f (Semigroup.Last Bool)
+  , _econf_omit_output_valid_check :: f (Last Bool)
   }
   deriving Generic
 
 data CPreProcessorConfig f = PreProcessorConfig
-  { _ppconf_CPPMode :: f (Semigroup.Last CPPMode)
-  , _ppconf_hackAroundIncludes :: f (Semigroup.Last Bool)
+  { _ppconf_CPPMode :: f (Last CPPMode)
+  , _ppconf_hackAroundIncludes :: f (Last Bool)
     -- ^ The flag will do the following: insert a marker string
     -- ("-- BRITANY_INCLUDE_HACK ") right before any lines starting with
     -- "#include" before processing (parsing) input; and remove that marker
@@ -158,7 +155,7 @@ data CPreProcessorConfig f = PreProcessorConfig
   } deriving Generic
 
 data CConfig f = Config
-  { _conf_version                   :: f (Semigroup.Last Int)
+  { _conf_version                   :: f (Last Int)
   , _conf_layout                    :: CLayoutConfig f
   , _conf_errorHandling             :: CErrorHandlingConfig f
   , _conf_forward                   :: CForwardOptions f
@@ -168,13 +165,13 @@ data CConfig f = Config
     -- inline config implementation. Could have re-used the existing
     -- field, but felt risky to use a "debug" labeled field for
     -- non-debug functionality.
-  , _conf_roundtrip_exactprint_only :: f (Semigroup.Last Bool)
+  , _conf_roundtrip_exactprint_only :: f (Last Bool)
     -- Used for inline config that disables brittany entirely for this
     -- module. Useful for wildcard application (`find -name "*.hs" |
     -- xargs brittany --write-mode inplace` or something in that
     -- direction).
-  , _conf_disable_formatting        :: f (Semigroup.Last Bool)
-  , _conf_obfuscate                 :: f (Semigroup.Last Bool)
+  , _conf_disable_formatting        :: f (Last Bool)
+  , _conf_obfuscate                 :: f (Last Bool)
   } deriving Generic
 
 type LayoutConfig        = CLayoutConfig Identity
@@ -206,26 +203,26 @@ deriving instance Data (CForwardOptions Maybe)
 deriving instance Data (CPreProcessorConfig Maybe)
 deriving instance Data (CConfig Maybe)
 
-instance Semigroup.Semigroup (CLayoutConfig Maybe) where
+instance Semigroup (CLayoutConfig Maybe) where
   (<>) = gmappend
-instance Semigroup.Semigroup (CErrorHandlingConfig Maybe) where
+instance Semigroup (CErrorHandlingConfig Maybe) where
   (<>) = gmappend
-instance Semigroup.Semigroup (CForwardOptions Maybe) where
+instance Semigroup (CForwardOptions Maybe) where
   (<>) = gmappend
-instance Semigroup.Semigroup (CPreProcessorConfig Maybe) where
+instance Semigroup (CPreProcessorConfig Maybe) where
   (<>) = gmappend
-instance Semigroup.Semigroup (CConfig Maybe) where
+instance Semigroup (CConfig Maybe) where
   (<>) = gmappend
 
-instance Semigroup.Semigroup (CLayoutConfig Identity) where
+instance Semigroup (CLayoutConfig Identity) where
   (<>) = gmappend
-instance Semigroup.Semigroup (CErrorHandlingConfig Identity) where
+instance Semigroup (CErrorHandlingConfig Identity) where
   (<>) = gmappend
-instance Semigroup.Semigroup (CForwardOptions Identity) where
+instance Semigroup (CForwardOptions Identity) where
   (<>) = gmappend
-instance Semigroup.Semigroup (CPreProcessorConfig Identity) where
+instance Semigroup (CPreProcessorConfig Identity) where
   (<>) = gmappend
-instance Semigroup.Semigroup (CConfig Identity) where
+instance Semigroup (CConfig Identity) where
   (<>) = gmappend
 
 instance Monoid (CLayoutConfig Maybe) where

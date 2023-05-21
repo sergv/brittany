@@ -46,6 +46,7 @@ import Safe qualified
 
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.Prelude
+import Language.Haskell.Brittany.Internal.PreludeUtils ()
 import Language.Haskell.Brittany.Internal.RecursionSchemes
 
 import GHC.PrettyInstances ()
