@@ -1,5 +1,4 @@
 {-# LANGUAGE MonadComprehensions #-}
-{-# LANGUAGE NoImplicitPrelude #-}
 
 module Language.Haskell.Brittany.Internal.Config
   ( staticDefaultConfig
@@ -14,18 +13,23 @@ module Language.Haskell.Brittany.Internal.Config
   , showConfigYaml
   ) where
 
+import Control.Monad
+import Control.Monad.IO.Class
+import Control.Monad.Trans.Maybe
 import Data.Bool qualified as Bool
 import Data.ByteString qualified as ByteString
 import Data.ByteString.Char8 qualified
 import Data.CZipWith
 import Data.Coerce (coerce)
-import Data.List.NonEmpty qualified as NonEmpty
-import Data.Semigroup qualified as Semigroup
+import Data.Functor.Identity
+import Data.List qualified as L
+import Data.List.NonEmpty (NonEmpty(..))
+import Data.List.NonEmpty qualified as NE
+import Data.Maybe
+import Data.Semigroup
 import Data.Yaml qualified
-import GHC.OldList qualified as List
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.Config.Types.Instances ()
-import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.PreludeUtils
 import Language.Haskell.Brittany.Internal.Utils
 import System.Console.CmdArgs.Explicit qualified as CmdArgs
@@ -137,16 +141,16 @@ cmdlineConfigParser = do
       , _econf_omit_output_valid_check = wrapLast $ falseToNothing omitValidCheck
       }
     , _conf_preprocessor = PreProcessorConfig { _ppconf_CPPMode = mempty, _ppconf_hackAroundIncludes = mempty }
-    , _conf_forward = ForwardOptions { _options_ghc = [ optionsGhc & List.unwords & CmdArgs.splitArgs | not $ null optionsGhc ] }
+    , _conf_forward = ForwardOptions { _options_ghc = [ CmdArgs.splitArgs $ L.unwords optionsGhc | not $ null optionsGhc ] }
     , _conf_roundtrip_exactprint_only = wrapLast $ falseToNothing roundtripOnly
     , _conf_disable_formatting = wrapLast $ falseToNothing disableFormatting
     , _conf_obfuscate = wrapLast $ falseToNothing obfuscate
     }
  where
   falseToNothing = Bool.bool Nothing (Just True)
-  wrapLast :: Maybe a -> Maybe (Semigroup.Last a)
-  wrapLast = fmap Semigroup.Last
-  optionConcat :: (Semigroup.Semigroup (f a), Applicative f) => [a] -> Maybe (f a)
+  wrapLast :: Maybe a -> Maybe (Last a)
+  wrapLast = fmap Last
+  optionConcat :: (Semigroup (f a), Applicative f) => [a] -> Maybe (f a)
   optionConcat = mconcat . fmap (pure . pure)
 
 -- | Reads a config from a file. If the file does not exist, returns
@@ -164,12 +168,11 @@ readConfig path = do
       contents <- liftIO $ ByteString.readFile path -- no lazy IO, tyvm.
       fileConf <- case Data.Yaml.decodeEither' contents of
         Left e -> do
-          liftIO
-            $ putStrErrLn
+          putStrErrLn
             $ "error reading in brittany config from "
             ++ path
             ++ ":"
-          liftIO $ putStrErrLn (Data.Yaml.prettyPrintParseException e)
+          putStrErrLn $ Data.Yaml.prettyPrintParseException e
           mzero
         Right x -> pure x
       pure $ Just fileConf
@@ -199,7 +202,7 @@ findLocalConfigPath :: System.IO.FilePath -> IO (Maybe System.IO.FilePath)
 findLocalConfigPath dir = do
   let dirParts = FilePath.splitDirectories dir
   -- when provided dir is "a/b/c", searchDirs is ["a/b/c", "a/b", "a", "/"]
-  let searchDirs = FilePath.joinPath <$> reverse (List.inits dirParts)
+  let searchDirs = FilePath.joinPath <$> reverse (L.inits dirParts)
   Directory.findFileWith Directory.doesFileExist searchDirs "brittany.yaml"
 
 -- | Reads specified configs.
@@ -211,7 +214,7 @@ readConfigs cmdlineConfig configPaths = do
   configs <- readConfig `mapM` configPaths
   let
     merged =
-      Semigroup.sconcat $ NonEmpty.reverse (cmdlineConfig :| catMaybes configs)
+      sconcat $ NE.reverse (cmdlineConfig :| catMaybes configs)
   pure $ cZipWith fromMaybeIdentity staticDefaultConfig merged
 
 -- | Reads provided configs
