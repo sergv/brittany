@@ -1,7 +1,6 @@
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE NamedFieldPuns    #-}
-{-# LANGUAGE NoImplicitPrelude #-}
 
 module Language.Haskell.Brittany.Internal.BackendUtils
   ( layoutWriteAppend
@@ -35,16 +34,20 @@ module Language.Haskell.Brittany.Internal.BackendUtils
   , layoutIndentRestorePostComment
   ) where
 
+import Prelude hiding (lines)
+
+import Control.Applicative
+import Control.Monad
+import Control.Monad.Trans.MultiRWS (MonadMultiReader(..), MonadMultiState(..), MonadMultiWriter(..), mGet)
 import Data.Foldable
-import Data.Functor
-import Data.Maybe qualified
-import Data.Semigroup qualified as Semigroup
-import Data.Text qualified as Text
-import Data.Text.Lazy.Builder qualified as Text.Builder
-import GHC.OldList qualified as List
+import Data.List qualified as L
+import Data.Maybe
+import Data.Semigroup (Semigroup(..), Last(..))
+import Data.Text (Text)
+import Data.Text qualified as T
+import Data.Text.Lazy.Builder qualified as TLB
 import GHC.Parser.Annotation
 import Language.Haskell.Brittany.Internal.Config.Types
-import Language.Haskell.Brittany.Internal.Prelude
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.Brittany.Internal.Utils
 
@@ -57,27 +60,27 @@ stimes' n x
   | otherwise = stimes n x
 
 layoutWriteAppend
-  :: (MonadMultiWriter Text.Builder.Builder m, MonadMultiState LayoutState m)
+  :: (MonadMultiWriter TLB.Builder m, MonadMultiState LayoutState m)
   => Text
   -> m ()
 layoutWriteAppend t = do
   traceLocal ("layoutWriteAppend", t)
   state <- mGet
   case _lstate_curYOrAddNewline state of
-    InsertNewlines i -> mTell $ stimes' i $ Text.Builder.singleton '\n'
+    InsertNewlines i -> mTell $ stimes' i $ TLB.singleton '\n'
     Cols{}           -> pure ()
   let spaces = fromMaybe 0 $ _lstate_addSepSpace state
-  mTell $ stimes' spaces $ Text.Builder.singleton ' '
-  mTell $ Text.Builder.fromText t
+  mTell $ stimes' spaces $ TLB.singleton ' '
+  mTell $ TLB.fromText t
   mModify $ \s -> s
-    { _lstate_curYOrAddNewline = Cols $ Text.length t + spaces + case _lstate_curYOrAddNewline s of
+    { _lstate_curYOrAddNewline = Cols $ T.length t + spaces + case _lstate_curYOrAddNewline s of
       Cols c           -> c
       InsertNewlines{} -> 0
     , _lstate_addSepSpace = Nothing
     }
 
 layoutWriteAppendSpaces
-  :: (MonadMultiWriter Text.Builder.Builder m, MonadMultiState LayoutState m)
+  :: (MonadMultiWriter TLB.Builder m, MonadMultiState LayoutState m)
   => Int
   -> m ()
 layoutWriteAppendSpaces i = do
@@ -89,13 +92,13 @@ layoutWriteAppendSpaces i = do
       }
 
 layoutWriteAppendMultiline
-  :: (MonadMultiWriter Text.Builder.Builder m, MonadMultiState LayoutState m)
+  :: (MonadMultiWriter TLB.Builder m, MonadMultiState LayoutState m)
   => [Text]
   -> m ()
 layoutWriteAppendMultiline ts = do
   traceLocal ("layoutWriteAppendMultiline", ts)
   case ts of
-    []     -> layoutWriteAppend (Text.pack "") -- need to write empty, too.
+    []     -> layoutWriteAppend (T.pack "") -- need to write empty, too.
     l : lr -> do
       layoutWriteAppend l
       for_ lr $ \x -> do
@@ -104,7 +107,7 @@ layoutWriteAppendMultiline ts = do
 
 -- adds a newline and adds spaces to reach the base column.
 layoutWriteNewlineBlock
-  :: (MonadMultiWriter Text.Builder.Builder m, MonadMultiState LayoutState m)
+  :: (MonadMultiWriter TLB.Builder m, MonadMultiState LayoutState m)
   => m ()
 layoutWriteNewlineBlock = do
   traceLocal ("layoutWriteNewlineBlock")
@@ -127,7 +130,7 @@ layoutSetCommentCol = do
 -- This is also used to move to non-comments in a couple of places. Seems
 -- to be harmless so far..
 layoutMoveToCommentPos
-  :: (MonadMultiWriter Text.Builder.Builder m, MonadMultiState LayoutState m)
+  :: (MonadMultiWriter TLB.Builder m, MonadMultiState LayoutState m)
   => Int
   -> Int
   -> Int
@@ -156,7 +159,7 @@ layoutMoveToCommentPos y x commentLines = do
 
 -- | does _not_ add spaces to again reach the current base column.
 layoutWriteNewline
-  :: (MonadMultiWriter Text.Builder.Builder m, MonadMultiState LayoutState m)
+  :: (MonadMultiWriter TLB.Builder m, MonadMultiState LayoutState m)
   => m ()
 layoutWriteNewline = do
   traceLocal ("layoutWriteNewline")
@@ -173,7 +176,7 @@ _layoutResetCommentNewlines = do
   mModify $ \state -> state { _lstate_commentNewlines = 0 }
 
 layoutWriteEnsureNewlineBlock
-  :: (MonadMultiWriter Text.Builder.Builder m, MonadMultiState LayoutState m)
+  :: (MonadMultiWriter TLB.Builder m, MonadMultiState LayoutState m)
   => m ()
 layoutWriteEnsureNewlineBlock = do
   traceLocal ("layoutWriteEnsureNewlineBlock")
@@ -187,18 +190,17 @@ layoutWriteEnsureNewlineBlock = do
     }
 
 layoutWriteEnsureAbsoluteN
-  :: (MonadMultiWriter Text.Builder.Builder m, MonadMultiState LayoutState m)
+  :: (MonadMultiWriter TLB.Builder m, MonadMultiState LayoutState m)
   => Int
   -> m ()
 layoutWriteEnsureAbsoluteN n = do
   state <- mGet
-  let
-    diff = case (_lstate_commentCol state, _lstate_curYOrAddNewline state) of
-      (Just c , _)                -> n - c
-      (Nothing, Cols i)           -> n - i
-      (Nothing, InsertNewlines{}) -> n
+  let diff = case (_lstate_commentCol state, _lstate_curYOrAddNewline state) of
+        (Just c,  _)                -> n - c
+        (Nothing, Cols i)           -> n - i
+        (Nothing, InsertNewlines{}) -> n
   traceLocal ("layoutWriteEnsureAbsoluteN", n, diff)
-  when (diff > 0) $ do
+  when (diff > 0) $
     mSet $ state { _lstate_addSepSpace = Just diff } -- this always sets to
                                             -- at least (Just 1), so we won't
                                             -- overwrite any old value in any
@@ -212,7 +214,7 @@ layoutBaseYPushInternal i = do
 layoutBaseYPopInternal :: (MonadMultiState LayoutState m) => m ()
 layoutBaseYPopInternal = do
   traceLocal ("layoutBaseYPopInternal")
-  mModify $ \s -> s { _lstate_baseYs = List.tail $ _lstate_baseYs s }
+  mModify $ \s -> s { _lstate_baseYs = L.tail $ _lstate_baseYs s }
 
 layoutIndentLevelPushInternal :: (MonadMultiState LayoutState m) => Int -> m ()
 layoutIndentLevelPushInternal i = do
@@ -227,7 +229,7 @@ layoutIndentLevelPopInternal = do
   traceLocal ("layoutIndentLevelPopInternal")
   mModify $ \s -> s
     { _lstate_indLevelLinger = lstate_indLevel s
-    , _lstate_indLevels = List.tail $ _lstate_indLevels s
+    , _lstate_indLevels = L.tail $ _lstate_indLevels s
     }
 
 layoutRemoveIndentLevelLinger :: (MonadMultiState LayoutState m) => m ()
@@ -235,36 +237,36 @@ layoutRemoveIndentLevelLinger = do
   mModify $ \s -> s { _lstate_indLevelLinger = lstate_indLevel s }
 
 layoutWithAddBaseCol
-  :: ( MonadMultiWriter Text.Builder.Builder m
+  :: ( MonadMultiWriter TLB.Builder m
      , MonadMultiState LayoutState m
      , MonadMultiReader Config m
      )
   => m ()
   -> m ()
 layoutWithAddBaseCol m = do
-  amount <- mAsk <&> (_conf_layout >>> _lconfig_indentAmount >>> confUnpack)
+  amount <- confUnpack . _lconfig_indentAmount . _conf_layout <$> mAsk
   state <- mGet
   layoutBaseYPushInternal $ lstate_baseY state + amount
   m
   layoutBaseYPopInternal
 
 layoutWithAddBaseColBlock
-  :: ( MonadMultiWriter Text.Builder.Builder m
+  :: ( MonadMultiWriter TLB.Builder m
      , MonadMultiState LayoutState m
      , MonadMultiReader Config m
      )
   => m ()
   -> m ()
 layoutWithAddBaseColBlock m = do
-  amount <- mAsk <&> (_conf_layout >>> _lconfig_indentAmount >>> confUnpack)
-  state <- mGet
+  amount <- confUnpack . _lconfig_indentAmount . _conf_layout <$> mAsk
+  state  <- mGet
   layoutBaseYPushInternal $ lstate_baseY state + amount
   layoutWriteEnsureBlock
   m
   layoutBaseYPopInternal
 
 layoutWithAddBaseColNBlock
-  :: (MonadMultiWriter Text.Builder.Builder m, MonadMultiState LayoutState m)
+  :: (MonadMultiWriter TLB.Builder m, MonadMultiState LayoutState m)
   => Int
   -> m ()
   -> m ()
@@ -277,7 +279,7 @@ layoutWithAddBaseColNBlock amount m = do
   layoutBaseYPopInternal
 
 layoutWriteEnsureBlock
-  :: (MonadMultiWriter Text.Builder.Builder m, MonadMultiState LayoutState m)
+  :: (MonadMultiWriter TLB.Builder m, MonadMultiState LayoutState m)
   => m ()
 layoutWriteEnsureBlock = do
   traceLocal ("layoutWriteEnsureBlock")
@@ -293,7 +295,7 @@ layoutWriteEnsureBlock = do
     mSet $ state { _lstate_addSepSpace = Just $ diff }
 
 layoutWithAddBaseColN
-  :: (MonadMultiWriter Text.Builder.Builder m, MonadMultiState LayoutState m)
+  :: (MonadMultiWriter TLB.Builder m, MonadMultiState LayoutState m)
   => Int
   -> m ()
   -> m ()
@@ -383,18 +385,18 @@ unpackDeltaPos = \case
   DifferentLine{deltaLine, deltaColumn} -> (deltaLine, deltaColumn)
 
 ppmMoveToExactLocAnchor
-  :: MonadMultiWriter Text.Builder.Builder m => Anchor -> m ()
+  :: MonadMultiWriter TLB.Builder m => Anchor -> m ()
 ppmMoveToExactLocAnchor an =
   case anchor_op an of
     UnchangedAnchor -> pure ()
     MovedAnchor dp  -> do
-      mTell $ stimes' lines $ Text.Builder.singleton '\n'
-      mTell $ stimes' cols $ Text.Builder.singleton ' '
+      mTell $ stimes' lines $ TLB.singleton '\n'
+      mTell $ stimes' cols $ TLB.singleton ' '
       where
         (lines, cols) = unpackDeltaPos dp
 
 layoutIndentRestorePostComment
-  :: (MonadMultiState LayoutState m, MonadMultiWriter Text.Builder.Builder m)
+  :: (MonadMultiState LayoutState m, MonadMultiWriter TLB.Builder m)
   => m ()
 layoutIndentRestorePostComment = do
   state <- mGet
