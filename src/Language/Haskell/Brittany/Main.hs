@@ -1,34 +1,33 @@
+{-# LANGUAGE ApplicativeDo     #-}
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
 
-module Language.Haskell.Brittany.Main (main, mainWith) where
+module Language.Haskell.Brittany.Main
+  ( main
+  , mainWith
+  ) where
 
 import Control.Applicative
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Except qualified as ExceptT
-import Control.Monad.Trans.Maybe
-import Data.Either qualified
+import Data.Either
 import Data.Foldable
-import Data.Functor.Identity
 import Data.List qualified as L
 import Data.Maybe
-import Data.Monoid qualified
 import Data.Semigroup
 import Data.Text.IO qualified as TIO
 import Data.Version
 import Data.Void
+import Options.Applicative hiding (str)
 import Prettyprinter ((<+>))
+import Prettyprinter qualified as PP
 import Prettyprinter.Combinators
 import System.Directory qualified as Directory
 import System.Environment qualified as Environment
-import System.Exit qualified
+import System.Exit
 import System.FilePath.Posix qualified as FilePath
-import Text.ParserCombinators.ReadP qualified as ReadP
-import Text.ParserCombinators.ReadPrec qualified as ReadPrec
-import Text.PrettyPrint qualified as PP
-import Text.Read (Read(..))
-import UI.Butcher.Monadic
 
 import GHC.Types.SrcLoc (SrcSpan)
 import Language.Haskell.Brittany.Internal.Config
@@ -39,15 +38,55 @@ import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.Brittany.Internal.Utils
 import Paths_brittany
 
-data WriteMode = Display | Inplace
+data CmdlineConfig = CmdlineConfig
+  { cfgLicense      :: Bool
+  , cfgVersion      :: Bool
+  , cfgNoUserConfig :: Bool
+  , cfgConfigFile   :: Maybe FilePath
+  , cfgConfig       :: CConfig Maybe
+  , cfgInplace      :: Bool
+  , cfgCheckMode    :: Bool
+  , cfgInputs       :: [FilePath]
+  }
 
-instance Read WriteMode where
-  readPrec = val "display" Display <|> val "inplace" Inplace
-    where val iden v = ReadPrec.lift $ ReadP.string iden >> pure v
+optsParser :: Parser CmdlineConfig
+optsParser = do
+  cfgLicense <- switch $
+    long "license" <>
+    help "Print license"
 
-instance Show WriteMode where
-  show Display = "display"
-  show Inplace = "inplace"
+  cfgVersion <- switch $
+    long "version" <>
+    help "Print version"
+
+  cfgNoUserConfig <- switch $
+    long "no-user-config"
+
+  cfgConfigFile <- optional $ strOption $
+    long "config-file" <>
+    metavar "PATH" <>
+    help "Path to config file"
+
+  cfgConfig <- cmdlineConfigParser
+
+  cfgInplace <- switch $
+    long "inplace" <>
+    help "Modify input files in place, without backup"
+
+  cfgCheckMode <- switch $
+    long "check-mode" <>
+    help "Check for changes but do not write them out. Exits with code 0 if no changes necessary, 1 otherwise and print file path(s) of files that have changes to stdout"
+
+  cfgInputs <- many $ strArgument $
+    metavar "PATH" <>
+    help "Haskell sources to format"
+
+  pure CmdlineConfig{..}
+
+progInfo :: ParserInfo CmdlineConfig
+progInfo = info
+  (helper <*> optsParser)
+  (fullDesc <> header "haskell source pretty printer" <> progDescDoc (Just descrDoc))
 
 main :: IO ()
 main = do
@@ -56,14 +95,51 @@ main = do
   mainWith progName args
 
 mainWith :: String -> [String] -> IO ()
-mainWith progName args
-  = Environment.withProgName progName
-  . Environment.withArgs args
-  $ mainFromCmdParserWithHelpDesc mainCmdParser
+mainWith progName args = Environment.withProgName progName $ Environment.withArgs args $
+  run =<< customExecParser (prefs (showHelpOnEmpty <> noBacktrack <> multiSuffix "*")) progInfo
 
-helpDoc :: PP.Doc
-helpDoc = PP.vcat $ L.intersperse
-  (PP.text "")
+run :: CmdlineConfig -> IO ()
+run CmdlineConfig{cfgLicense, cfgVersion, cfgNoUserConfig, cfgConfigFile, cfgConfig, cfgInplace, cfgCheckMode, cfgInputs} = do
+  when cfgLicense $ do
+    putDocLn licenseDoc
+    exitSuccess
+  when cfgVersion $ do
+    putDocLn versionDoc
+    exitSuccess
+
+  let inputPaths :: [Maybe FilePath]
+      inputPaths = case cfgInputs of
+        [] -> [Nothing]
+        xs -> map Just xs
+      outputPaths :: [Maybe FilePath]
+      outputPaths = if cfgInplace
+        then inputPaths
+        else repeat Nothing
+
+  configToLoad <- liftIO $ case cfgConfigFile of
+    Nothing -> Directory.getCurrentDirectory >>= findLocalConfigPath
+    Just x  -> pure $ Just x
+
+  config <- (maybe (exitWith (ExitFailure 53)) pure =<<) $
+    if cfgNoUserConfig
+    then readConfigs cfgConfig $ maybeToList configToLoad
+    else readConfigsWithUserConfig cfgConfig $ maybeToList configToLoad
+
+  results <- zipWithM
+    (formatModule config cfgCheckMode)
+    inputPaths
+    outputPaths
+
+  if cfgCheckMode
+  then when (Changes `elem` rights results)
+    $ exitWith (ExitFailure 1)
+  else case results of
+    xs | all isRight xs -> pure ()
+    [Left x]            -> exitWith (ExitFailure x)
+    _                   -> exitWith (ExitFailure 1)
+
+descrDoc :: PP.Doc ann
+descrDoc = PP.vcat $ L.intersperse mempty
   [ parDocW
     [ "Reformats one or more haskell modules."
     , "Currently affects only the module head (imports/exports), type"
@@ -72,16 +148,16 @@ helpDoc = PP.vcat $ L.intersperse
     , "Based on ghc-exactprint, thus (theoretically) supporting all"
     , "that ghc does."
     ]
-  , parDoc $ "Example invocations:"
-  , PP.hang (PP.text "") 2 $ PP.vcat
-    [ PP.text "brittany"
-    , PP.nest 2 $ PP.text "read from stdin, output to stdout"
+  , parDoc "Example invocations:"
+  , PP.hang 2 $ PP.vcat
+    [ "brittany"
+    , PP.nest 2 $ "read from stdin, output to stdout"
     ]
-  , PP.hang (PP.text "") 2 $ PP.vcat
-    [ PP.text "brittany --indent=4 --write-mode=inplace *.hs"
+  , PP.hang 2 $ PP.vcat
+    [ "brittany --indent=4 --inplace *.hs"
     , PP.nest 2 $ PP.vcat
-      [ PP.text "run on all modules in current directory (no backup!)"
-      , PP.text "4 spaces indentation"
+      [ "run on all modules in current directory (no backup!)"
+      , "4 spaces indentation"
       ]
     ]
   , parDocW
@@ -93,23 +169,20 @@ helpDoc = PP.vcat $ L.intersperse
     , "Please do check the output and do not let brittany override your large"
     , "codebase without having backups."
     ]
-  , parDoc $ "There is NO WARRANTY, to the extent permitted by law."
+  , parDoc "There is NO WARRANTY, to the extent permitted by law."
   , parDocW
     [ "This program is free software released under the AGPLv3."
     , "For details use the --license flag."
     ]
-  , parDoc $ "See https://github.com/lspitzner/brittany"
-  , parDoc
-  $ "Please report bugs at"
-  ++ " https://github.com/lspitzner/brittany/issues"
+  , "See https://github.com/lspitzner/brittany"
+  , "Please report bugs at https://github.com/lspitzner/brittany/issues"
   ]
 
-licenseDoc :: PP.Doc
-licenseDoc = PP.vcat $ L.intersperse
-  (PP.text "")
-  [ parDoc $ "Copyright (C) 2016-2019 Lennart Spitzner"
-  , parDoc $ "Copyright (C) 2019 PRODA LTD"
-  , parDoc $ "Copyright (C) 2022-2023 Sergey Vinokurov"
+licenseDoc :: PP.Doc ann
+licenseDoc = PP.vcat $ L.intersperse mempty
+  [ "Copyright (C) 2016-2019 Lennart Spitzner\n\
+    \Copyright (C) 2019 PRODA LTD\n\
+    \Copyright (C) 2022-2023 Sergey Vinokurov"
   , parDocW
     [ "This program is free software: you can redistribute it and/or modify"
     , "it under the terms of the GNU Affero General Public License,"
@@ -128,116 +201,14 @@ licenseDoc = PP.vcat $ L.intersperse
     ]
   ]
 
-
-mainCmdParser :: CommandDesc () -> CmdParser Identity (IO ()) ()
-mainCmdParser helpDesc = do
-  addCmdSynopsis "haskell source pretty printer"
-  addCmdHelp $ helpDoc
-  -- addCmd "debugArgs" $ do
-  addHelpCommand helpDesc
-  addCmd "license" $ addCmdImpl $ print $ licenseDoc
-  -- addButcherDebugCommand
-  reorderStart
-  printHelp <- addSimpleBoolFlag "h" ["help"] mempty
-  printVersion <- addSimpleBoolFlag "" ["version"] mempty
-  printLicense <- addSimpleBoolFlag "" ["license"] mempty
-  noUserConfig <- addSimpleBoolFlag "" ["no-user-config"] mempty
-  configPaths <- addFlagStringParams
-    ""
-    ["config-file"]
-    "PATH"
-    (flagHelpStr "path to config file") -- TODO: allow default on addFlagStringParam ?
-  cmdlineConfig <- cmdlineConfigParser
-  suppressOutput <- addSimpleBoolFlag
-    ""
-    ["suppress-output"]
-    (flagHelp $ parDoc
-      "suppress the regular output, i.e. the transformed haskell source"
-    )
-  _verbosity <- addSimpleCountFlag
-    "v"
-    ["verbose"]
-    (flagHelp $ parDoc "[currently without effect; TODO]")
-  checkMode <- addSimpleBoolFlag
-    "c"
-    ["check-mode"]
-    (flagHelp
-      (PP.vcat
-        [ PP.text "check for changes but do not write them out"
-        , PP.text "exits with code 0 if no changes necessary, 1 otherwise"
-        , PP.text "and print file path(s) of files that have changes to stdout"
-        ]
-      )
-    )
-  writeMode <- addFlagReadParam
-    ""
-    ["write-mode"]
-    "(display|inplace)"
-    (flagHelp
-        (PP.vcat
-          [ PP.text "display: output for any input(s) goes to stdout"
-          , PP.text "inplace: override respective input file (without backup!)"
-          ]
-        )
-    Data.Monoid.<> flagDefault Display
-    )
-  inputParams <- addParamNoFlagStrings
-    "PATH"
-    (paramHelpStr "paths to input/inout haskell source files")
-  reorderStop
-  addCmdImpl $ void $ do
-    when printLicense $ do
-      print licenseDoc
-      System.Exit.exitSuccess
-    when printVersion $ do
-      do
-        putStrLn $ "brittany version " ++ showVersion version
-        putStrLn $ "Copyright (C) 2016-2019 Lennart Spitzner"
-        putStrLn $ "Copyright (C) 2019 PRODA LTD"
-        putStrLn $ "Copyright (C) 2022 Sergey Vinokurov"
-        putStrLn $ "There is NO WARRANTY, to the extent permitted by law."
-      System.Exit.exitSuccess
-    when printHelp $ do
-      liftIO
-        $ putStrLn
-        $ PP.renderStyle PP.style { PP.ribbonsPerLine = 1.0 }
-        $ ppHelpShallow helpDesc
-      System.Exit.exitSuccess
-
-    let
-      inputPaths = if null inputParams then [Nothing] else map Just inputParams
-    let
-      outputPaths = case writeMode of
-        Display -> repeat Nothing
-        Inplace -> inputPaths
-
-    configsToLoad <- liftIO $ if null configPaths
-      then
-        maybeToList <$> (Directory.getCurrentDirectory >>= findLocalConfigPath)
-      else pure configPaths
-
-    config <-
-      runMaybeT
-          (if noUserConfig
-            then readConfigs cmdlineConfig configsToLoad
-            else readConfigsWithUserConfig cmdlineConfig configsToLoad
-          )
-        >>= \case
-              Nothing -> System.Exit.exitWith (System.Exit.ExitFailure 53)
-              Just x -> pure x
-
-    results <- zipWithM
-      (coreIO config suppressOutput checkMode)
-      inputPaths
-      outputPaths
-
-    if checkMode
-      then when (Changes `elem` (Data.Either.rights results))
-        $ System.Exit.exitWith (System.Exit.ExitFailure 1)
-      else case results of
-        xs | all Data.Either.isRight xs -> pure ()
-        [Left x] -> System.Exit.exitWith (System.Exit.ExitFailure x)
-        _ -> System.Exit.exitWith (System.Exit.ExitFailure 1)
+versionDoc :: PP.Doc ann
+versionDoc = PP.vcat
+  [ "brittany version" <+> pretty (showVersion version)
+  , "Copyright (C) 2016-2019 Lennart Spitzner"
+  , "Copyright (C) 2019 PRODA LTD"
+  , "Copyright (C) 2022-2023 Sergey Vinokurov"
+  , "There is NO WARRANTY, to the extent permitted by law."
+  ]
 
 data ChangeStatus = Changes | NoChanges
   deriving (Eq)
@@ -253,15 +224,13 @@ classifyError = \case
 
 -- | The main IO parts for the default mode of operation, and after commandline
 -- and config stuff is processed.
-coreIO
+formatModule
   :: Config                       -- ^ global program config.
-  -> Bool                         -- ^ whether to supress output (to stdout). Purely IO flag, so
-                                  -- currently not part of program config.
   -> Bool                         -- ^ whether we are (just) in check mode.
   -> Maybe FilePath.FilePath      -- ^ input filepath; stdin if Nothing.
   -> Maybe FilePath.FilePath      -- ^ output filepath; stdout if Nothing.
   -> IO (Either Int ChangeStatus) -- ^ Either an errorNo, or the change status.
-coreIO config suppressOutput checkMode inputPathM outputPathM =
+formatModule config cfgCheckMode inputPathM outputPathM =
   ExceptT.runExceptT $ do
 
     (input, fname) <- liftIO $
@@ -281,9 +250,7 @@ coreIO config suppressOutput checkMode inputPathM outputPathM =
       traverse_ putStrErrLn logs
 
     unless (null warns) $ do
-      let Any isCppWarning = foldMap (Any . (== CPPWarning)) warns
-
-      when isCppWarning
+      when (any (== CPPWarning) warns)
         $ putStrErrLn
         $ "Warning: Encountered -XCPP."
         ++ " Be warned that -XCPP is not supported and that"
@@ -325,7 +292,7 @@ coreIO config suppressOutput checkMode inputPathM outputPathM =
         outputOnErrs :: Bool
         outputOnErrs = confUnpack (_econf_produceOutputOnErrors (_conf_errorHandling config))
         shouldOutput :: Bool
-        shouldOutput = not suppressOutput && not checkMode && (not hasErrors || outputOnErrs)
+        shouldOutput = not cfgCheckMode && (not hasErrors || outputOnErrs)
 
     liftIO $ when shouldOutput $
       case outputPathM of
@@ -336,7 +303,7 @@ coreIO config suppressOutput checkMode inputPathM outputPathM =
                 Just _  -> not hasChanges
           unless isIdentical $ TIO.writeFile p formatted
 
-    when (checkMode && hasChanges) $ case inputPathM of
+    when (cfgCheckMode && hasChanges) $ case inputPathM of
       Nothing -> pure ()
       Just p  -> liftIO $ putStrLn $ "formatting would modify: " ++ p
 

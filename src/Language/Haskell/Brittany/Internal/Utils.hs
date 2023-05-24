@@ -23,23 +23,24 @@ module Language.Haskell.Brittany.Internal.Utils
   ) where
 
 import Control.Monad.Trans.MultiRWS (MonadMultiState(..), MonadMultiWriter(..), mGet)
-
 import Data.Coerce
 import Data.Data
 import Data.Functor.Identity
+import Data.List qualified as L
 import Data.Maybe
 import Data.Sequence (Seq)
 import Data.Sequence qualified as Seq
+import Data.Text (Text)
+import Data.Text qualified as T
 import GHC.Driver.Ppr qualified as GHC
-import GHC.OldList qualified as List
 import GHC.Utils.Outputable qualified as GHC
-import Text.PrettyPrint qualified as PP
+import Prettyprinter qualified as PP
 
-parDoc :: String -> PP.Doc
-parDoc = PP.fsep . fmap PP.text . List.words
+parDoc :: Text -> PP.Doc ann
+parDoc = PP.fillSep . map PP.pretty . T.words
 
-parDocW :: [String] -> PP.Doc
-parDocW = PP.fsep . fmap PP.text . List.words . List.unwords
+parDocW :: [Text] -> PP.Doc ann
+parDocW = parDoc . T.unwords
 
 showSDoc_ :: GHC.SDoc -> String
 showSDoc_ = GHC.showSDocUnsafe
@@ -103,4 +104,4 @@ data FirstLastView a
 splitFirstLast :: [a] -> FirstLastView a
 splitFirstLast []        = FirstLastEmpty
 splitFirstLast [x]       = FirstLastSingleton x
-splitFirstLast (x1 : xr) = FirstLast x1 (List.init xr) (List.last xr)
+splitFirstLast (x1 : xr) = FirstLast x1 (L.init xr) (L.last xr)
