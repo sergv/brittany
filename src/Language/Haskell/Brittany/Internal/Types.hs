@@ -274,9 +274,14 @@ deriving via PPGeneric (BriDocF a) instance Pretty a => Pretty (BriDocF a)
 type BriDoc = Fix BriDocF
 type BriDocNumbered = Cofree BriDocF Int
 
+instance Pretty BriDoc where
+  pretty = pretty . unFix
+
+instance Pretty BriDocNumbered where
+  pretty = pretty . cataAnn (\_ -> Fix)
+
 newtype NodeAllocIndex = NodeAllocIndex Int
 
--- TODO: rename to "dropLabels" ?
 unwrapBriDocNumbered :: BriDocNumbered -> BriDoc
 unwrapBriDocNumbered = cataAnn $ \_ -> Fix
 

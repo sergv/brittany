@@ -2,10 +2,15 @@
 {-# LANGUAGE NamedFieldPuns      #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
+{-# LANGUAGE OverloadedStrings   #-}
+
 module Language.Haskell.Brittany.Internal
   ( pPrintModule
   , pPrintModuleAndCheck
   ) where
+
+import Debug.Trace qualified
+import Prettyprinter.Combinators
 
 import Control.Monad.Trans.MultiRWS.Strict (mAsk, mTell)
 import Control.Monad.Trans.MultiRWS.Strict qualified as MultiRWSS
@@ -207,6 +212,13 @@ layoutBriDoc briDoc = do
     -- That's why the alt-transform looks a bit special here.
     -- bridoc transformation: remove alts
     pureTransforms <$> transformAlts briDoc
+
+
+
+  Debug.Trace.traceM $ renderString $ ppDictHeader "layoutBriDoc"
+    [ "briDoc"  --> briDoc
+    , "briDoc'" --> briDoc'
+    ]
 
   let state = LayoutState
         { _lstate_baseYs           = [0]
