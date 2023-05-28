@@ -19,7 +19,6 @@ import GHC.Hs
 import GHC.Types.SourceText
 import GHC.Types.SrcLoc
 import GHC.Utils.Outputable (ftext, showSDocUnsafe)
-import Language.Haskell.Brittany.Internal.ExactPrintUtils (realSrcSpan')
 import Language.Haskell.Brittany.Internal.LayouterBasics
 import Language.Haskell.Brittany.Internal.Types
 import Language.Haskell.Brittany.Internal.Utils (FirstLastView(..), splitFirstLast)
@@ -159,7 +158,7 @@ layoutForallType bndrs ltype = do
                ])
 
 layoutType :: LHsType GhcPs -> ToBriDocM BriDocNumbered
-layoutType ltype@(L typAnn typ) = docWrapNodeAround ltype $ case typ of
+layoutType ltype@(L _typAnn typ) = docWrapNodeAround ltype $ case typ of
   HsTyVar _ promoted name -> do
     let t = lrdrNameToTextAnnTypeEqualityIsSpecial name
     case promoted of
@@ -214,13 +213,13 @@ layoutType ltype@(L typAnn typ) = docWrapNodeAround ltype $ case typ of
           , docAddBaseY (BrIndentSpecial 3) $ maybeForceML typeDoc
           ])
   HsFunTy _funAnn (HsUnrestrictedArrow (L arrowAnn HsNormalTok)) typ1 typ2 -> do
-    let funComments :: EpAnn ()
+    let funComments :: [BrComment]
         funComments =
           case arrowAnn of
-            NoTokenLoc                      -> error "NoTokenLoc"
-            TokenLoc EpaSpan{}              -> error "Unexpected EpaSpan"
-            TokenLoc (EpaDelta dp comments) ->
-              EpAnn (Anchor (realSrcSpan' (locA typAnn)) (MovedAnchor dp)) () (EpaComments comments)
+            NoTokenLoc                     -> error "NoTokenLoc"
+            TokenLoc EpaSpan{}             -> error "Unexpected EpaSpan"
+            TokenLoc (EpaDelta _ comments) ->
+              map commentFromEpaComment comments
         maybeForceML = case typ2 of
           L _ HsFunTy{} -> docForceMultiline
           _             -> id

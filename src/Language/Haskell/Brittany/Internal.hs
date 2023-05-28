@@ -71,13 +71,9 @@ pPrintModuleAndCheck
   -> GHC.ParsedSource
   -> IO (Text, [BrittanyError], Seq String)
 pPrintModuleAndCheck conf parsedModule = do
-  let ghcOptions = runIdentity (_options_ghc (_conf_forward conf))
-  let (output, errs, logs) = pPrintModule conf parsedModule
-  parseResult <- parseModuleFromString
-    ghcOptions
-    "output"
-    (\_ -> pure $ Right ())
-    (T.unpack output)
+  let ghcOptions           = runIdentity (_options_ghc (_conf_forward conf))
+      (output, errs, logs) = pPrintModule conf parsedModule
+  parseResult <- parseModuleFromString ghcOptions "output" (\_ -> pure $ Right ()) (T.unpack output)
   let errs' = errs ++ case parseResult of
         Left msg -> [ErrorOutputCheck msg]
         Right{}  -> []
@@ -92,7 +88,8 @@ ppModule m@HsModule{} = do
       exactprintOnly :: Bool
       exactprintOnly = confUnpack (_conf_roundtrip_exactprint_only config')
 
-      (annsBefore, annotatedDecls, annsAfter) = splitAnnots' m
+      annotatedDecls :: [([LEpaComment], GenLocated SrcSpanAnnA (HsDecl GhcPs))]
+      (annsBefore, annotatedDecls, annsAfter) = splitAnnots m
 
   ppPreamble $ setModComments annsBefore m
 
@@ -100,11 +97,7 @@ ppModule m@HsModule{} = do
     let prependComments :: ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
         prependComments = case cs of
           [] -> id
-          _  -> wrapBefore $ EpAnn
-            { entry    = entry $ ann $ getLoc decl
-            , anns     = ()
-            , comments = EpaComments cs
-            }
+          _  -> wrapBefore (deltaFromAnn (ann (getLoc decl))) (map commentFromEpaComment cs)
     layoutBriDoc =<< if exactprintOnly
       then briDocMToPPM $ prependComments $ briDocByExactNoComment decl
       else do
@@ -140,8 +133,8 @@ setModComments comments m@HsModule{ hsmodExt = ext@XModulePs{hsmodAnn} } = m
     }
   }
 
-splitAnnots' :: HsModule GhcPs -> ([LEpaComment], [([LEpaComment], LHsDecl GhcPs)], [LEpaComment])
-splitAnnots' HsModule{hsmodExt, hsmodDecls} =
+splitAnnots :: HsModule GhcPs -> ([LEpaComment], [([LEpaComment], LHsDecl GhcPs)], [LEpaComment])
+splitAnnots HsModule{hsmodExt, hsmodDecls} =
   case hsmodDecls of
     []    -> (allComments, [], [])
     decls -> (commentsBefore, decls', commentsAfter)

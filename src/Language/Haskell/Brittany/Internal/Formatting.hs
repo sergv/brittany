@@ -73,7 +73,7 @@ format config fname input = do
   parseResult <-
     parseModuleFromString ghcOptions fname (cppCheckFunc cppMode) (T.unpack input')
   case parseResult of
-    Left err -> pure $ Left $ ParseError err
+    Left err                                 -> pure $ Left $ ParseError err
     Right (parsedSource, (hasCPP, cppWarns)) -> do
       -- TODO: collect module config here and merge with values from global config
       let moduleConf = config

@@ -41,12 +41,12 @@ transformSimplifyIndent = cataRewrite alg
           Fix (BDLines l) -> l
           x                -> [x]
       BDLines [l] -> Just l
-      BDAddBaseY i (Fix (BDAnnotationBefore ann x)) ->
-        Just $ Fix $ BDAnnotationBefore ann $ Fix $ BDAddBaseY i x
+      BDAddBaseY i (Fix (BDAnnotationBefore finalDelta comments x)) ->
+        Just $ Fix $ BDAnnotationBefore finalDelta comments $ Fix $ BDAddBaseY i x
       BDAddBaseY i (Fix (BDAnnotationKW kw x)) ->
         Just $ Fix $ BDAnnotationKW kw $ Fix $ BDAddBaseY i x
-      BDAddBaseY i (Fix (BDAnnotationAfter ann x)) ->
-        Just $ Fix $ BDAnnotationAfter ann $ Fix $ BDAddBaseY i x
+      BDAddBaseY i (Fix (BDAnnotationAfter comments x)) ->
+        Just $ Fix $ BDAnnotationAfter comments $ Fix $ BDAddBaseY i x
       BDAddBaseY i (Fix (BDSeq l)) ->
         Just $ Fix $ BDSeq $ L.init l ++ [Fix $ BDAddBaseY i $ L.last l]
       BDAddBaseY i (Fix (BDCols sig l)) ->

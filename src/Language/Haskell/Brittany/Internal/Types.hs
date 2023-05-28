@@ -18,6 +18,8 @@ module Language.Haskell.Brittany.Internal.Types
   , BriSpacing(..)
   , ColSig(..)
   , BrIndent(..)
+  , commentFromAnn
+  , commentFromEpaComment
   , ToBriDocM
   , DocMultiLine(..)
   , BrittanyWarning(..)
@@ -30,6 +32,14 @@ module Language.Haskell.Brittany.Internal.Types
   , LineModeValidity(..)
   , pattern LineModeValid
   , pattern LineModeInvalid
+
+  , Delta(..)
+  , BrComment(..)
+
+  , unpackDeltaPos
+  , deltaFromAnn
+  , deltaFromAnchorOp
+  , deltaFromDeltaPos
   ) where
 
 import Control.Applicative
@@ -37,9 +47,11 @@ import Control.Comonad.Cofree
 import Control.Monad.Trans.MultiRWS.Strict qualified as MultiRWSS
 import Data.Data (Data)
 import Data.Fix
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.Sequence (Seq)
 import Data.Strict.Maybe qualified as Strict
 import Data.Text (Text)
+import Data.Text qualified as T
 import Data.Text.Lazy.Builder qualified as TLB
 import Data.Void
 import GHC.Parser.Annotation
@@ -50,6 +62,8 @@ import Safe qualified
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.PreludeUtils ()
 import Language.Haskell.Brittany.Internal.RecursionSchemes
+import Language.Haskell.GHC.ExactPrint.Types
+import Language.Haskell.GHC.ExactPrint.Utils
 
 import GHC.PrettyInstances ()
 import Prettyprinter.Generics
@@ -252,9 +266,9 @@ data BriDocF a
       Text
   | BDPlain
       !Text -- used for QuasiQuotes, content can be multi-line (contrast to BDLit)
-  | BDAnnotationBefore (EpAnn ()) a
+  | BDAnnotationBefore (Maybe Delta) (NonEmpty BrComment) a
   | BDAnnotationKW (Maybe AnnKeywordId) a
-  | BDAnnotationAfter (EpAnn ()) a
+  | BDAnnotationAfter (NonEmpty BrComment) a
   | BDMoveToKWDP
       AnnKeywordId
       Bool -- True if should respect x offset
@@ -318,3 +332,47 @@ pattern LineModeInvalid :: forall t. LineModeValidity t
 pattern LineModeInvalid = LineModeValidity Strict.Nothing :: LineModeValidity t
 
 {-# COMPLETE LineModeValid, LineModeInvalid #-}
+
+data Delta = Delta
+  { dLines :: !Int
+  , dCols  :: !Int
+  }
+  deriving (Eq, Ord, Show, Data, Generic)
+  deriving Pretty via PPGeneric Delta
+
+data BrComment = BrComment
+  { bcContents :: {-# UNPACK #-} !Text
+  , bcDelta    :: !(Maybe Delta)
+  }
+  deriving (Eq, Ord, Show, Data, Generic)
+  deriving Pretty via PPGeneric BrComment
+
+commentFromAnn :: EpAnn a -> [BrComment]
+commentFromAnn = map commentFromEpaComment . priorComments . epAnnComments
+
+commentFromEpaComment :: LEpaComment -> BrComment
+commentFromEpaComment x@(L pos _) = BrComment
+  { bcContents = T.pack $ commentContents $ tokComment x
+  , bcDelta    = deltaFromAnchorOp $ anchor_op pos
+  }
+
+unpackDeltaPos :: DeltaPos -> (Int, Int)
+unpackDeltaPos = \case
+  SameLine{deltaColumn}                 -> (0, deltaColumn)
+  DifferentLine{deltaLine, deltaColumn} -> (deltaLine, deltaColumn)
+
+deltaFromAnn :: EpAnn ann -> Maybe Delta
+deltaFromAnn = \case
+  EpAnn{entry} -> deltaFromAnchorOp $ anchor_op entry
+  EpAnnNotUsed -> Nothing
+
+deltaFromAnchorOp :: AnchorOperation -> Maybe Delta
+deltaFromAnchorOp = \case
+  UnchangedAnchor -> Nothing
+  MovedAnchor dp  -> Just $ deltaFromDeltaPos dp
+
+deltaFromDeltaPos :: DeltaPos -> Delta
+deltaFromDeltaPos dp = Delta { dLines, dCols }
+  where
+    (dLines, dCols) = unpackDeltaPos dp
+

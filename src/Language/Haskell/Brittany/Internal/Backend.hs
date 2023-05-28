@@ -4,6 +4,8 @@
 {-# LANGUAGE NamedFieldPuns      #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
+{-# LANGUAGE OverloadedStrings #-}
+
 module Language.Haskell.Brittany.Internal.Backend
   ( ColIndex
   , ColumnSpacing(..)
@@ -46,15 +48,11 @@ import Data.Text qualified as T
 import Data.Text.Lazy.Builder qualified as TLB
 import Data.Traversable
 
-import GHC.Parser.Annotation
-import GHC.Types.SrcLoc
 import Language.Haskell.Brittany.Internal.BackendUtils
 import Language.Haskell.Brittany.Internal.Config.Types
 import Language.Haskell.Brittany.Internal.RecursionSchemes
 import Language.Haskell.Brittany.Internal.Types
-import Language.Haskell.GHC.ExactPrint.Types
 import Language.Haskell.GHC.ExactPrint.Types qualified as ExactPrint.Types
-import Language.Haskell.GHC.ExactPrint.Utils
 
 type ColIndex = Int
 
@@ -155,68 +153,86 @@ layoutBriDocM = para alg
       BDExternal shouldAddComment t -> do
         let tlines     = T.lines $ t <> T.singleton '\n'
             tlineCount = length tlines
-        when shouldAddComment $ do
+        when shouldAddComment $
           layoutWriteAppend
-            $ T.pack
-            $ "{- BRITTANY TODO SHOULD ADD COMMENT -}"
+            $ T.pack "{- BRITTANY TODO SHOULD ADD COMMENT -}"
         for_ (zip [1 ..] tlines) $ \(i, l) -> do
           layoutWriteAppend l
           unless (i == tlineCount) $
             layoutWriteNewlineBlock
       BDPlain t -> layoutWriteAppend t
-      BDAnnotationBefore a (bd, _) -> do
-        -- data GenLocated l e = L l e
-        -- getLoc         :: LocatedAn ann a -> SrcAnn ann
-        -- ann            :: SrcAnn ann -> EpAnn ann
-        -- ann            :: SrcSpanAnn' (EpAnn ann) -> EpAnn ann
-        -- epAnnComments  :: EpAnn an -> EpAnnComments
-        -- priorComments  :: EpAnnComments -> [LEpaComment]
-        -- getEntryDP     :: LocatedAn ann a -> DeltaPos
-        --
-        -- ExactPrint.Utils.tokComment :: LEpaComment -> Comment
-        -- commentContents . tokComment :: LEpaComment -> String
-        -- -- This one doesn't normalise comment text: ghcCommentText :: LEpaComment -> String
-        -- epaLocationRealSrcSpan :: EpaLocation -> RealSrcSpan
-        -- tokComment :: LEpaComment -> Comment
-
-        -- data DeltaPos
-        --   = SameLine { deltaColumn :: !Int }
-        --   | DifferentLine
-        --       { deltaLine   :: !Int, -- ^ deltaLine should always be > 0
-        --         deltaColumn :: !Int
-        --       } deriving (Show,Eq,Ord,Data)
-
+      BDAnnotationBefore finalDelta comments (bd, _) -> do
         state <- mGet
-        let moveToExactLocation :: m ()
-            moveToExactLocation = case _lstate_curYOrAddNewline state of
-              Cols{}           -> pure ()
-              InsertNewlines{} -> moveToExactAnn a
 
-        case priorComments $ epAnnComments a of
-          [] -> moveToExactLocation
-          ps -> do
-            -- layoutResetSepSpace
-            for_ ps $ \commentAnn@(L pos EpaComment{}) -> do
-              ppmMoveToExactLocAnchor pos
-              -- mTell $ TLB.fromString $ commentContents $ tokComment comment
-              layoutWriteAppend $ T.pack $ commentContents $ tokComment commentAnn
-            moveToExactLocation
+        for_ comments $ \BrComment{bcContents, bcDelta} -> do
+          moveByDelta bcDelta
+          layoutWriteAppend bcContents
 
-              -- let comment = T.pack $ ExactPrint.Types.commentContents $ tokComment lcomment
-              -- when (comment /= "(" && comment /= ")") $ do
-              --   let commentLines = T.lines comment
-              --       (x, y)       = unpackDeltaPos delta
-              --   case comment of
-              --     -- Evil hack for CPP.
-              --     '#': _ -> layoutMoveToCommentPos y (-999) (length commentLines)
-              --     _      -> layoutMoveToCommentPos y x (length commentLines)
-              --   -- fixedX <- fixMoveToLineByIsNewline x
-              --   -- replicateM_ fixedX layoutWriteNewline
-              --   -- layoutMoveToIndentCol y
-              --   layoutWriteAppendMultiline commentLines
-              -- -- mModify $ \s -> s { _lstate_curYOrAddNewline = Right 0 }
-            -- moveToExactLocationAction
+        case (_lstate_curYOrAddNewline state, finalDelta) of
+          (InsertNewlines{}, Just Delta{dLines}) -> moveNextLine dLines
+          _                                      -> pure ()
+
         bd
+
+      -- BDAnnotationBefore ann (bd, _) -> do
+      --   -- data GenLocated l e = L l e
+      --   -- getLoc         :: LocatedAn ann a -> SrcAnn ann
+      --   -- ann            :: SrcAnn ann -> EpAnn ann
+      --   -- ann            :: SrcSpanAnn' (EpAnn ann) -> EpAnn ann
+      --   -- epAnnComments  :: EpAnn an -> EpAnnComments
+      --   -- priorComments  :: EpAnnComments -> [LEpaComment]
+      --   -- getEntryDP     :: LocatedAn ann a -> DeltaPos
+      --   --
+      --   -- ExactPrint.Utils.tokComment :: LEpaComment -> Comment
+      --   -- commentContents . tokComment :: LEpaComment -> String
+      --   -- -- This one doesn't normalise comment text: ghcCommentText :: LEpaComment -> String
+      --   -- epaLocationRealSrcSpan :: EpaLocation -> RealSrcSpan
+      --   -- tokComment :: LEpaComment -> Comment
+      --
+      --   -- data DeltaPos
+      --   --   = SameLine { deltaColumn :: !Int }
+      --   --   | DifferentLine
+      --   --       { deltaLine   :: !Int, -- ^ deltaLine should always be > 0
+      --   --         deltaColumn :: !Int
+      --   --       } deriving (Show,Eq,Ord,Data)
+      --
+      --   state <- mGet
+      --   let moveToExactLocation :: m ()
+      --       moveToExactLocation = case _lstate_curYOrAddNewline state of
+      --         Cols{}           -> pure ()
+      --         InsertNewlines{} -> moveToExactAnn ann
+      --
+      --   case priorComments $ epAnnComments ann of
+      --     [] -> moveToExactLocation
+      --     ps -> do
+      --       -- layoutResetSepSpace
+      --       for_ ps $ \commentAnn@(L pos EpaComment{}) -> do
+      --         when (commentAnchor (tokComment commentAnn) /= pos) $
+      --           error $ renderString $ ppDictHeader
+      --             "BDAnnotationBefore"
+      --             [ "commentAnchor (tokComment commentAnn)" --> commentAnchor (tokComment commentAnn)
+      --             , "pos"                                   --> pos
+      --             ]
+      --         ppmMoveToExactLocAnchor pos
+      --         -- mTell $ TLB.fromString $ commentContents $ tokComment comment
+      --         layoutWriteAppend $ T.pack $ commentContents $ tokComment commentAnn
+      --       moveToExactLocation
+      --
+      --         -- let comment = T.pack $ ExactPrint.Types.commentContents $ tokComment lcomment
+      --         -- when (comment /= "(" && comment /= ")") $ do
+      --         --   let commentLines = T.lines comment
+      --         --       (x, y)       = unpackDeltaPos delta
+      --         --   case comment of
+      --         --     -- Evil hack for CPP.
+      --         --     '#': _ -> layoutMoveToCommentPos y (-999) (length commentLines)
+      --         --     _      -> layoutMoveToCommentPos y x (length commentLines)
+      --         --   -- fixedX <- fixMoveToLineByIsNewline x
+      --         --   -- replicateM_ fixedX layoutWriteNewline
+      --         --   -- layoutMoveToIndentCol y
+      --         --   layoutWriteAppendMultiline commentLines
+      --         -- -- mModify $ \s -> s { _lstate_curYOrAddNewline = Right 0 }
+      --       -- moveToExactLocationAction
+      --   bd
       BDAnnotationKW _keyword (bd, _) -> do
         bd
         let comments = []
@@ -233,17 +249,12 @@ layoutBriDocM = para alg
             -- layoutMoveToIndentCol y
             layoutWriteAppendMultiline commentLines
           -- mModify $ \s -> s { _lstate_curYOrAddNewline = Right 0 }
-      BDAnnotationAfter a (bd, _) -> do
+      BDAnnotationAfter comments (bd, _) -> do
         bd
+        for_ comments $ \BrComment{bcContents, bcDelta} -> do
+          moveByDelta bcDelta
+          layoutWriteAppend bcContents
 
-        case priorComments $ epAnnComments a of
-          [] -> pure ()
-          ps -> do
-            -- layoutResetSepSpace
-            for_ ps $ \commentAnn@(L pos EpaComment{}) -> do
-              ppmMoveToExactLocAnchor pos
-              -- mTell $ TLB.fromString $ commentContents $ tokComment comment
-              layoutWriteAppend $ T.pack $ commentContents $ tokComment commentAnn
       BDMoveToKWDP _keyword _shouldRestoreIndent (bd, _) -> do
         -- mDP <- do
         --   state <- mGet
@@ -284,36 +295,36 @@ briDocLineLength briDoc =
   where
     go :: MonadState Bool m => BriDoc -> m Int
     go (Fix bd') = case bd' of
-      BDEmpty                 -> pure 0
-      BDLit t                 -> put False $> T.length t
-      BDSeq bds               -> sum <$> traverse go bds
-      BDCols _ bds            -> sum <$> traverse go bds
-      BDSeparator             -> get >>= \b -> put True $> if b then 0 else 1
-      BDAddBaseY _ bd         -> go bd
-      BDBaseYPushCur bd       -> go bd
-      BDBaseYPop bd           -> go bd
-      BDIndentLevelPushCur bd -> go bd
-      BDIndentLevelPop bd     -> go bd
-      BDPar _ line _          -> go line
-      BDAlt{}                 -> error "briDocLineLength BDAlt"
-      BDForceMultiline bd     -> go bd
-      BDForceSingleline bd    -> go bd
-      BDForwardLineMode bd    -> go bd
-      BDExternal _ t          -> pure $ T.length t
-      BDPlain t               -> pure $ T.length t
-      BDAnnotationBefore _ bd -> go bd
-      BDAnnotationKW _ bd     -> go bd
-      BDAnnotationAfter _ bd  -> go bd
-      BDMoveToKWDP _ _ bd     -> go bd
-      BDLines ls@(_ : _)      -> do
+      BDEmpty                      -> pure 0
+      BDLit t                      -> put False $> T.length t
+      BDSeq bds                    -> sum <$> traverse go bds
+      BDCols _ bds                 -> sum <$> traverse go bds
+      BDSeparator                  -> get >>= \b -> put True $> if b then 0 else 1
+      BDAddBaseY _ bd              -> go bd
+      BDBaseYPushCur bd            -> go bd
+      BDBaseYPop bd                -> go bd
+      BDIndentLevelPushCur bd      -> go bd
+      BDIndentLevelPop bd          -> go bd
+      BDPar _ line _               -> go line
+      BDAlt{}                      -> error "briDocLineLength BDAlt"
+      BDForceMultiline bd          -> go bd
+      BDForceSingleline bd         -> go bd
+      BDForwardLineMode bd         -> go bd
+      BDExternal _ t               -> pure $ T.length t
+      BDPlain t                    -> pure $ T.length t
+      BDAnnotationBefore _ _ bd    -> go bd
+      BDAnnotationKW _ bd          -> go bd
+      BDAnnotationAfter _ bd       -> go bd
+      BDMoveToKWDP _ _ bd          -> go bd
+      BDLines ls@(_ : _)           -> do
         x <- get
         pure $ maximum $ ls <&> \l -> evalState (go l) x
-      BDLines []              -> error "briDocLineLength BDLines []"
-      BDEnsureIndent _ bd     -> go bd
-      BDSetParSpacing bd      -> go bd
-      BDForceParSpacing bd    -> go bd
-      BDNonBottomSpacing _ bd -> go bd
-      BDDebug _ bd            -> go bd
+      BDLines []                   -> error "briDocLineLength BDLines []"
+      BDEnsureIndent _ bd          -> go bd
+      BDSetParSpacing bd           -> go bd
+      BDForceParSpacing bd         -> go bd
+      BDNonBottomSpacing _ bd      -> go bd
+      BDDebug _ bd                 -> go bd
 
 briDocIsMultiLine :: BriDoc -> Bool
 briDocIsMultiLine = cata alg
@@ -337,9 +348,9 @@ briDocIsMultiLine = cata alg
       BDForwardLineMode bd              -> bd
       BDExternal _ t | [_] <- T.lines t -> False
       BDExternal{}                      -> True
-      BDPlain t | [_]      <- T.lines t -> False
+      BDPlain t      | [_] <- T.lines t -> False
       BDPlain _                         -> True
-      BDAnnotationBefore _ bd           -> bd
+      BDAnnotationBefore _ _ bd         -> bd
       BDAnnotationKW _ bd               -> bd
       BDAnnotationAfter _ bd            -> bd
       BDMoveToKWDP _ _ bd               -> bd

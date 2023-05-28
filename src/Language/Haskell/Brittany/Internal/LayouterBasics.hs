@@ -65,7 +65,8 @@ module Language.Haskell.Brittany.Internal.LayouterBasics
   , docNodeAnnKW
   , docNodeMoveToKWDP
   , DocWrapable(..)
-  , forgetAnn
+  , wrapBeforeAnn
+  , wrapAfterAnn
   , wrapBefore
   , wrapAfter
   , docPar
@@ -89,6 +90,7 @@ import Data.Data (Data)
 import Data.Functor.Identity
 import Data.Generics qualified as SYB
 import Data.List qualified as L
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.Maybe
 import Data.Monoid as Monoid
 import Data.Occurrences
@@ -103,6 +105,7 @@ import Prettyprinter (Pretty(..))
 
 import GHC (GenLocated(L), moduleName, moduleNameString)
 import GHC.Parser.Annotation as GHC
+import GHC.Parser.Annotation qualified
 import GHC.PrettyInstances ()
 import GHC.Types.Name (getOccString)
 import GHC.Types.Name.Occurrence (occNameString)
@@ -513,36 +516,82 @@ class DocWrapable a where
   docWrapNodeBefore :: LocatedAn ann ast -> a -> a
   docWrapNodeAfter  :: LocatedAn ann ast -> a -> a
 
-forgetAnn :: SrcSpanAnn' (EpAnn a) -> EpAnn ()
-forgetAnn = void . ann
+wrapBeforeAnn
+  :: EpAnn ann
+  -> ToBriDocM BriDocNumbered
+  -> ToBriDocM BriDocNumbered
+wrapBeforeAnn ann bdm =
+  wrapBefore (deltaFromAnn ann) (commentFromAnn ann) bdm
 
-wrapBefore :: EpAnn () -> ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
-wrapBefore epann bdm = do
-  bd <- bdm
-  i  <- allocNodeIndex
-  pure $ i :< BDAnnotationBefore epann bd
+wrapAfterAnn
+  :: EpAnn ann
+  -> ToBriDocM BriDocNumbered
+  -> ToBriDocM BriDocNumbered
+wrapAfterAnn ann =
+  wrapAfter (commentFromAnn ann)
 
-wrapAfter :: EpAnn () -> ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered
-wrapAfter epann bdm = do
-  bd <- bdm
-  i  <- allocNodeIndex
-  pure $ i :< BDAnnotationAfter epann bd
+wrapBefore
+  :: Maybe Delta
+  -> [BrComment]
+  -> ToBriDocM BriDocNumbered
+  -> ToBriDocM BriDocNumbered
+wrapBefore finalDelta comments bdm =
+  case comments of
+    []     -> bdm
+    c : cs -> do
+      bd <- bdm
+      i  <- allocNodeIndex
+      pure $ i :< BDAnnotationBefore finalDelta (c :| cs) bd
+
+wrapAfter
+  :: [BrComment]
+  -> ToBriDocM BriDocNumbered
+  -> ToBriDocM BriDocNumbered
+wrapAfter comments bdm =
+  case comments of
+    []     -> bdm
+    c : cs -> do
+      bd <- bdm
+      i  <- allocNodeIndex
+      pure $ i :< BDAnnotationAfter (c :| cs) bd
+
+-- data GenLocated l e = L l e
+-- getLoc         :: LocatedAn ann a -> SrcAnn ann
+-- ann            :: SrcAnn ann -> EpAnn ann
+-- ann            :: SrcSpanAnn' (EpAnn ann) -> EpAnn ann
+-- epAnnComments  :: EpAnn an -> EpAnnComments
+-- priorComments  :: EpAnnComments -> [LEpaComment]
+-- getEntryDP     :: LocatedAn ann a -> DeltaPos
+--
+-- ExactPrint.Utils.tokComment :: LEpaComment -> Comment
+-- commentContents . tokComment :: LEpaComment -> String
+-- -- This one doesn't normalise comment text: ghcCommentText :: LEpaComment -> String
+-- epaLocationRealSrcSpan :: EpaLocation -> RealSrcSpan
+-- tokComment :: LEpaComment -> Comment
+
+-- data DeltaPos
+--   = SameLine { deltaColumn :: !Int }
+--   | DifferentLine
+--       { deltaLine   :: !Int, -- ^ deltaLine should always be > 0
+--         deltaColumn :: !Int
+--       } deriving (Show,Eq,Ord,Data)
 
 instance DocWrapable (ToBriDocM BriDocNumbered) where
-  docWrapNodeAround (L ann _ast) bdm = do
-    bd <- bdm
-    i1 <- allocNodeIndex
-    -- i2 <- allocNodeIndex
-    pure
-      $ (i1 :<)
-      $ BDAnnotationBefore (forgetAnn ann)
-      --  $ (i2,)
-      --  $ BDAnnotationAfter
-      $ bd
+  docWrapNodeAround (L ann _ast) =
+    wrapBeforeAnn (GHC.Parser.Annotation.ann ann)
+    -- bd <- bdm
+    -- i1 <- allocNodeIndex
+    -- -- i2 <- allocNodeIndex
+    -- pure
+    --   $ (i1 :<)
+    --   $ BDAnnotationBefore () (commentFromAnn ann')
+    --   --  $ (i2,)
+    --   --  $ BDAnnotationAfter
+    --   $ bd
   docWrapNodeBefore (L ann _ast) =
-    wrapBefore (forgetAnn ann)
+    wrapBeforeAnn (GHC.Parser.Annotation.ann ann)
   docWrapNodeAfter (L ann _ast) =
-    wrapAfter (forgetAnn ann)
+    wrapAfterAnn (GHC.Parser.Annotation.ann ann)
 
 instance DocWrapable (ToBriDocM a) => DocWrapable [ToBriDocM a] where
   docWrapNodeAround ast bdms = case bdms of

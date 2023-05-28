@@ -29,9 +29,10 @@ module Language.Haskell.Brittany.Internal.BackendUtils
   , layoutAddSepSpace
   , moveToExactAnn
   , moveNextLine
-  , unpackDeltaPos
   , ppmMoveToExactLocAnchor
   , layoutIndentRestorePostComment
+
+  , moveByDelta
   ) where
 
 import Prelude hiding (lines)
@@ -356,21 +357,20 @@ moveNextLine delta = mModify $ \state ->
       , _lstate_commentCol       = Nothing
       }
 
-unpackDeltaPos :: DeltaPos -> (Int, Int)
-unpackDeltaPos = \case
-  SameLine{deltaColumn}                 -> (0, deltaColumn)
-  DifferentLine{deltaLine, deltaColumn} -> (deltaLine, deltaColumn)
-
 ppmMoveToExactLocAnchor
   :: MonadMultiWriter TLB.Builder m => Anchor -> m ()
 ppmMoveToExactLocAnchor an =
   case anchor_op an of
     UnchangedAnchor -> pure ()
-    MovedAnchor dp  -> do
-      mTell $ stimes' lines $ TLB.singleton '\n'
-      mTell $ stimes' cols $ TLB.singleton ' '
+    MovedAnchor dp  ->
+      mTell $ stimes' lines (TLB.singleton '\n') <> stimes' cols (TLB.singleton ' ')
       where
         (lines, cols) = unpackDeltaPos dp
+
+moveByDelta
+  :: MonadMultiWriter TLB.Builder m => Maybe Delta -> m ()
+moveByDelta = traverse_ $ \Delta{dLines, dCols} ->
+  mTell $ stimes' dLines (TLB.singleton '\n') <> stimes' dCols (TLB.singleton ' ')
 
 layoutIndentRestorePostComment
   :: (MonadMultiState LayoutState m, MonadMultiWriter TLB.Builder m)

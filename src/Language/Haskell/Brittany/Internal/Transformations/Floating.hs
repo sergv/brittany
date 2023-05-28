@@ -60,14 +60,14 @@ transformSimplifyFloating = stepFull . stepBO
             Just $ Fix $ BDBaseYPushCur $ Fix $ BDAddBaseY ind x
           BDAddBaseY ind (Fix (BDBaseYPop x)) -> Just $ Fix $ BDBaseYPop $ Fix $ BDAddBaseY ind x
           -- prior floating in
-          BDAnnotationBefore ann (Fix (BDPar ind line indented)) ->
-            Just $ Fix $ BDPar ind (Fix (BDAnnotationBefore ann line)) indented
-          BDAnnotationBefore ann (Fix (BDSeq (l : lr))) ->
-            Just $ Fix $ BDSeq (Fix (BDAnnotationBefore ann l) : lr)
-          BDAnnotationBefore ann (Fix (BDLines (l : lr))) ->
-            Just $ Fix $ BDLines (Fix (BDAnnotationBefore ann l) : lr)
-          BDAnnotationBefore ann (Fix (BDCols sig (l : lr))) ->
-            Just $ Fix $ BDCols sig (Fix (BDAnnotationBefore ann l) : lr)
+          BDAnnotationBefore finalDelta comments (Fix (BDPar ind line indented)) ->
+            Just $ Fix $ BDPar ind (Fix (BDAnnotationBefore finalDelta comments line)) indented
+          BDAnnotationBefore finalDelta comments (Fix (BDSeq (l : lr))) ->
+            Just $ Fix $ BDSeq (Fix (BDAnnotationBefore finalDelta comments l) : lr)
+          BDAnnotationBefore finalDelta comments (Fix (BDLines (l : lr))) ->
+            Just $ Fix $ BDLines (Fix (BDAnnotationBefore finalDelta comments l) : lr)
+          BDAnnotationBefore finalDelta comments (Fix (BDCols sig (l : lr))) ->
+            Just $ Fix $ BDCols sig (Fix (BDAnnotationBefore finalDelta comments l) : lr)
           -- EnsureIndent float-in
           -- BDEnsureIndent indent (Fix (BDCols sig (col:colr))) ->
           --   Just $ Fix $ BDCols sig (Fix (BDEnsureIndent indent col) : (Fix . BDAddBaseY indent <$> colr))
@@ -76,14 +76,14 @@ transformSimplifyFloating = stepFull . stepBO
           -- BDEnsureIndent indent (Fix (BDLines lines)) ->
           --   Just $ Fix $ BDLines $ Fix . BDEnsureIndent indent <$> lines
           -- post floating in
-          BDAnnotationAfter ann (Fix (BDPar ind line indented)) ->
-            Just $ Fix $ BDPar ind line $ Fix $ BDAnnotationAfter ann indented
-          BDAnnotationAfter ann (Fix (BDSeq list)) ->
-            Just $ Fix $ BDSeq $ L.init list ++ [Fix (BDAnnotationAfter ann (L.last list))]
-          BDAnnotationAfter ann (Fix (BDLines list)) ->
-            Just $ Fix $ BDLines $ L.init list ++ [Fix (BDAnnotationAfter ann (L.last list))]
-          BDAnnotationAfter ann (Fix (BDCols sig cols)) ->
-            Just $ Fix $ BDCols sig $ L.init cols ++ [Fix (BDAnnotationAfter ann (L.last cols))]
+          BDAnnotationAfter comments (Fix (BDPar ind line indented)) ->
+            Just $ Fix $ BDPar ind line $ Fix $ BDAnnotationAfter comments indented
+          BDAnnotationAfter comments (Fix (BDSeq list)) ->
+            Just $ Fix $ BDSeq $ L.init list ++ [Fix (BDAnnotationAfter comments (L.last list))]
+          BDAnnotationAfter comments (Fix (BDLines list)) ->
+            Just $ Fix $ BDLines $ L.init list ++ [Fix (BDAnnotationAfter comments (L.last list))]
+          BDAnnotationAfter comments (Fix (BDCols sig cols)) ->
+            Just $ Fix $ BDCols sig $ L.init cols ++ [Fix (BDAnnotationAfter comments (L.last cols))]
           _ -> Nothing
 
     descendPrior :: BriDoc -> BriDoc
@@ -92,18 +92,18 @@ transformSimplifyFloating = stepFull . stepBO
         coalg :: BriDocF BriDoc -> Maybe (BriDocF BriDoc)
         coalg = \case
           -- prior floating in
-          BDAnnotationBefore ann (Fix (BDPar ind line indented)) ->
-            Just $ BDPar ind (Fix (BDAnnotationBefore ann line)) indented
-          BDAnnotationBefore ann (Fix (BDSeq (l : lr))) ->
-            Just $ BDSeq (Fix (BDAnnotationBefore ann l) : lr)
-          BDAnnotationBefore ann (Fix (BDLines (l : lr))) ->
-            Just $ BDLines (Fix (BDAnnotationBefore ann l) : lr)
-          BDAnnotationBefore ann (Fix (BDCols sig (l : lr))) ->
-            Just $ BDCols sig (Fix (BDAnnotationBefore ann l) : lr)
-          BDAnnotationBefore ann (Fix (BDAddBaseY indent x)) ->
-            Just $ BDAddBaseY indent $ Fix $ BDAnnotationBefore ann x
-          BDAnnotationBefore ann (Fix (BDDebug s x)) ->
-            Just $ BDDebug s $ Fix $ BDAnnotationBefore ann x
+          BDAnnotationBefore finalDelta comments (Fix (BDPar ind line indented)) ->
+            Just $ BDPar ind (Fix (BDAnnotationBefore finalDelta comments line)) indented
+          BDAnnotationBefore finalDelta comments (Fix (BDSeq (l : lr))) ->
+            Just $ BDSeq (Fix (BDAnnotationBefore finalDelta comments l) : lr)
+          BDAnnotationBefore finalDelta comments (Fix (BDLines (l : lr))) ->
+            Just $ BDLines (Fix (BDAnnotationBefore finalDelta comments l) : lr)
+          BDAnnotationBefore finalDelta comments (Fix (BDCols sig (l : lr))) ->
+            Just $ BDCols sig (Fix (BDAnnotationBefore finalDelta comments l) : lr)
+          BDAnnotationBefore finalDelta comments (Fix (BDAddBaseY indent x)) ->
+            Just $ BDAddBaseY indent $ Fix $ BDAnnotationBefore finalDelta comments x
+          BDAnnotationBefore finalDelta comments (Fix (BDDebug s x)) ->
+            Just $ BDDebug s $ Fix $ BDAnnotationBefore finalDelta comments x
           _ -> Nothing
 
     descendRest :: BriDoc -> BriDoc
@@ -112,18 +112,18 @@ transformSimplifyFloating = stepFull . stepBO
         coalg :: BriDocF BriDoc -> Maybe (BriDocF BriDoc)
         coalg = \case
           -- post floating in
-          BDAnnotationAfter ann (Fix (BDPar ind line indented)) ->
-            Just $ BDPar ind line $ Fix $ BDAnnotationAfter ann indented
-          BDAnnotationAfter ann (Fix (BDSeq list)) ->
-            Just $ BDSeq $ L.init list ++ [Fix (BDAnnotationAfter ann (L.last list))]
-          BDAnnotationAfter ann (Fix (BDLines list)) ->
-            Just $ BDLines $ L.init list ++ [Fix (BDAnnotationAfter ann (L.last list))]
-          BDAnnotationAfter ann (Fix (BDCols sig cols)) ->
-            Just $ BDCols sig $ L.init cols ++ [Fix (BDAnnotationAfter ann (L.last cols))]
-          BDAnnotationAfter ann (Fix (BDAddBaseY indent x)) ->
-            Just $ BDAddBaseY indent $ Fix $ BDAnnotationAfter ann x
-          BDAnnotationAfter ann (Fix (BDDebug s x)) ->
-            Just $ BDDebug s $ Fix $ BDAnnotationAfter ann x
+          BDAnnotationAfter comments (Fix (BDPar ind line indented)) ->
+            Just $ BDPar ind line $ Fix $ BDAnnotationAfter comments indented
+          BDAnnotationAfter comments (Fix (BDSeq list)) ->
+            Just $ BDSeq $ L.init list ++ [Fix (BDAnnotationAfter comments (L.last list))]
+          BDAnnotationAfter comments (Fix (BDLines list)) ->
+            Just $ BDLines $ L.init list ++ [Fix (BDAnnotationAfter comments (L.last list))]
+          BDAnnotationAfter comments (Fix (BDCols sig cols)) ->
+            Just $ BDCols sig $ L.init cols ++ [Fix (BDAnnotationAfter comments (L.last cols))]
+          BDAnnotationAfter comments (Fix (BDAddBaseY indent x)) ->
+            Just $ BDAddBaseY indent $ Fix $ BDAnnotationAfter comments x
+          BDAnnotationAfter comments (Fix (BDDebug s x)) ->
+            Just $ BDDebug s $ Fix $ BDAnnotationAfter comments x
           _ -> Nothing
 
     descendKW :: BriDoc -> BriDoc
@@ -205,10 +205,10 @@ transformSimplifyFloating = stepFull . stepBO
           -- merge AddIndent and Par
           BDAddBaseY ind1 (Fix (BDPar ind2 line indented)) ->
             Just $ BDPar (mergeIndents ind1 ind2) line indented
-          BDAddBaseY ind (Fix (BDAnnotationBefore ann x)) ->
-            Just $ BDAnnotationBefore ann (Fix (BDAddBaseY ind x))
-          BDAddBaseY ind (Fix (BDAnnotationAfter ann x)) ->
-            Just $ BDAnnotationAfter ann $ Fix $ BDAddBaseY ind x
+          BDAddBaseY ind (Fix (BDAnnotationBefore finalDelta comments x)) ->
+            Just $ BDAnnotationBefore finalDelta comments (Fix (BDAddBaseY ind x))
+          BDAddBaseY ind (Fix (BDAnnotationAfter comments x)) ->
+            Just $ BDAnnotationAfter comments $ Fix $ BDAddBaseY ind x
           BDAddBaseY ind (Fix (BDAnnotationKW kw x)) ->
             Just $ BDAnnotationKW kw $ Fix $ BDAddBaseY ind x
           BDAddBaseY ind (Fix (BDSeq list)) ->

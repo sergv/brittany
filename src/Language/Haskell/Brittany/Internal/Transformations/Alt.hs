@@ -255,15 +255,14 @@ transformAlts
         mSet $ acp' { _acp_forceMLFlag = _acp_forceMLFlag acp }
         pure $ x
       BDExternal{} -> processSpacingSimple bdX $> bdX
-      BDPlain{} -> processSpacingSimple bdX $> bdX
-      BDAnnotationBefore ann bd -> do
+      BDPlain{}    -> processSpacingSimple bdX $> bdX
+      BDAnnotationBefore finalDelta comments bd -> do
         acp <- mGet
-        mSet
-          $ acp { _acp_forceMLFlag = altLineModeDecay $ _acp_forceMLFlag acp }
+        mSet $ acp { _acp_forceMLFlag = altLineModeDecay $ _acp_forceMLFlag acp }
         bd' <- rec bd
-        pure $ reWrap $ BDAnnotationBefore ann bd'
-      BDAnnotationAfter ann bd ->
-        reWrap . BDAnnotationAfter ann <$> rec bd
+        pure $ reWrap $ BDAnnotationBefore finalDelta comments bd'
+      BDAnnotationAfter comments bd ->
+        reWrap . BDAnnotationAfter comments <$> rec bd
       BDAnnotationKW kw bd ->
         reWrap . BDAnnotationKW kw <$> rec bd
       BDMoveToKWDP kw b bd ->
@@ -435,17 +434,17 @@ getSpacing !bridoc = rec bridoc
               VerticalSpacingParNone -> mVs
               _                      -> LineModeInvalid
         BDForwardLineMode bd -> rec bd
-        BDExternal _ txt -> pure $ LineModeValid $ case T.lines txt of
+        BDExternal _ txt     -> pure $ LineModeValid $ case T.lines txt of
           [t] -> VerticalSpacing (T.length t) VerticalSpacingParNone False
           _   -> VerticalSpacing 999 VerticalSpacingParNone False
         BDPlain txt -> pure $ LineModeValid $ case T.lines txt of
           [t] -> VerticalSpacing (T.length t) VerticalSpacingParNone False
           _   -> VerticalSpacing 999 VerticalSpacingParNone False
-        BDAnnotationBefore _ bd -> rec bd
-        BDAnnotationKW _kw bd   -> rec bd
-        BDAnnotationAfter _ bd  -> rec bd
-        BDMoveToKWDP _kw _b bd  -> rec bd
-        BDLines [] ->
+        BDAnnotationBefore _ _ bd -> rec bd
+        BDAnnotationKW _kw bd     -> rec bd
+        BDAnnotationAfter _ bd    -> rec bd
+        BDMoveToKWDP _kw _b bd    -> rec bd
+        BDLines []                ->
           pure $ LineModeValid $ VerticalSpacing 0 VerticalSpacingParNone False
         BDLines (l : ls) -> do
           lSps <- (:|) <$> rec l <*> traverse rec ls
@@ -721,12 +720,12 @@ getSpacings !limit bridoc = preFilterLimit <$> rec bridoc
                 VerticalSpacing (T.length t1) (VerticalSpacingParAlways 0) True
           | allowHangingQuasiQuotes
           ]
-        BDAnnotationBefore _ bd -> rec bd
-        BDAnnotationKW _kw bd   -> rec bd
-        BDAnnotationAfter _ bd  -> rec bd
-        BDMoveToKWDP _kw _b bd  -> rec bd
-        BDLines []              -> pure [VerticalSpacing 0 VerticalSpacingParNone False]
-        BDLines ls@(_ : _)      -> do
+        BDAnnotationBefore _ _ bd -> rec bd
+        BDAnnotationKW _kw bd     -> rec bd
+        BDAnnotationAfter _ bd    -> rec bd
+        BDMoveToKWDP _kw _b bd    -> rec bd
+        BDLines []                -> pure [VerticalSpacing 0 VerticalSpacingParNone False]
+        BDLines ls@(_ : _)        -> do
           -- we simply assume that lines is only used "properly", i.e. in
           -- such a way that the first line can be treated "as a part of the
           -- paragraph". That most importantly means that Lines should never

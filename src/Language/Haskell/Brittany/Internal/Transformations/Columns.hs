@@ -50,19 +50,19 @@ transformSimplifyColumns = cataRewrite alg
           Fix (BDLines l) -> l
           x                -> [x]
       -- prior floating in
-      BDAnnotationBefore ann (Fix (BDSeq (l : lr))) ->
-        Just $ Fix $ BDSeq $ Fix (BDAnnotationBefore ann l) : lr
-      BDAnnotationBefore ann (Fix (BDLines (l : lr))) ->
-        Just $ Fix $ BDLines $ Fix (BDAnnotationBefore ann l) : lr
-      BDAnnotationBefore ann (Fix (BDCols sig (l : lr))) ->
-        Just $ Fix $ BDCols sig $ Fix (BDAnnotationBefore ann l) : lr
+      BDAnnotationBefore finalDelta comments (Fix (BDSeq (l : lr))) ->
+        Just $ Fix $ BDSeq $ Fix (BDAnnotationBefore finalDelta comments l) : lr
+      BDAnnotationBefore finalDelta comments (Fix (BDLines (l : lr))) ->
+        Just $ Fix $ BDLines $ Fix (BDAnnotationBefore finalDelta comments l) : lr
+      BDAnnotationBefore finalDelta comments (Fix (BDCols sig (l : lr))) ->
+        Just $ Fix $ BDCols sig $ Fix (BDAnnotationBefore finalDelta comments l) : lr
       -- post floating in
-      BDAnnotationAfter ann (Fix (BDSeq list)) ->
-        Just $ Fix $ BDSeq $ L.init list ++ [Fix (BDAnnotationAfter ann (L.last list))]
-      BDAnnotationAfter ann (Fix (BDLines list)) ->
-        Just $ Fix $ BDLines $ L.init list ++ [Fix (BDAnnotationAfter ann (L.last list))]
-      BDAnnotationAfter ann (Fix (BDCols sig cols)) ->
-        Just $ Fix $ BDCols sig $ L.init cols ++ [Fix (BDAnnotationAfter ann (L.last cols))]
+      BDAnnotationAfter comments (Fix (BDSeq list)) ->
+        Just $ Fix $ BDSeq $ L.init list ++ [Fix (BDAnnotationAfter comments (L.last list))]
+      BDAnnotationAfter comments (Fix (BDLines list)) ->
+        Just $ Fix $ BDLines $ L.init list ++ [Fix (BDAnnotationAfter comments (L.last list))]
+      BDAnnotationAfter comments (Fix (BDCols sig cols)) ->
+        Just $ Fix $ BDCols sig $ L.init cols ++ [Fix (BDAnnotationAfter comments (L.last cols))]
       BDAnnotationKW kw (Fix (BDSeq list)) ->
         Just $ Fix $ BDSeq $ L.init list ++ [Fix (BDAnnotationKW kw (L.last list))]
       BDAnnotationKW kw (Fix (BDLines list)) ->
