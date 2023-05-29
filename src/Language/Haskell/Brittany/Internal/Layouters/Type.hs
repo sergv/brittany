@@ -35,8 +35,11 @@ layoutSigType (L _ HsSig{sig_bndrs, sig_body}) =
     HsOuterExplicit{hso_bndrs} -> layoutForallType (map forgetTyVarBndrFlag hso_bndrs) sig_body
 
 layoutContext :: LHsContext GhcPs -> ToBriDocM BriDocNumbered
-layoutContext lcs@(L _ cs) = do
-  cs' <- traverse (docSharedWrapper layoutType) cs
+layoutContext = layoutContext' defaultLayoutTypeConfig
+
+layoutContext' :: LayoutTypeConfig -> LHsContext GhcPs -> ToBriDocM BriDocNumbered
+layoutContext' cfg lcs@(L _ cs) = do
+  cs' <- traverse (docSharedWrapper (layoutType' cfg)) cs
   docWrapNodeAround lcs $ case cs' of
     []  -> docLitS "()"
     [x] -> x
@@ -57,13 +60,12 @@ layoutForallType :: [LHsTyVarBndr () (NoGhcTc GhcPs)] -> LHsType GhcPs -> ToBriD
 layoutForallType bndrs ltype = do
   forallDoc <- docSharedWrapper docLitS "forall"
   tyVarDocs <- layoutTyVarBndrs bndrs
+  let cfg = defaultLayoutTypeConfig
   case ltype of
     L _ HsQualTy { hst_ctxt = context, hst_body } -> do
-      typeDoc    <- docSharedWrapper layoutType hst_body
-      contextDoc <- docSharedWrapper layoutContext context
-      let maybeForceML = case hst_body of
-            L _ HsFunTy{} -> docForceMultiline
-            _             -> id
+      let cfg'         = case hst_body of
+            L _ HsFunTy{} -> cfg { ltcForceMultilineFunctions = True }
+            _             -> cfg
           tyVarDocLineList :: [ToBriDocM BriDocNumbered]
           tyVarDocLineList = processTyVarBndrsSingleline tyVarDocs
           forallHeader     = runFilteredAlternative $ do
@@ -79,6 +81,9 @@ layoutForallType bndrs ltype = do
                     , docCols ColTyOpPrefix [docLitS ":: ", doc]
                     , docParenR
                     ])
+      typeDocSingle <- docSharedWrapper (layoutType' cfg) hst_body
+      typeDocMulti  <- docSharedWrapper (layoutType' cfg') hst_body
+      contextDoc    <- docSharedWrapper layoutContext context
       runFilteredAlternative $ do
         -- :: forall a b c . (Foo a b c) => a b -> c
         addAlternative $
@@ -88,7 +93,7 @@ layoutForallType bndrs ltype = do
               else docSeq ([forallHeader, docSeparator] ++ tyVarDocLineList ++ [docLitS " . "])
             , docForceSingleline contextDoc
             , docLitS " => "
-            , docForceSingleline typeDoc
+            , docForceSingleline typeDocSingle
             ]
         -- :: forall a b c
         --  . (Foo a b c)
@@ -106,15 +111,15 @@ layoutForallType bndrs ltype = do
               , docCols
                 ColTyOpPrefix
                 [ docLitS "=> "
-                , docAddBaseY (BrIndentSpecial 3) $ maybeForceML typeDoc
+                , docAddBaseY (BrIndentSpecial 3) typeDocMulti
                 ]
               ])
     typ -> do
-      -- typeDoc   <- layoutType typ
-      typeDoc <- docSharedWrapper layoutType typ
-      let maybeForceML = case typ of
-            L _ HsFunTy{} -> docForceMultiline
-            _             -> id
+      let cfg'         = case typ of
+            L _ HsFunTy{} -> cfg { ltcForceMultilineFunctions = True }
+            _             -> cfg
+      typeDocSingle <- docSharedWrapper (layoutType' cfg) typ
+      typeDocMulti  <- docSharedWrapper (layoutType' cfg') typ
       let tyVarDocLineList = processTyVarBndrsSingleline tyVarDocs
       runFilteredAlternative $ do
         -- forall x . x
@@ -123,7 +128,7 @@ layoutForallType bndrs ltype = do
           [ if null bndrs
             then docEmpty
             else docSeq ([forallDoc] ++ tyVarDocLineList ++ [docLitS " . "])
-          , docForceSingleline typeDoc
+          , docForceSingleline typeDocSingle
           ]
         -- :: forall x
         --  . x
@@ -133,7 +138,7 @@ layoutForallType bndrs ltype = do
             (docCols
               ColTyOpPrefix
               [ docWrapNodeAfter typ $ docLitS " . "
-              , maybeForceML typeDoc
+              , typeDocMulti
               ])
         -- :: forall
         --      (x :: *)
@@ -153,12 +158,24 @@ layoutForallType bndrs ltype = do
             ++ [ docCols
                    ColTyOpPrefix
                    [ docWrapNodeAfter typ $ docLitS " . "
-                   , maybeForceML typeDoc
+                   , typeDocMulti
                    ]
                ])
 
+newtype LayoutTypeConfig = LayoutTypeConfig
+  { ltcForceMultilineFunctions :: Bool
+  }
+
+defaultLayoutTypeConfig :: LayoutTypeConfig
+defaultLayoutTypeConfig = LayoutTypeConfig
+  { ltcForceMultilineFunctions = False
+  }
+
 layoutType :: LHsType GhcPs -> ToBriDocM BriDocNumbered
-layoutType ltype@(L _typAnn typ) = docWrapNodeAround ltype $ case typ of
+layoutType = layoutType' defaultLayoutTypeConfig
+
+layoutType' :: LayoutTypeConfig -> LHsType GhcPs -> ToBriDocM BriDocNumbered
+layoutType' cfg ltype@(L _typAnn typ) = docWrapNodeAround ltype $ case typ of
   HsTyVar _ promoted name -> do
     let t = lrdrNameToTextAnnTypeEqualityIsSpecial name
     case promoted of
@@ -172,35 +189,37 @@ layoutType ltype@(L _typAnn typ) = docWrapNodeAround ltype $ case typ of
   -- TODO: confirm this implementation makes sense, maybe unify with
   -- the following case.
   HsQualTy _ (L _ []) typ1 -> do
-    typeDoc <- docSharedWrapper layoutType typ1
-    let maybeForceML = case typ1 of
-          L _ HsFunTy{} -> docForceMultiline
-          _             -> id
+    let cfg' = case typ1 of
+          L _ HsFunTy{} -> cfg { ltcForceMultilineFunctions = True }
+          _             -> cfg
+    typeDocSingle <- docSharedWrapper (layoutType' cfg) typ1
+    typeDocMulti  <- docSharedWrapper (layoutType' cfg') typ1
     runFilteredAlternative $ do
       -- a b -> c
       addAlternative $
-        docForceSingleline typeDoc
+        docForceSingleline typeDocSingle
       --    a b
       -- -> c
       addAlternative $
         docCols
           ColTyOpPrefix
           [ docLitS "   "
-          , docAddBaseY (BrIndentSpecial 3) $ maybeForceML typeDoc
+          , docAddBaseY (BrIndentSpecial 3) typeDocMulti
           ]
   HsQualTy _ context typ1 -> do
-    typeDoc    <- docSharedWrapper layoutType typ1
-    contextDoc <- docSharedWrapper layoutContext context
-    let maybeForceML = case typ1 of
-          L _ HsFunTy{} -> docForceMultiline
-          _             -> id
+    let cfg' = case typ1 of
+          L _ HsFunTy{} -> cfg { ltcForceMultilineFunctions = True }
+          _             -> cfg
+    typeDocSingle <- docSharedWrapper (layoutType' cfg) typ1
+    typeDocMulti  <- docSharedWrapper (layoutType' cfg') typ1
+    contextDoc    <- docSharedWrapper (layoutContext' cfg) context
     runFilteredAlternative $ do
       -- (Foo a b c) => a b -> c
       addAlternative $
         docSeq
         [ docForceSingleline contextDoc
         , docLitS " => "
-        , docForceSingleline typeDoc
+        , docForceSingleline typeDocSingle
         ]
       --    (Foo a b c)
       -- => a b
@@ -210,7 +229,7 @@ layoutType ltype@(L _typAnn typ) = docWrapNodeAround ltype $ case typ of
         (docCols
           ColTyOpPrefix
           [ docLitS "=> "
-          , docAddBaseY (BrIndentSpecial 3) $ maybeForceML typeDoc
+          , docAddBaseY (BrIndentSpecial 3) typeDocMulti
           ])
   HsFunTy _funAnn (HsUnrestrictedArrow (L arrowAnn HsNormalTok)) typ1 typ2 -> do
     let funComments :: [BrComment]
@@ -220,18 +239,23 @@ layoutType ltype@(L _typAnn typ) = docWrapNodeAround ltype $ case typ of
             TokenLoc EpaSpan{}             -> error "Unexpected EpaSpan"
             TokenLoc (EpaDelta _ comments) ->
               map commentFromEpaComment comments
-        maybeForceML = case typ2 of
-          L _ HsFunTy{} -> docForceMultiline
-          _             -> id
         hasComments  = hasAnyCommentsBelow ltype
-    typeDoc1 <- docSharedWrapper layoutType typ1
-    typeDoc2 <- docSharedWrapper layoutType typ2
+
+    let cfg' = case typ2 of
+          L _ HsFunTy{} -> cfg { ltcForceMultilineFunctions = True }
+          _             -> cfg
+
+    typeDoc1 <- docSharedWrapper (layoutType' cfg) typ1
+
+    typeDoc2Single <- docSharedWrapper (layoutType' cfg) typ2
+    typeDoc2Multi  <- docSharedWrapper (layoutType' cfg') typ2
+
     runFilteredAlternative $ do
-      addAlternativeCond (not hasComments) $
+      addAlternativeCond (not hasComments && not (ltcForceMultilineFunctions cfg)) $
         docSeq
           [ appSep $ docForceSingleline typeDoc1
           , appSep $ docLitS "->"
-          , docForceSingleline typeDoc2
+          , docForceSingleline typeDoc2Single
           ]
       addAlternative $
         docPar
@@ -239,12 +263,12 @@ layoutType ltype@(L _typAnn typ) = docWrapNodeAround ltype $ case typ of
           (docCols
             ColTyOpPrefix
             [ appSep $ docLitS "->"
-            , docAddBaseY (BrIndentSpecial 3) $ maybeForceML typeDoc2
+            , docAddBaseY (BrIndentSpecial 3) typeDoc2Multi
             ])
   HsFunTy{} -> -- TODO
     briDocByExactInlineOnly "HsFunTy{}" ltype
   HsParTy _ typ1 -> do
-    typeDoc1 <- docSharedWrapper layoutType typ1
+    typeDoc1 <- docSharedWrapper (layoutType' cfg) typ1
     runFilteredAlternative $ do
       addAlternative $
         docSeq
@@ -268,8 +292,8 @@ layoutType ltype@(L _typAnn typ) = docWrapNodeAround ltype $ case typ of
         L _ (HsAppTy _ ty1 ty2) -> gather (ty2 : list) ty1
         final -> (final, list)
     let (typHead, typRest) = gather [typ2] typ1
-    docHead <- docSharedWrapper layoutType typHead
-    docRest <- docSharedWrapper layoutType `mapM` typRest
+    docHead <- docSharedWrapper (layoutType' cfg) typHead
+    docRest <- traverse (docSharedWrapper (layoutType' cfg)) typRest
     runFilteredAlternative $ do
       addAlternative $
         docSeq
@@ -278,8 +302,8 @@ layoutType ltype@(L _typAnn typ) = docWrapNodeAround ltype $ case typ of
       addAlternative $
         docPar docHead (docLines $ docEnsureIndent BrIndentRegular <$> docRest)
   HsAppTy _ typ1 typ2 -> do
-    typeDoc1 <- docSharedWrapper layoutType typ1
-    typeDoc2 <- docSharedWrapper layoutType typ2
+    typeDoc1 <- docSharedWrapper (layoutType' cfg) typ1
+    typeDoc2 <- docSharedWrapper (layoutType' cfg) typ2
     runFilteredAlternative $ do
       addAlternative $
         docSeq
@@ -287,7 +311,7 @@ layoutType ltype@(L _typAnn typ) = docWrapNodeAround ltype $ case typ of
       addAlternative $
         docPar typeDoc1 (docEnsureIndent BrIndentRegular typeDoc2)
   HsListTy _ typ1 -> do
-    typeDoc1 <- docSharedWrapper layoutType typ1
+    typeDoc1 <- docSharedWrapper (layoutType' cfg) typ1
     runFilteredAlternative $ do
       addAlternative $
         docSeq
@@ -313,7 +337,7 @@ layoutType ltype@(L _typAnn typ) = docWrapNodeAround ltype $ case typ of
     simple = if null typs then unitL else simpleL
     unitL  = docLitS "()"
     simpleL = do
-      docs <- docSharedWrapper layoutType `mapM` typs
+      docs <- traverse (docSharedWrapper (layoutType' cfg)) typs
       let lines =
             L.tail docs
               <&> \d -> docAddBaseY (BrIndentSpecial 2)
@@ -331,7 +355,7 @@ layoutType ltype@(L _typAnn typ) = docWrapNodeAround ltype $ case typ of
             (docAddBaseY (BrIndentSpecial 2) line1)
             (docLines $ docWrapNodeAfter ltype lines ++ [docParenR])
     unboxedL = do
-      docs <- docSharedWrapper layoutType `mapM` typs
+      docs <- traverse (docSharedWrapper (layoutType' cfg)) typs
       let start = docParenHashLSep
           end   = docParenHashRSep
       runFilteredAlternative $ do
@@ -358,8 +382,8 @@ layoutType ltype@(L _typAnn typ) = docWrapNodeAround ltype $ case typ of
   --   --       need to check how things are handled on the expression level.
   --   let opStr = lrdrNameToText opName
   --   let opLen = T.length opStr
-  --   layouter1@(Layouter desc1 _ _) <- layoutType typ1
-  --   layouter2@(Layouter desc2 _ _) <- layoutType typ2
+  --   layouter1@(Layouter desc1 _ _) <- layoutType' cfg typ1
+  --   layouter2@(Layouter desc2 _ _) <- layoutType' cfg typ2
   --   let line = do -- Maybe
   --         l1 <- _ldesc_line desc1
   --         l2 <- _ldesc_line desc2
@@ -410,7 +434,7 @@ layoutType ltype@(L _typAnn typ) = docWrapNodeAround ltype $ case typ of
   --     , _layouter_ast = ltype
   --     }
   HsIParamTy _ (L _ (HsIPName ipName)) typ1 -> do
-    typeDoc1 <- docSharedWrapper layoutType typ1
+    typeDoc1 <- docSharedWrapper (layoutType' cfg) typ1
     runFilteredAlternative $ do
       addAlternative $
         docSeq
@@ -427,8 +451,8 @@ layoutType ltype@(L _typAnn typ) = docWrapNodeAround ltype $ case typ of
             ])
   -- TODO: test KindSig
   HsKindSig _ typ1 kind1 -> do
-    typeDoc1 <- docSharedWrapper layoutType typ1
-    kindDoc1 <- docSharedWrapper layoutType kind1
+    typeDoc1 <- docSharedWrapper (layoutType' cfg) typ1
+    kindDoc1 <- docSharedWrapper (layoutType' cfg) kind1
     let hasParens = hasAnnKeyword ltype AnnOpenP
     runFilteredAlternative $ do
       addAlternative $
@@ -488,7 +512,7 @@ layoutType ltype@(L _typAnn typ) = docWrapNodeAround ltype $ case typ of
   --               NoSrcStrict -> ""
   --             )
   --   let bangLen = length bangStr
-  --   layouter@(Layouter desc _ _) <- layoutType typ1
+  --   layouter@(Layouter desc _ _) <- layoutType' cfg typ1
   --   let line = do -- Maybe
   --         l <- _ldesc_line desc
   --         let len = bangLen + _lColumns_min l
@@ -530,7 +554,7 @@ layoutType ltype@(L _typAnn typ) = docWrapNodeAround ltype $ case typ of
   HsRecTy{} -> -- TODO
     briDocByExactInlineOnly "HsRecTy{}" ltype
   HsExplicitListTy _ _ typs -> do
-    typDocs <- docSharedWrapper layoutType `mapM` typs
+    typDocs <- traverse (docSharedWrapper (layoutType' cfg)) typs
     let hasComments     = hasAnyCommentsBelow ltype
         specialCommaSep = appSep $ docLitS " ,"
     runFilteredAlternative $ do
@@ -598,8 +622,8 @@ layoutType ltype@(L _typAnn typ) = docWrapNodeAround ltype $ case typ of
       else docLitS "*"
   XHsType{} -> error "brittany internal error: XHsType"
   HsAppKindTy _ ty kind -> do
-    t <- docSharedWrapper layoutType ty
-    k <- docSharedWrapper layoutType kind
+    t <- docSharedWrapper (layoutType' cfg) ty
+    k <- docSharedWrapper (layoutType' cfg) kind
     runFilteredAlternative $ do
       addAlternative $
         docSeq
