@@ -162,6 +162,7 @@ instance Occurrences a NameAdornment
 instance Occurrences a NameAnn
 instance Occurrences a ParenType
 instance Occurrences a TrailingAnn
+instance Occurrences a Bool
 
 instance Occurrences a b => Occurrences a (GHC.Data.Strict.Maybe b)
 

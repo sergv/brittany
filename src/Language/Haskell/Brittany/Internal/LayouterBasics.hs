@@ -31,6 +31,7 @@ module Language.Haskell.Brittany.Internal.LayouterBasics
   , docEmpty
   , docLit
   , docLitS
+  , docLitFS
   , docExt
   , docAlt
   , CollectAltM
@@ -99,11 +100,13 @@ import Data.Sequence (Seq)
 import Data.Sequence qualified as Seq
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.Ext qualified as T
 import Data.Text.Lazy.Builder qualified as TLB
 import Data.Typeable
 import Prettyprinter (Pretty(..))
 
 import GHC (GenLocated(L), moduleName, moduleNameString)
+import GHC.Data.FastString
 import GHC.Parser.Annotation as GHC
 import GHC.Parser.Annotation qualified
 import GHC.PrettyInstances ()
@@ -367,6 +370,9 @@ docLit = allocateNode . BDLit
 
 docLitS :: String -> ToBriDocM BriDocNumbered
 docLitS = docLit . T.pack
+
+docLitFS :: FastString -> ToBriDocM BriDocNumbered
+docLitFS = docLit . T.fromFastString
 
 docExt
   :: ExactPrint (LocatedAn ann ast)

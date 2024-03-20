@@ -14,6 +14,7 @@ import Data.Semigroup
 import Data.Sequence qualified as Seq
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.Ext qualified as T
 import Data.Traversable
 
 import GHC (GenLocated(L))
@@ -739,22 +740,24 @@ layoutExpr lexpr@(L _ expr) = do
                   $ docForceSingleline <$> L.init stmtDocs
               , docLitS " ]"
               ]
-            addAlternative
-              $ let
-                  start = docCols
-                    ColListComp
-                    [ docNodeAnnKW lexpr Nothing $ appSep $ docLitS "["
-                    , docSetBaseY
-                    $ docNodeAnnKW lexpr (Just AnnOpenS)
-                    $ L.last stmtDocs
-                    ]
-                  stmtDocsInit = L.init stmtDocs
-                  s1           = L.head stmtDocsInit
-                  sM           = L.tail stmtDocsInit
-                  line1        =
-                    docCols ColListComp [appSep $ docLitS "|", s1]
-                  lineM        = sM <&> \d -> docCols ColListComp [docCommaSep, d]
-                in docSetBaseY $ docLines $ [start, line1] ++ lineM ++ [docBracketR]
+            case stmtDocs of
+              []    -> pure ()
+              _ : _ -> case L.init stmtDocs of
+                []      -> pure ()
+                s1 : sM ->
+                  addAlternative
+                    $ let
+                        start = docCols
+                          ColListComp
+                          [ docNodeAnnKW lexpr Nothing $ appSep $ docLitS "["
+                          , docSetBaseY
+                          $ docNodeAnnKW lexpr (Just AnnOpenS)
+                          $ L.last stmtDocs
+                          ]
+                        line1        =
+                          docCols ColListComp [appSep $ docLitS "|", s1]
+                        lineM        = sM <&> \d -> docCols ColListComp [docCommaSep, d]
+                      in docSetBaseY $ docLines $ [start, line1] ++ lineM ++ [docBracketR]
       _ -> do
         -- TODO
         unknownNodeError "HsDo{} unknown stmtCtx" lexpr
@@ -823,7 +826,7 @@ layoutExpr lexpr@(L _ expr) = do
           pure (fieldl, lrdrNameToText lnameF, fExpDoc)
         recordExpression True indentPolicy lexpr nameDoc fieldDocs
       _ -> unknownNodeError "RecordCon with puns" lexpr
-    RecordUpd _ rExpr (Left fields) -> do
+    RecordUpd _ rExpr (RegularRecUpdFields _ fields) -> do
       rExprDoc <- docSharedWrapper layoutExpr rExpr
       rFs      <- for fields $ \lfield@(L _ (HsFieldBind _ann (L _ ambName) rFExpr pun)) -> do
         rFExpDoc <- if pun
@@ -833,7 +836,7 @@ layoutExpr lexpr@(L _ expr) = do
           Unambiguous _ n -> (lfield, lrdrNameToText n, rFExpDoc)
           Ambiguous   _ n -> (lfield, lrdrNameToText n, rFExpDoc)
       recordExpression False indentPolicy lexpr rExprDoc rFs
-    RecordUpd _ _ (Right _) ->
+    RecordUpd _ _ (OverloadedRecUpdFields _ _) ->
       unknownNodeError "RecordUpd with RecUpdProj" lexpr
     ExprWithTySig _ e (HsWC _ext t) -> do
       expDoc <- docSharedWrapper layoutExpr e
@@ -1055,24 +1058,24 @@ recordExpression dotdot indentPolicy lexpr nameDoc rFs@(rF1 : rFr) = do
 
 litBriDoc :: HsLit GhcPs -> BriDocF BriDocNumbered
 litBriDoc = \case
-  HsChar         (SourceText t) _c             -> BDLit $ T.pack t -- BDLit $ T.pack $ ['\'', c, '\'']
-  HsCharPrim     (SourceText t) _c             -> BDLit $ T.pack t -- BDLit $ T.pack $ ['\'', c, '\'']
-  HsString       (SourceText t) _fastString    -> BDLit $ T.pack t -- BDLit $ T.pack $ FastString.unpackFS fastString
-  HsStringPrim   (SourceText t) _byteString    -> BDLit $ T.pack t -- BDLit $ T.pack $ Data.ByteString.Char8.unpack byteString
-  HsInt _        (IL (SourceText t) _ _)       -> BDLit $ T.pack t -- BDLit $ T.pack $ show i
-  HsIntPrim      (SourceText t) _i             -> BDLit $ T.pack t -- BDLit $ T.pack $ show i
-  HsWordPrim     (SourceText t) _i             -> BDLit $ T.pack t -- BDLit $ T.pack $ show i
-  HsInt64Prim    (SourceText t) _i             -> BDLit $ T.pack t -- BDLit $ T.pack $ show i
-  HsWord64Prim   (SourceText t) _i             -> BDLit $ T.pack t -- BDLit $ T.pack $ show i
-  HsInteger      (SourceText t) _i _type       -> BDLit $ T.pack t -- BDLit $ T.pack $ show i
-  HsRat _        FL{fl_text = SourceText t} _  -> BDLit $ T.pack t
-  HsFloatPrim _  FL{fl_text = SourceText t}    -> BDLit $ T.pack t
-  HsDoublePrim _ FL{fl_text = SourceText t}    -> BDLit $ T.pack t
+  HsChar         (SourceText t) _c             -> BDLit $ T.fromFastString t -- BDLit $ T.pack $ ['\'', c, '\'']
+  HsCharPrim     (SourceText t) _c             -> BDLit $ T.fromFastString t -- BDLit $ T.pack $ ['\'', c, '\'']
+  HsString       (SourceText t) _fastString    -> BDLit $ T.fromFastString t -- BDLit $ T.pack $ FastString.unpackFS fastString
+  HsStringPrim   (SourceText t) _byteString    -> BDLit $ T.fromFastString t -- BDLit $ T.pack $ Data.ByteString.Char8.unpack byteString
+  HsInt _        (IL (SourceText t) _ _)       -> BDLit $ T.fromFastString t -- BDLit $ T.pack $ show i
+  HsIntPrim      (SourceText t) _i             -> BDLit $ T.fromFastString t -- BDLit $ T.pack $ show i
+  HsWordPrim     (SourceText t) _i             -> BDLit $ T.fromFastString t -- BDLit $ T.pack $ show i
+  HsInt64Prim    (SourceText t) _i             -> BDLit $ T.fromFastString t -- BDLit $ T.pack $ show i
+  HsWord64Prim   (SourceText t) _i             -> BDLit $ T.fromFastString t -- BDLit $ T.pack $ show i
+  HsInteger      (SourceText t) _i _type       -> BDLit $ T.fromFastString t -- BDLit $ T.pack $ show i
+  HsRat _        FL{fl_text = SourceText t} _  -> BDLit $ T.fromFastString t
+  HsFloatPrim _  FL{fl_text = SourceText t}    -> BDLit $ T.fromFastString t
+  HsDoublePrim _ FL{fl_text = SourceText t}    -> BDLit $ T.fromFastString t
   _                                            -> error "litBriDoc: literal with no SourceText"
 
 overLitValBriDoc :: OverLitVal -> BriDocF BriDocNumbered
 overLitValBriDoc = \case
-  HsIntegral (IL (SourceText t) _ _)      -> BDLit $ T.pack t
-  HsFractional FL{fl_text = SourceText t} -> BDLit $ T.pack t
-  HsIsString (SourceText t) _             -> BDLit $ T.pack t
+  HsIntegral (IL (SourceText t) _ _)      -> BDLit $ T.fromFastString t
+  HsFractional FL{fl_text = SourceText t} -> BDLit $ T.fromFastString t
+  HsIsString (SourceText t) _             -> BDLit $ T.fromFastString t
   _                                       -> error "overLitValBriDoc: literal with no SourceText"

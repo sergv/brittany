@@ -1,10 +1,10 @@
-
 module Language.Haskell.Brittany.Internal.Layouters.Import (layoutImport) where
 
 import Control.Monad.Trans.MultiRWS (MonadMultiReader(..))
 import Data.Semigroup
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.Ext qualified as T
 
 import GHC (GenLocated(L), unLoc)
 import GHC.Hs
@@ -15,12 +15,12 @@ import Language.Haskell.Brittany.Internal.LayouterBasics
 import Language.Haskell.Brittany.Internal.Layouters.IE
 import Language.Haskell.Brittany.Internal.Types
 
-prepPkg :: SourceText -> String
+prepPkg :: SourceText -> Text
 prepPkg rawN = case rawN of
-  SourceText n -> n
+  SourceText n -> T.fromFastString n
   -- This would be odd to encounter and the
   -- result will most certainly be wrong
-  NoSourceText -> ""
+  NoSourceText -> T.empty
 
 layoutImport :: ImportDecl GhcPs -> ToBriDocM BriDocNumbered
 layoutImport importD = case importD of
@@ -33,7 +33,7 @@ layoutImport importD = case importD of
         pkgNameT :: Maybe Text
         pkgNameT    = case pkg of
           NoRawPkgQual -> Nothing
-          RawPkgQual s -> Just $ T.pack $ prepPkg $ sl_st s
+          RawPkgQual s -> Just $ prepPkg $ sl_st s
         masT        = T.pack . moduleNameString . unLoc <$> mas
         hiding      = case impList of
           Just (EverythingBut, _) -> True

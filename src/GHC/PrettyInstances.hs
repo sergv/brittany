@@ -6,10 +6,13 @@
 -- Maintainer  :  serg.foo@gmail.com
 ----------------------------------------------------------------------------
 
+{-# LANGUAGE CPP                  #-}
+{-# LANGUAGE DataKinds            #-}
 {-# LANGUAGE DeriveGeneric        #-}
 {-# LANGUAGE DerivingVia          #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE LambdaCase           #-}
+{-# LANGUAGE MonoLocalBinds       #-}
 {-# LANGUAGE OverloadedStrings    #-}
 {-# LANGUAGE StandaloneDeriving   #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -33,8 +36,10 @@ import GHC.Data.BooleanFormula
 import GHC.Data.FastString
 import GHC.Data.Strict qualified as Strict
 import GHC.Types.Basic
+import GHC.Types.FieldLabel
 import GHC.Types.Fixity
 import GHC.Types.ForeignCall
+import GHC.Types.GREInfo
 import GHC.Types.Name
 import GHC.Types.Name.Reader
 import GHC.Types.PkgQual
@@ -117,11 +122,15 @@ deriving instance Generic (GenInstantiatedUnit UnitId)
 deriving instance Generic (GenLocated a b)
 deriving instance Generic (GenModule Unit)
 deriving instance Generic (GenUnit UnitId)
-deriving instance Generic (HsArg a b)
+deriving instance Generic (GlobalRdrEltX GREInfo)
+deriving instance Generic (HsArg GhcPs b c)
+deriving instance Generic (HsArg GhcRn b c)
 deriving instance Generic (HsArrow GhcPs)
 deriving instance Generic (HsArrow GhcRn)
 deriving instance Generic (HsBindLR GhcPs GhcPs)
 deriving instance Generic (HsBindLR GhcRn GhcRn)
+deriving instance Generic (HsBndrVis GhcPs)
+deriving instance Generic (HsBndrVis GhcRn)
 deriving instance Generic (HsCmd GhcPs)
 deriving instance Generic (HsCmd GhcRn)
 deriving instance Generic (HsCmdTop GhcPs)
@@ -155,6 +164,7 @@ deriving instance Generic (HsLocalBindsLR GhcPs GhcPs)
 deriving instance Generic (HsLocalBindsLR GhcRn GhcRn)
 deriving instance Generic (HsMatchContext GhcPs)
 deriving instance Generic (HsMatchContext GhcRn)
+deriving instance Generic (HsMatchContext GhcTc)
 deriving instance Generic (HsModule GhcPs)
 deriving instance Generic (HsOuterTyVarBndrs a GhcPs)
 deriving instance Generic (HsOuterTyVarBndrs a GhcRn)
@@ -171,12 +181,14 @@ deriving instance Generic (HsQuote GhcPs)
 deriving instance Generic (HsQuote GhcRn)
 deriving instance Generic (HsRecFields GhcPs a)
 deriving instance Generic (HsRecFields GhcRn a)
+deriving instance Generic (HsRecUpdParent GhcRn)
 deriving instance Generic (HsScaled GhcPs a)
 deriving instance Generic (HsScaled GhcRn a)
 deriving instance Generic (HsSigType GhcPs)
 deriving instance Generic (HsSigType GhcRn)
 deriving instance Generic (HsStmtContext GhcPs)
 deriving instance Generic (HsStmtContext GhcRn)
+deriving instance Generic (HsStmtContext GhcTc)
 deriving instance Generic (HsToken a)
 deriving instance Generic (HsTupArg GhcPs)
 deriving instance Generic (HsTupArg GhcRn)
@@ -205,6 +217,8 @@ deriving instance Generic (InstDecl GhcPs)
 deriving instance Generic (InstDecl GhcRn)
 deriving instance Generic (LHsQTyVars GhcPs)
 deriving instance Generic (LHsQTyVars GhcRn)
+deriving instance Generic (LHsRecUpdFields GhcPs)
+deriving instance Generic (LHsRecUpdFields GhcRn)
 deriving instance Generic (LayoutInfo GhcPs)
 deriving instance Generic (LayoutInfo GhcRn)
 deriving instance Generic (Match GhcPs a)
@@ -246,6 +260,7 @@ deriving instance Generic (TyClDecl GhcPs)
 deriving instance Generic (TyClDecl GhcRn)
 deriving instance Generic (TyClGroup GhcPs)
 deriving instance Generic (TyClGroup GhcRn)
+deriving instance Generic (TyConFlavour Name)
 deriving instance Generic (TyFamInstDecl GhcPs)
 deriving instance Generic (TyFamInstDecl GhcRn)
 deriving instance Generic (VarBndr a b)
@@ -285,9 +300,13 @@ deriving instance Generic CoAxBranch
 deriving instance Generic CoSel
 deriving instance Generic Coercion
 deriving instance Generic CoercionHole
+deriving instance Generic ConInfo
+deriving instance Generic ConLikeName
 deriving instance Generic DataConCantHappen
 deriving instance Generic DataDeclRn
 deriving instance Generic DeltaPos
+deriving instance Generic DoPmc
+deriving instance Generic DuplicateRecordFields
 deriving instance Generic EpAnnComments
 deriving instance Generic EpAnnHsCase
 deriving instance Generic EpAnnImportDecl
@@ -296,7 +315,9 @@ deriving instance Generic EpAnnUnboundVar
 deriving instance Generic EpaComment
 deriving instance Generic EpaCommentTok
 deriving instance Generic EpaLocation
+deriving instance Generic FieldLabel
 deriving instance Generic FieldLabelString
+deriving instance Generic FieldSelectors
 deriving instance Generic Fixity
 deriving instance Generic FixityDirection
 deriving instance Generic ForAllTyFlag
@@ -304,6 +325,7 @@ deriving instance Generic FractionalExponentBase
 deriving instance Generic FractionalLit
 deriving instance Generic FunSel
 deriving instance Generic FunTyFlag
+deriving instance Generic GREInfo
 deriving instance Generic GrhsAnn
 deriving instance Generic Header
 deriving instance Generic HsArrAppType
@@ -320,8 +342,12 @@ deriving instance Generic HsSrcBang
 deriving instance Generic HsTupleSort
 deriving instance Generic IEWildcard
 deriving instance Generic IdSig
+deriving instance Generic ImpDeclSpec
+deriving instance Generic ImpItemSpec
 deriving instance Generic ImportDeclQualifiedStyle
 deriving instance Generic ImportListInterpretation
+deriving instance Generic ImportSpec
+deriving instance Generic InWarningCategory
 deriving instance Generic InlinePragma
 deriving instance Generic InlineSpec
 deriving instance Generic IntegralLit
@@ -340,10 +366,12 @@ deriving instance Generic OverLitRn
 deriving instance Generic OverLitVal
 deriving instance Generic OverlapMode
 deriving instance Generic ParenType
+deriving instance Generic Parent
 deriving instance Generic PendingRnSplice
 deriving instance Generic PromotionFlag
 deriving instance Generic RawPkgQual
 deriving instance Generic RdrName
+deriving instance Generic RecFieldInfo
 deriving instance Generic RecFieldsDotDot
 deriving instance Generic RecFlag
 deriving instance Generic Role
@@ -363,9 +391,11 @@ deriving instance Generic TrailingAnn
 deriving instance Generic TransForm
 deriving instance Generic TyLit
 deriving instance Generic Type
+deriving instance Generic TypeOrData
 deriving instance Generic UnitId
 deriving instance Generic UnivCoProvenance
 deriving instance Generic UntypedSpliceFlavour
+deriving instance Generic WarningCategory
 deriving instance Generic XBindStmtRn
 deriving instance Generic XImportDeclPass
 deriving instance Generic XModulePs
@@ -507,11 +537,15 @@ deriving via PPGeneric (GenInstantiatedUnit UnitId) instance Pretty (GenInstanti
 deriving via PPGeneric (GenLocated a b) instance (Pretty a, Pretty b) => Pretty (GenLocated a b)
 deriving via PPGeneric (GenModule Unit) instance Pretty (GenModule Unit)
 deriving via PPGeneric (GenUnit UnitId) instance Pretty (GenUnit UnitId)
-deriving via PPGeneric (HsArg a b) instance (Pretty a, Pretty b) => Pretty (HsArg a b)
+deriving via PPGeneric (GlobalRdrEltX GREInfo) instance Pretty (GlobalRdrEltX GREInfo)
+deriving via PPGeneric (HsArg GhcPs b c) instance (Pretty b, Pretty c) => Pretty (HsArg GhcPs b c)
+deriving via PPGeneric (HsArg GhcRn b c) instance (Pretty b, Pretty c) => Pretty (HsArg GhcRn b c)
 deriving via PPGeneric (HsArrow GhcPs) instance Pretty (HsArrow GhcPs)
 deriving via PPGeneric (HsArrow GhcRn) instance Pretty (HsArrow GhcRn)
 deriving via PPGeneric (HsBindLR GhcPs GhcPs) instance Pretty (HsBindLR GhcPs GhcPs)
 deriving via PPGeneric (HsBindLR GhcRn GhcRn) instance Pretty (HsBindLR GhcRn GhcRn)
+deriving via PPGeneric (HsBndrVis GhcPs) instance Pretty (HsBndrVis GhcPs)
+deriving via PPGeneric (HsBndrVis GhcRn) instance Pretty (HsBndrVis GhcRn)
 deriving via PPGeneric (HsCmd GhcPs) instance Pretty (HsCmd GhcPs)
 deriving via PPGeneric (HsCmd GhcRn) instance Pretty (HsCmd GhcRn)
 deriving via PPGeneric (HsCmdTop GhcPs) instance Pretty (HsCmdTop GhcPs)
@@ -545,6 +579,7 @@ deriving via PPGeneric (HsLocalBindsLR GhcPs GhcPs) instance Pretty (HsLocalBind
 deriving via PPGeneric (HsLocalBindsLR GhcRn GhcRn) instance Pretty (HsLocalBindsLR GhcRn GhcRn)
 deriving via PPGeneric (HsMatchContext GhcPs) instance Pretty (HsMatchContext GhcPs)
 deriving via PPGeneric (HsMatchContext GhcRn) instance Pretty (HsMatchContext GhcRn)
+deriving via PPGeneric (HsMatchContext GhcTc) instance Pretty (HsMatchContext GhcTc)
 deriving via PPGeneric (HsModule GhcPs) instance Pretty (HsModule GhcPs)
 deriving via PPGeneric (HsOuterTyVarBndrs a GhcPs) instance Pretty a => Pretty (HsOuterTyVarBndrs a GhcPs)
 deriving via PPGeneric (HsOuterTyVarBndrs a GhcRn) instance Pretty a => Pretty (HsOuterTyVarBndrs a GhcRn)
@@ -561,12 +596,14 @@ deriving via PPGeneric (HsQuote GhcPs) instance Pretty (HsQuote GhcPs)
 deriving via PPGeneric (HsQuote GhcRn) instance Pretty (HsQuote GhcRn)
 deriving via PPGeneric (HsRecFields GhcPs a) instance Pretty a => Pretty (HsRecFields GhcPs a)
 deriving via PPGeneric (HsRecFields GhcRn a) instance Pretty a => Pretty (HsRecFields GhcRn a)
+deriving via PPGeneric (HsRecUpdParent GhcRn) instance Pretty (HsRecUpdParent GhcRn)
 deriving via PPGeneric (HsScaled GhcPs a) instance Pretty a => Pretty (HsScaled GhcPs a)
 deriving via PPGeneric (HsScaled GhcRn a) instance Pretty a => Pretty (HsScaled GhcRn a)
 deriving via PPGeneric (HsSigType GhcPs) instance Pretty (HsSigType GhcPs)
 deriving via PPGeneric (HsSigType GhcRn) instance Pretty (HsSigType GhcRn)
 deriving via PPGeneric (HsStmtContext GhcPs) instance Pretty (HsStmtContext GhcPs)
 deriving via PPGeneric (HsStmtContext GhcRn) instance Pretty (HsStmtContext GhcRn)
+deriving via PPGeneric (HsStmtContext GhcTc) instance Pretty (HsStmtContext GhcTc)
 deriving via PPGeneric (HsToken a) instance Pretty (HsToken a)
 deriving via PPGeneric (HsTupArg GhcPs) instance Pretty (HsTupArg GhcPs)
 deriving via PPGeneric (HsTupArg GhcRn) instance Pretty (HsTupArg GhcRn)
@@ -595,6 +632,8 @@ deriving via PPGeneric (InstDecl GhcPs) instance Pretty (InstDecl GhcPs)
 deriving via PPGeneric (InstDecl GhcRn) instance Pretty (InstDecl GhcRn)
 deriving via PPGeneric (LHsQTyVars GhcPs) instance Pretty (LHsQTyVars GhcPs)
 deriving via PPGeneric (LHsQTyVars GhcRn) instance Pretty (LHsQTyVars GhcRn)
+deriving via PPGeneric (LHsRecUpdFields GhcPs) instance Pretty (LHsRecUpdFields GhcPs)
+deriving via PPGeneric (LHsRecUpdFields GhcRn) instance Pretty (LHsRecUpdFields GhcRn)
 deriving via PPGeneric (LayoutInfo GhcPs) instance Pretty (LayoutInfo GhcPs)
 deriving via PPGeneric (LayoutInfo GhcRn) instance Pretty (LayoutInfo GhcRn)
 deriving via PPGeneric (Match GhcPs (GenLocated SrcSpanAnnA (HsCmd GhcPs))) instance Pretty (Match GhcPs (GenLocated SrcSpanAnnA (HsCmd GhcPs)))
@@ -638,6 +677,7 @@ deriving via PPGeneric (TyClDecl GhcPs) instance Pretty (TyClDecl GhcPs)
 deriving via PPGeneric (TyClDecl GhcRn) instance Pretty (TyClDecl GhcRn)
 deriving via PPGeneric (TyClGroup GhcPs) instance Pretty (TyClGroup GhcPs)
 deriving via PPGeneric (TyClGroup GhcRn) instance Pretty (TyClGroup GhcRn)
+deriving via PPGeneric (TyConFlavour Name) instance Pretty (TyConFlavour Name)
 deriving via PPGeneric (TyFamInstDecl GhcPs) instance Pretty (TyFamInstDecl GhcPs)
 deriving via PPGeneric (TyFamInstDecl GhcRn) instance Pretty (TyFamInstDecl GhcRn)
 deriving via PPGeneric (VarBndr a b) instance (Pretty a, Pretty b) => Pretty (VarBndr a b)
@@ -678,9 +718,13 @@ deriving via PPGeneric CoAxBranch instance Pretty CoAxBranch
 deriving via PPGeneric CoSel instance Pretty CoSel
 deriving via PPGeneric Coercion instance Pretty Coercion
 deriving via PPGeneric CoercionHole instance Pretty CoercionHole
+deriving via PPGeneric ConInfo instance Pretty ConInfo
+deriving via PPGeneric ConLikeName instance Pretty ConLikeName
 deriving via PPGeneric DataConCantHappen instance Pretty DataConCantHappen
 deriving via PPGeneric DataDeclRn instance Pretty DataDeclRn
 deriving via PPGeneric DeltaPos instance Pretty DeltaPos
+deriving via PPGeneric DoPmc instance Pretty DoPmc
+deriving via PPGeneric DuplicateRecordFields instance Pretty DuplicateRecordFields
 deriving via PPGeneric EpAnnComments instance Pretty EpAnnComments
 deriving via PPGeneric EpAnnHsCase instance Pretty EpAnnHsCase
 deriving via PPGeneric EpAnnImportDecl instance Pretty EpAnnImportDecl
@@ -689,7 +733,9 @@ deriving via PPGeneric EpAnnUnboundVar instance Pretty EpAnnUnboundVar
 deriving via PPGeneric EpaComment instance Pretty EpaComment
 deriving via PPGeneric EpaCommentTok instance Pretty EpaCommentTok
 deriving via PPGeneric EpaLocation instance Pretty EpaLocation
+deriving via PPGeneric FieldLabel instance Pretty FieldLabel
 deriving via PPGeneric FieldLabelString instance Pretty FieldLabelString
+deriving via PPGeneric FieldSelectors instance Pretty FieldSelectors
 deriving via PPGeneric Fixity instance Pretty Fixity
 deriving via PPGeneric FixityDirection instance Pretty FixityDirection
 deriving via PPGeneric ForAllTyFlag instance Pretty ForAllTyFlag
@@ -697,6 +743,7 @@ deriving via PPGeneric FractionalExponentBase instance Pretty FractionalExponent
 deriving via PPGeneric FractionalLit instance Pretty FractionalLit
 deriving via PPGeneric FunSel instance Pretty FunSel
 deriving via PPGeneric FunTyFlag instance Pretty FunTyFlag
+deriving via PPGeneric GREInfo instance Pretty GREInfo
 deriving via PPGeneric GrhsAnn instance Pretty GrhsAnn
 deriving via PPGeneric Header instance Pretty Header
 deriving via PPGeneric HsArrAppType instance Pretty HsArrAppType
@@ -713,8 +760,12 @@ deriving via PPGeneric HsSrcBang instance Pretty HsSrcBang
 deriving via PPGeneric HsTupleSort instance Pretty HsTupleSort
 deriving via PPGeneric IEWildcard instance Pretty IEWildcard
 deriving via PPGeneric IdSig instance Pretty IdSig
+deriving via PPGeneric ImpDeclSpec instance Pretty ImpDeclSpec
+deriving via PPGeneric ImpItemSpec instance Pretty ImpItemSpec
 deriving via PPGeneric ImportDeclQualifiedStyle instance Pretty ImportDeclQualifiedStyle
 deriving via PPGeneric ImportListInterpretation instance Pretty ImportListInterpretation
+deriving via PPGeneric ImportSpec instance Pretty ImportSpec
+deriving via PPGeneric InWarningCategory instance Pretty InWarningCategory
 deriving via PPGeneric InlinePragma instance Pretty InlinePragma
 deriving via PPGeneric InlineSpec instance Pretty InlineSpec
 deriving via PPGeneric IntegralLit instance Pretty IntegralLit
@@ -733,10 +784,12 @@ deriving via PPGeneric OverLitRn instance Pretty OverLitRn
 deriving via PPGeneric OverLitVal instance Pretty OverLitVal
 deriving via PPGeneric OverlapMode instance Pretty OverlapMode
 deriving via PPGeneric ParenType instance Pretty ParenType
+deriving via PPGeneric Parent instance Pretty Parent
 deriving via PPGeneric PendingRnSplice instance Pretty PendingRnSplice
 deriving via PPGeneric PromotionFlag instance Pretty PromotionFlag
 deriving via PPGeneric RawPkgQual instance Pretty RawPkgQual
 deriving via PPGeneric RdrName instance Pretty RdrName
+deriving via PPGeneric RecFieldInfo instance Pretty RecFieldInfo
 deriving via PPGeneric RecFieldsDotDot instance Pretty RecFieldsDotDot
 deriving via PPGeneric RecFlag instance Pretty RecFlag
 deriving via PPGeneric Role instance Pretty Role
@@ -755,10 +808,18 @@ deriving via PPGeneric TrailingAnn instance Pretty TrailingAnn
 deriving via PPGeneric TransForm instance Pretty TransForm
 deriving via PPGeneric TyLit instance Pretty TyLit
 deriving via PPGeneric Type instance Pretty Type
+deriving via PPGeneric TypeOrData instance Pretty TypeOrData
 deriving via PPGeneric UnitId instance Pretty UnitId
 deriving via PPGeneric UnivCoProvenance instance Pretty UnivCoProvenance
 deriving via PPGeneric UntypedSpliceFlavour instance Pretty UntypedSpliceFlavour
+deriving via PPGeneric WarningCategory instance Pretty WarningCategory
 deriving via PPGeneric XBindStmtRn instance Pretty XBindStmtRn
 deriving via PPGeneric XImportDeclPass instance Pretty XImportDeclPass
 deriving via PPGeneric XModulePs instance Pretty XModulePs
 deriving via PPGeneric XViaStrategyPs instance Pretty XViaStrategyPs
+
+instance Pretty (GhcPass ix) where
+  pretty = \case
+    GhcPs -> "GhcPs"
+    GhcRn -> "GhcRn"
+    GhcTc -> "GhcTc"

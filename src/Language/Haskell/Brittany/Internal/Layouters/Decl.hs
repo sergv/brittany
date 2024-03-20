@@ -709,7 +709,7 @@ layoutSynDecl
   :: LexicalFixity
   -> (ToBriDocM BriDocNumbered -> ToBriDocM BriDocNumbered)
   -> LIdP GhcPs
-  -> [LHsTyVarBndr () GhcPs]
+  -> [LHsTyVarBndr (HsBndrVis GhcPs) GhcPs]
   -> LHsType GhcPs
   -> ToBriDocM BriDocNumbered
 layoutSynDecl fixity wrapNodeRest name vars typ = do
@@ -745,14 +745,14 @@ layoutSynDecl fixity wrapNodeRest name vars typ = do
   let hasComments = hasAnyCommentsConnected typ
   layoutLhsAndType hasComments sharedLhs "=" typeDoc
 
-layoutTyVarBndr :: Bool -> LHsTyVarBndr () GhcPs -> ToBriDocM BriDocNumbered
+layoutTyVarBndr :: Bool -> LHsTyVarBndr (HsBndrVis GhcPs) GhcPs -> ToBriDocM BriDocNumbered
 layoutTyVarBndr needsSep lbndr@(L _ bndr) = do
   docWrapNodeBefore lbndr $ case bndr of
-    UserTyVar _ _ name -> do
-      let nameStr = lrdrNameToTextAnn name
+    UserTyVar _ vis name -> do
+      let nameStr = prefix vis <> lrdrNameToTextAnn name
       docSeq $ [ docSeparator | needsSep ] ++ [docLit nameStr]
-    KindedTyVar _ _ name kind -> do
-      let nameStr = lrdrNameToTextAnn name
+    KindedTyVar _ vis name kind -> do
+      let nameStr = prefix vis <> lrdrNameToTextAnn name
       docSeq
         $ [ docSeparator | needsSep ]
         ++ [ docParenL
@@ -761,6 +761,11 @@ layoutTyVarBndr needsSep lbndr@(L _ bndr) = do
            , docForceSingleline $ layoutType kind
            , docParenR
            ]
+  where
+    prefix :: HsBndrVis GhcPs -> Text
+    prefix = \case
+      HsBndrRequired    -> ""
+      HsBndrInvisible _ -> "@"
 
 --------------------------------------------------------------------------------
 -- TyFamInstDecl
@@ -807,7 +812,7 @@ layoutTyFamInstDecl inClass outerNode tfid = do
     layoutLhsAndType hasComments lhs "=" typeDoc
 
 layoutHsTyPats
-  :: [HsArg (LHsType GhcPs) (LHsKind GhcPs)] -> [ToBriDocM BriDocNumbered]
+  :: [HsArg a (LHsType GhcPs) (LHsKind GhcPs)] -> [ToBriDocM BriDocNumbered]
 layoutHsTyPats pats = pats <&> \case
   HsValArg tm -> layoutType tm
   HsTypeArg _l ty -> docSeq [docLitS "@", layoutType ty]

@@ -176,7 +176,8 @@ initialToolSettings = GHC.Settings.ToolSettings
   , GHC.Settings.toolSettings_useInplaceMinGW         = True
   , GHC.Settings.toolSettings_arSupportsDashL         = True
   , GHC.Settings.toolSettings_pgm_cxx                 = ""
-#if MIN_VERSION_ghc(9, 6, 4)
   , GHC.Settings.toolSettings_ldSupportsSingleModule  = True
+#if MIN_VERSION_ghc(9, 8, 1)
+  , GHC.Settings.toolSettings_ldSupportsResponseFiles = True
 #endif
   }

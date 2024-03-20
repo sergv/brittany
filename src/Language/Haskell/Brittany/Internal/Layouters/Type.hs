@@ -38,20 +38,20 @@ layoutContext :: LHsContext GhcPs -> ToBriDocM BriDocNumbered
 layoutContext = layoutContext' defaultLayoutTypeConfig
 
 layoutContext' :: LayoutTypeConfig -> LHsContext GhcPs -> ToBriDocM BriDocNumbered
-layoutContext' cfg lcs@(L _ cs) = do
-  cs' <- traverse (docSharedWrapper (layoutType' cfg)) cs
+layoutContext' cfg lcs@(L _ cs'') = do
+  cs' <- traverse (docSharedWrapper (layoutType' cfg)) cs''
   docWrapNodeAround lcs $ case cs' of
-    []  -> docLitS "()"
-    [x] -> x
-    _   -> runFilteredAlternative $ do
+    []     -> docLitS "()"
+    [x]    -> x
+    c : cs -> runFilteredAlternative $ do
       addAlternative $ do
         let list = L.intersperse docCommaSep $ docForceSingleline <$> cs'
         docSeq $ [docParenL] ++ list ++ [docParenR]
       addAlternative $ do
         let open = docCols
               ColTyOpPrefix
-              [docParenLSep, docAddBaseY (BrIndentSpecial 2) $ head cs']
-            list = L.tail cs' <&> \cntxtDoc -> docCols
+              [docParenLSep, docAddBaseY (BrIndentSpecial 2) c]
+            list = cs <&> \cntxtDoc -> docCols
               ColTyOpPrefix
               [docCommaSep, docAddBaseY (BrIndentSpecial 2) $ cntxtDoc]
         docPar open $ docLines $ list ++ [docParenR]
@@ -338,22 +338,22 @@ layoutType' cfg ltype@(L _typAnn typ) = docWrapNodeAround ltype $ case typ of
     unitL  = docLitS "()"
     simpleL = do
       docs <- traverse (docSharedWrapper (layoutType' cfg)) typs
-      let lines =
-            L.tail docs
-              <&> \d -> docAddBaseY (BrIndentSpecial 2)
-                    $ docCols ColTyOpPrefix [docCommaSep, d]
-          commaDocs = L.intersperse docCommaSep (docForceSingleline <$> docs)
+      let commaDocs = L.intersperse docCommaSep (docForceSingleline <$> docs)
       runFilteredAlternative $ do
         addAlternative $
           docSeq
             $ [docParenL]
             ++ docWrapNodeAfter ltype commaDocs
             ++ [docParenR]
-        addAlternative $ do
-          let line1 = docCols ColTyOpPrefix [docParenLSep, head docs]
-          docPar
-            (docAddBaseY (BrIndentSpecial 2) line1)
-            (docLines $ docWrapNodeAfter ltype lines ++ [docParenR])
+        case docs of
+          []     -> pure ()
+          d : ds ->
+            addAlternative $ do
+              let line1 = docCols ColTyOpPrefix [docParenLSep, d]
+                  lines = (\x -> docAddBaseY (BrIndentSpecial 2) $ docCols ColTyOpPrefix [docCommaSep, x]) <$> ds
+              docPar
+                (docAddBaseY (BrIndentSpecial 2) line1)
+                (docLines $ docWrapNodeAfter ltype lines ++ [docParenR])
     unboxedL = do
       docs <- traverse (docSharedWrapper (layoutType' cfg)) typs
       let start = docParenHashLSep
@@ -364,15 +364,15 @@ layoutType' cfg ltype@(L _typAnn typ) = docWrapNodeAround ltype $ case typ of
             $ [start]
             ++ docWrapNodeAfter ltype (L.intersperse docCommaSep docs)
             ++ [end]
-        addAlternative $ do
-          let line1 = docCols ColTyOpPrefix [start, head docs]
-              lines =
-                L.tail docs
-                  <&> \d -> docAddBaseY (BrIndentSpecial 2)
-                        $ docCols ColTyOpPrefix [docCommaSep, d]
-          docPar
-            (docAddBaseY (BrIndentSpecial 2) line1)
-            (docLines $ lines ++ [end])
+        case docs of
+          []     -> pure ()
+          d : ds ->
+            addAlternative $ do
+              let line1 = docCols ColTyOpPrefix [start, d]
+                  lines = (\x -> docAddBaseY (BrIndentSpecial 2) $ docCols ColTyOpPrefix [docCommaSep, x]) <$> ds
+              docPar
+                (docAddBaseY (BrIndentSpecial 2) line1)
+                (docLines $ lines ++ [end])
   HsOpTy{} -> -- TODO
     briDocByExactInlineOnly "HsOpTy{}" ltype
   -- HsOpTy typ1 opName typ2 -> do
@@ -610,7 +610,7 @@ layoutType' cfg ltype@(L _typAnn typ) = docWrapNodeAround ltype $ case typ of
           HsStrTy x _ -> x
           HsCharTy x _ -> x
     case srctext of
-      SourceText x -> docLitS x
+      SourceText x -> docLitFS x
       NoSourceText ->
         error "overLitValBriDoc: literal without SourceText"
   HsWildCardTy _ -> docLitS "_"
@@ -621,7 +621,7 @@ layoutType' cfg ltype@(L _typAnn typ) = docWrapNodeAround ltype $ case typ of
       then docLitS "\x2605" -- Unicode star
       else docLitS "*"
   XHsType{} -> error "brittany internal error: XHsType"
-  HsAppKindTy _ ty kind -> do
+  HsAppKindTy _ ty _ kind -> do
     t <- docSharedWrapper (layoutType' cfg) ty
     k <- docSharedWrapper (layoutType' cfg) kind
     runFilteredAlternative $ do

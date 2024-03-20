@@ -174,11 +174,11 @@ transformAlts
                                       -- possibility, but i will prefer a
                                       -- fail-early approach; BDEmpty does not
                                       -- make sense semantically for Alt[].
-      BDAlt alts -> do
+      BDAlt alts@(firstAlt : _) -> do
         altChooser <- confUnpack . _lconfig_altChooser . _conf_layout <$> mAsk
         case altChooser of
           AltChooserSimpleQuick ->
-            rec $ head alts
+            rec firstAlt
           AltChooserShallowBest -> do
             spacings <- traverse getSpacing alts
             acp      <- mGet

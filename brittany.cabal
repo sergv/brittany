@@ -41,29 +41,32 @@ common ghc-options
   default-language:
     GHC2021
 
+  default-extensions:
+    LambdaCase
+
   ghc-options:
     -Weverything
-    -Wno-type-defaults
-    -Wno-implicit-prelude
-    -Wno-missing-local-signatures
-    -Wno-missing-import-lists
-    -Wno-missed-specialisations
     -Wno-all-missed-specialisations
-    -Wno-safe
+    -Wno-implicit-prelude
+    -Wno-missed-specialisations
+    -Wno-missing-import-lists
+    -Wno-missing-local-signatures
     -Wno-missing-safe-haskell-mode
+    -Wno-safe
     -Wno-unsafe
 
   if impl(ghc >= 8.8)
     ghc-options:
       -Wno-missing-deriving-strategies
 
-  if impl(ghc >= 8.10)
-    ghc-options:
-      -Wno-prepositive-qualified-module
-
   if impl(ghc >= 9.2)
     ghc-options:
       -Wno-missing-kind-signatures
+
+  if impl(ghc >= 9.8)
+    ghc-options:
+      -Wno-missing-role-annotations
+      -Wno-missing-poly-kind-signatures
 
   if flag(pedantic)
     ghc-options: -Werror
@@ -116,6 +119,9 @@ library
 
     GHC.PrettyInstances
 
+  other-modules:
+    Data.Text.Ext
+
   build-depends:
     , aeson >= 2.0.1
     , base >= 4.18.0
@@ -127,9 +133,9 @@ library
     , extra >= 1.7.10
     , filepath >= 1.4.2
     , free
-    , ghc >= 9.6.1
+    , ghc >= 9.8.1
     , ghc-boot-th >= 9.2.2
-    , ghc-exactprint >= 1.7.1
+    , ghc-exactprint >= 1.8
     , monad-memo >= 0.5.3
     , mtl >= 2.2.2
     , multistate >= 0.8.0
@@ -201,8 +207,8 @@ executable brittany-investigation
     exe
   build-depends:
     , base >= 4.9
-    , ghc >= 9.6.1
-    , ghc-exactprint >= 1.7.1
+    , ghc >= 9.8.1
+    , ghc-exactprint >= 1.8
     , prettyprinter-combinators
     , text
     , transformers

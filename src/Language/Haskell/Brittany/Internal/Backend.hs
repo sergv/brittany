@@ -667,7 +667,7 @@ processInfo maxSpace m = \case
               fixed   = map (truncate . (* factor) . fromIntegral) offsets
           _ -> posXs
 
-        spacings = zipWith (-) (L.tail fixedPosXs ++ [min maxX colMax]) fixedPosXs
+        spacings = zipWith (-) (L.drop 1 fixedPosXs ++ [min maxX colMax]) fixedPosXs
 
         alignAct :: m ()
         alignAct = zip3 fixedPosXs spacings list `forM_` \(destX, s, x) -> do

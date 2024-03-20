@@ -201,20 +201,20 @@ layoutBaseYPushInternal i =
 
 layoutBaseYPopInternal :: MonadMultiState LayoutState m => m ()
 layoutBaseYPopInternal =
-  mModify $ \s -> s { _lstate_baseYs = L.tail $ _lstate_baseYs s }
+  mModify $ \s -> s { _lstate_baseYs = L.drop 1 $ _lstate_baseYs s }
 
 layoutIndentLevelPushInternal :: MonadMultiState LayoutState m => Int -> m ()
 layoutIndentLevelPushInternal i =
   mModify $ \s -> s
     { _lstate_indLevelLinger = lstate_indLevel s
-    , _lstate_indLevels = i : _lstate_indLevels s
+    , _lstate_indLevels      = i : _lstate_indLevels s
     }
 
 layoutIndentLevelPopInternal :: MonadMultiState LayoutState m => m ()
 layoutIndentLevelPopInternal =
   mModify $ \s -> s
     { _lstate_indLevelLinger = lstate_indLevel s
-    , _lstate_indLevels = L.tail $ _lstate_indLevels s
+    , _lstate_indLevels      = L.drop 1 $ _lstate_indLevels s
     }
 
 layoutRemoveIndentLevelLinger :: MonadMultiState LayoutState m => m ()

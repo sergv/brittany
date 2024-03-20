@@ -138,7 +138,7 @@ transformSimplifyFloating = stepFull . stepBO
             Just $ BDSeq $ L.init list ++ [Fix (BDAnnotationKW kw (L.last list))]
           BDAnnotationKW kw (Fix (BDLines list)) ->
             Just $ BDLines $ L.init list ++ [Fix (BDAnnotationKW kw (L.last list))]
-          BDAnnotationKW kw (Fix (BDCols sig cols)) ->
+          BDAnnotationKW kw (Fix (BDCols sig cols@(_ : _))) ->
             Just $ BDCols sig $ L.init cols ++ [Fix (BDAnnotationKW kw (L.last cols))]
           BDAnnotationKW kw (Fix (BDAddBaseY indent x)) ->
             Just $ BDAddBaseY indent $ Fix $ BDAnnotationKW kw x
@@ -151,8 +151,8 @@ transformSimplifyFloating = stepFull . stepBO
       where
         coalg :: BriDocF BriDoc -> Maybe (BriDocF BriDoc)
         coalg = \case
-          BDBaseYPushCur (Fix (BDCols sig cols@(_ : _))) ->
-            Just $ BDCols sig $ Fix (BDBaseYPushCur (L.head cols)) : L.tail cols
+          BDBaseYPushCur (Fix (BDCols sig (c : cs))) ->
+            Just $ BDCols sig $ Fix (BDBaseYPushCur c) : cs
           BDBaseYPushCur (Fix (BDDebug s x)) ->
             Just $ BDDebug s $ Fix $ BDBaseYPushCur x
           _ -> Nothing
@@ -173,8 +173,8 @@ transformSimplifyFloating = stepFull . stepBO
       where
         coalg :: BriDocF BriDoc -> Maybe (BriDocF BriDoc)
         coalg = \case
-          BDIndentLevelPushCur (Fix (BDCols sig cols@(_ : _))) ->
-            Just $ BDCols sig (Fix (BDIndentLevelPushCur (L.head cols)) : L.tail cols)
+          BDIndentLevelPushCur (Fix (BDCols sig (c : cs))) ->
+            Just $ BDCols sig (Fix (BDIndentLevelPushCur c) : cs)
           BDIndentLevelPushCur (Fix (BDDebug s x)) ->
             Just $ BDDebug s $ Fix $ BDIndentLevelPushCur x
           _ -> Nothing
@@ -200,7 +200,7 @@ transformSimplifyFloating = stepFull . stepBO
           BDAddBaseY indent (Fix (BDLines lines)) ->
             Just $ BDLines $ Fix . BDAddBaseY indent <$> lines
           -- AddIndent floats into last column
-          BDAddBaseY indent (Fix (BDCols sig cols)) ->
+          BDAddBaseY indent (Fix (BDCols sig cols@(_ : _))) ->
             Just $ BDCols sig $ L.init cols ++ [Fix (BDAddBaseY indent (L.last cols))]
           -- merge AddIndent and Par
           BDAddBaseY ind1 (Fix (BDPar ind2 line indented)) ->

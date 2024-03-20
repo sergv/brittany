@@ -1,4 +1,4 @@
-import qualified Language.Haskell.Brittany.Main as BrittanyMain
+import Language.Haskell.Brittany.Main qualified as BrittanyMain
 
 main :: IO ()
 main = BrittanyMain.main
