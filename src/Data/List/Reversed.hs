@@ -17,6 +17,7 @@ module Data.List.Reversed
   ( RList(..)
   , empty
   , snoc
+  , append
   , singleton
   , fromList
   , Data.List.Reversed.toList
@@ -53,6 +54,10 @@ snoc = Snoc
 
 singleton :: a -> RList a
 singleton = Snoc Nil
+
+append :: RList a -> [a] -> RList a
+append xs []       = xs
+append xs (y : ys) = append (Snoc xs y) ys
 
 fromList :: forall a. [a] -> RList a
 fromList = go Nil

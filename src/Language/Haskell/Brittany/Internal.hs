@@ -113,7 +113,7 @@ ppModule m@HsModule{} = do
     case ac_tok of
       EpaEofComment -> pure ()
       _             ->
-        mTell $ TLB.fromString $ ExactPrint.commentContents $ tokComment commentAnn
+        mTell $ foldMap (TLB.fromString . ExactPrint.commentContents) $ tokComment commentAnn
 
   pure ()
 

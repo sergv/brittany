@@ -352,7 +352,7 @@ commentFromAnn = map commentFromEpaComment . priorComments . epAnnComments
 
 commentFromEpaComment :: LEpaComment -> BrComment
 commentFromEpaComment x@(L pos _) = BrComment
-  { bcContents = T.pack $ commentContents $ tokComment x
+  { bcContents = T.pack $ concatMap commentContents $ tokComment x
   , bcDelta    = deltaFromAnchorOp $ anchor_op pos
   }
 

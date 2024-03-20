@@ -1,3 +1,5 @@
+{-# LANGUAGE CPP #-}
+
 {-# OPTIONS_GHC -Wno-implicit-prelude #-}
 
 module Language.Haskell.Brittany.Internal.ParseModule
@@ -174,4 +176,7 @@ initialToolSettings = GHC.Settings.ToolSettings
   , GHC.Settings.toolSettings_useInplaceMinGW         = True
   , GHC.Settings.toolSettings_arSupportsDashL         = True
   , GHC.Settings.toolSettings_pgm_cxx                 = ""
+#if MIN_VERSION_ghc(9, 6, 4)
+  , GHC.Settings.toolSettings_ldSupportsSingleModule  = True
+#endif
   }

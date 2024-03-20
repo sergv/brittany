@@ -129,7 +129,7 @@ library
     , free
     , ghc >= 9.6.1
     , ghc-boot-th >= 9.2.2
-    , ghc-exactprint >= 1.5
+    , ghc-exactprint >= 1.7.1
     , monad-memo >= 0.5.3
     , mtl >= 2.2.2
     , multistate >= 0.8.0
@@ -201,8 +201,8 @@ executable brittany-investigation
     exe
   build-depends:
     , base >= 4.9
-    , ghc ^>= 9.6.1
-    , ghc-exactprint ^>= 1.7
+    , ghc >= 9.6.1
+    , ghc-exactprint >= 1.7.1
     , prettyprinter-combinators
     , text
     , transformers

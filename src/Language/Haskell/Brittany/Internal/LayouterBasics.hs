@@ -279,7 +279,7 @@ hasCommentsBetween
 hasCommentsBetween ast leftKey rightKey = do
   case (epaLocationRealSrcSpan <$> findAnn leftKey, epaLocationRealSrcSpan <$> findAnn rightKey) of
     (Just left, Just right) ->
-      any (between (ss2posEnd left) (ss2pos right) . ss2pos . GHC.anchor . ExactPrint.commentAnchor . ExactPrint.Utils.tokComment) $ extractAllComments ast
+      any (any (between (ss2posEnd left) (ss2pos right) . ss2pos . GHC.anchor . ExactPrint.commentAnchor) . ExactPrint.Utils.tokComment) $ extractAllComments ast
     _ -> False
   where
     findAnn :: AnnKeywordId -> Maybe EpaLocation
@@ -322,12 +322,12 @@ astFoldConnectedComments
 astFoldConnectedComments ast f = SYB.everything (<>) (SYB.mkQ mempty getComment) ast
   where
     getComment :: LEpaComment -> a
-    getComment = f . ExactPrint.Utils.tokComment
+    getComment = foldMap f . ExactPrint.Utils.tokComment
 
 
 hasAnyRegularCommentsRest :: LocatedAn ann ast -> Bool
 hasAnyRegularCommentsRest =
-  any (isRegularComment . ExactPrint.Utils.tokComment) . extractFollowingComments
+  any (any isRegularComment . ExactPrint.Utils.tokComment) . extractFollowingComments
 
 hasAnnKeywordComment
   :: LocatedAn ann ast -> AnnKeywordId -> Bool
@@ -335,7 +335,7 @@ hasAnnKeywordComment ast annKeyword =
   any hasK $ extractAllComments ast
   where
     hasK :: LEpaComment -> Bool
-    hasK = (== Just annKeyword) . ExactPrint.Types.commentOrigin . ExactPrint.Utils.tokComment
+    hasK = any ((== Just annKeyword) . ExactPrint.Types.commentOrigin) . ExactPrint.Utils.tokComment
 
 hasAnnKeyword
   :: Occurrences AnnKeywordId ann

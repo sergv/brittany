@@ -188,14 +188,14 @@ transformToCommentedImport =
           case acc of
             RL.Snoc prefix (ImportStatement info@ImportStatementData{isdCommentsAfter}) ->
               prefix `RL.snoc`
-              ImportStatement info { isdCommentsAfter = isdCommentsAfter `RL.snoc` tokComment annComment }
+              ImportStatement info { isdCommentsAfter = isdCommentsAfter `RL.append` tokComment annComment }
             other ->
-              other `RL.snoc` IndependentComment (tokComment annComment)
+              other `RL.append` map IndependentComment (tokComment annComment)
 
         MovedAnchor DifferentLine{deltaLine} ->
           acc <>
-          RL.fromList (replicate (deltaLine - 1) EmptyLine) `RL.snoc`
-          IndependentComment (tokComment annComment)
+          RL.fromList (replicate (deltaLine - 1) EmptyLine) `RL.append`
+          map IndependentComment (tokComment annComment)
 
 sortCommentedImports
   :: forall a.
